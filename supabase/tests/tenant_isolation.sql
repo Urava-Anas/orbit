@@ -187,5 +187,26 @@ begin
 end;
 $$;
 
+reset role;
+do $$
+declare
+  target_workspace uuid;
+begin
+  select workspace_one into target_workspace from orbit_test_context;
+
+  delete from public.workspaces where id = target_workspace;
+
+  if exists (
+    select 1 from public.leads where workspace_id = target_workspace
+  ) or exists (
+    select 1 from public.audit_events where workspace_id = target_workspace
+  ) or exists (
+    select 1 from public.workspace_members where workspace_id = target_workspace
+  ) then
+    raise exception 'Teardown failure: workspace-owned records remain';
+  end if;
+end;
+$$;
+
 rollback;
-select 'tenant isolation passed' as result;
+select 'tenant isolation and teardown passed' as result;
