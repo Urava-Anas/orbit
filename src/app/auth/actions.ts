@@ -92,8 +92,24 @@ export async function signup(formData: FormData) {
   });
 
   if (error) {
+    console.error("Orbit signup failed", {
+      code: error.code,
+      status: error.status,
+    });
+
+    const isEmailRateLimited =
+      error.status === 429 ||
+      error.code === "over_email_send_rate_limit" ||
+      error.message.toLowerCase().includes("rate limit");
+
     redirect(
-      messagePath("/login", "error", "Account creation failed. Try again shortly."),
+      messagePath(
+        "/login?mode=signup",
+        "error",
+        isEmailRateLimited
+          ? "Email verification is temporarily busy. Wait a few minutes, then try once."
+          : "Account creation failed. Please try again.",
+      ),
     );
   }
 
