@@ -169,6 +169,13 @@ a {
   transform: translateY(-1px);
 }
 
+.button:disabled,
+.button[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.68;
+  transform: none;
+}
+
 .button-primary {
   border-color: var(--accent);
   background: var(--accent);
@@ -519,6 +526,44 @@ a {
 .field input::placeholder,
 .field textarea::placeholder {
   color: #596273;
+}
+
+.password-input {
+  position: relative;
+}
+
+.password-input input {
+  padding-right: 50px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  place-items: center;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.password-toggle:hover,
+.password-toggle[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--foreground);
+}
+
+.password-toggle:focus-visible {
+  outline-offset: 1px;
 }
 
 .form-grid {
