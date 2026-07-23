@@ -3,6 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { OrbitMark } from "@/components/OrbitMark";
 import { Notice } from "@/components/Notice";
+import { PasswordField } from "@/components/PasswordField";
+import { SubmitButton } from "@/components/SubmitButton";
 import { login, signup } from "@/app/auth/actions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -90,10 +92,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </div>
             <div className="field">
               <label htmlFor="password">Password</label>
-              <input
+              <PasswordField
                 id="password"
                 name="password"
-                type="password"
                 autoComplete={isSignup ? "new-password" : "current-password"}
                 minLength={12}
                 maxLength={128}
@@ -101,9 +102,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 placeholder="Minimum 12 characters"
               />
             </div>
-            <button className="button button-primary" type="submit">
-              {isSignup ? "Create secure workspace" : "Sign in to Orbit"}
-            </button>
+            <SubmitButton
+              idleLabel={
+                isSignup ? "Create secure workspace" : "Sign in to Orbit"
+              }
+              pendingLabel={
+                isSignup ? "Creating secure workspace…" : "Signing in…"
+              }
+            />
           </form>
 
           <div className="form-foot" style={{ marginTop: 20 }}>
