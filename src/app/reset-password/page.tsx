@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { updatePassword } from "@/app/auth/actions";
 import { Notice } from "@/components/Notice";
 import { OrbitMark } from "@/components/OrbitMark";
+import { PasswordField } from "@/components/PasswordField";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -38,19 +40,19 @@ export default async function ResetPasswordPage({ searchParams }: PageProps) {
           <form className="form-stack" action={updatePassword}>
             <div className="field">
               <label htmlFor="password">New password</label>
-              <input
+              <PasswordField
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="new-password"
                 minLength={12}
                 maxLength={128}
                 required
               />
             </div>
-            <button className="button button-primary" type="submit">
-              Update password
-            </button>
+            <SubmitButton
+              idleLabel="Update password"
+              pendingLabel="Updating password…"
+            />
           </form>
         </div>
       </section>
