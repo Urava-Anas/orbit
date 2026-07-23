@@ -1,0 +1,18 @@
+create index audit_events_actor_idx on public.audit_events(actor_id) where actor_id is not null;
+create index clients_created_by_idx on public.clients(created_by);
+create index content_drafts_created_by_idx on public.content_drafts(created_by);
+create index content_drafts_workspace_proof_idx on public.content_drafts(workspace_id, proof_id);
+create index invoices_created_by_idx on public.invoices(created_by);
+create index invoices_workspace_project_idx on public.invoices(workspace_id, project_id) where project_id is not null;
+create index leads_created_by_idx on public.leads(created_by);
+create index leads_owner_idx on public.leads(owner_id) where owner_id is not null;
+create index project_tasks_created_by_idx on public.project_tasks(created_by);
+create index project_tasks_owner_idx on public.project_tasks(owner_id) where owner_id is not null;
+create index project_tasks_workspace_project_idx on public.project_tasks(workspace_id, project_id);
+create index projects_workspace_client_idx on public.projects(workspace_id, client_id);
+create index projects_workspace_lead_idx on public.projects(workspace_id, lead_id) where lead_id is not null;
+create index projects_created_by_idx on public.projects(created_by);
+create index projects_owner_idx on public.projects(owner_id) where owner_id is not null;
+create index proofs_created_by_idx on public.proofs(created_by);
+create index proofs_workspace_project_idx on public.proofs(workspace_id, project_id);
+create index workspaces_owner_idx on public.workspaces(owner_id);
