@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { checkPasswordExposure } from "@/lib/password-security";
 import { createClient } from "@/lib/supabase/server";
 
 const emailSchema = z.string().trim().email().max(254);
@@ -15,6 +16,30 @@ function value(formData: FormData, key: string) {
 function messagePath(path: string, type: "error" | "notice", message: string) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${type}=${encodeURIComponent(message)}`;
+}
+
+async function requireSafePassword(password: string, returnPath: string) {
+  const exposure = await checkPasswordExposure(password);
+
+  if (exposure === "leaked") {
+    redirect(
+      messagePath(
+        returnPath,
+        "error",
+        "This password appears in known breach data. Choose a unique password.",
+      ),
+    );
+  }
+
+  if (exposure === "unavailable") {
+    redirect(
+      messagePath(
+        returnPath,
+        "error",
+        "Password safety verification is temporarily unavailable. Try again shortly.",
+      ),
+    );
+  }
 }
 
 async function requestOrigin() {
@@ -76,6 +101,8 @@ export async function signup(formData: FormData) {
       ),
     );
   }
+
+  await requireSafePassword(parsed.data.password, "/login?mode=signup");
 
   const origin = await requestOrigin();
   const supabase = await createClient();
@@ -160,6 +187,8 @@ export async function updatePassword(formData: FormData) {
       ),
     );
   }
+
+  await requireSafePassword(password.data, "/reset-password");
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({
