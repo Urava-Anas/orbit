@@ -8,8 +8,17 @@ import type { AuditEvent, Lead, Project } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 
 export const metadata: Metadata = {
-  title: "Command Center",
+  title: "Founder Command",
   robots: { index: false, follow: false },
+};
+
+type AttentionItem = {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  priority: number;
+  date?: string | null;
 };
 
 export default async function DashboardPage() {
@@ -30,7 +39,7 @@ export default async function DashboardPage() {
         .eq("workspace_id", workspace.id),
       supabase
         .from("invoices")
-        .select("amount, currency, status")
+        .select("id, reference, amount, currency, status, due_at")
         .eq("workspace_id", workspace.id),
       supabase
         .from("proofs")
@@ -49,6 +58,9 @@ export default async function DashboardPage() {
   const invoices = invoicesResult.data ?? [];
   const proofs = proofsResult.data ?? [];
   const audit = (auditResult.data ?? []) as AuditEvent[];
+  const now = Date.now();
+  const nextThreeDays = now + 3 * 24 * 60 * 60 * 1000;
+
   const activeLeads = leads.filter(
     (lead) => !["won", "lost"].includes(lead.stage),
   );
@@ -61,46 +73,108 @@ export default async function DashboardPage() {
   const approvedProof = proofs.filter((proof) =>
     ["approved", "published"].includes(proof.status),
   ).length;
-  const upcoming = activeLeads
-    .filter((lead) => lead.next_action && lead.next_action_at)
-    .sort(
-      (a, b) =>
-        new Date(a.next_action_at!).getTime() -
-        new Date(b.next_action_at!).getTime(),
-    )
-    .slice(0, 5);
+
+  const attention: AttentionItem[] = [];
+
+  for (const project of activeProjects) {
+    const dueTime = project.due_date ? new Date(project.due_date).getTime() : null;
+
+    if (project.status === "blocked") {
+      attention.push({
+        id: `project-blocked-${project.id}`,
+        title: `${project.name} is blocked`,
+        detail: project.clients?.name
+          ? `${project.clients.name} · founder decision required`
+          : "Founder decision required",
+        href: "/dashboard/projects",
+        priority: 1,
+        date: project.due_date,
+      });
+    } else if (dueTime && dueTime < now) {
+      attention.push({
+        id: `project-overdue-${project.id}`,
+        title: `${project.name} passed its due date`,
+        detail: project.clients?.name ?? "Delivery needs review",
+        href: "/dashboard/projects",
+        priority: 2,
+        date: project.due_date,
+      });
+    }
+  }
+
+  for (const invoice of invoices) {
+    const dueTime = invoice.due_at ? new Date(invoice.due_at).getTime() : null;
+    const needsCollection =
+      invoice.status === "overdue" ||
+      (dueTime && dueTime < now && !["paid", "void"].includes(invoice.status));
+
+    if (needsCollection) {
+      attention.push({
+        id: `invoice-${invoice.id}`,
+        title: `Collect ${formatMoney(Number(invoice.amount), invoice.currency)}`,
+        detail: `${invoice.reference} · payment needs attention`,
+        href: "/dashboard/cash",
+        priority: 1,
+        date: invoice.due_at,
+      });
+    }
+  }
+
+  for (const lead of activeLeads) {
+    if (!lead.next_action || !lead.next_action_at) continue;
+    const actionTime = new Date(lead.next_action_at).getTime();
+    if (Number.isNaN(actionTime) || actionTime > nextThreeDays) continue;
+
+    attention.push({
+      id: `lead-${lead.id}`,
+      title: lead.next_action,
+      detail: `${lead.name}${lead.company ? ` · ${lead.company}` : ""}`,
+      href: "/dashboard/leads",
+      priority: actionTime < now ? 1 : 3,
+      date: lead.next_action_at,
+    });
+  }
+
+  attention.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    const aDate = a.date ? new Date(a.date).getTime() : Number.MAX_SAFE_INTEGER;
+    const bDate = b.date ? new Date(b.date).getTime() : Number.MAX_SAFE_INTEGER;
+    return aDate - bDate;
+  });
+
+  const founderAttention = attention.slice(0, 7);
 
   return (
     <div className="page">
       <PageHeader
-        kicker="Live operating state"
-        title="Command Center"
-        description="What is moving, what is stuck, and what needs your decision next. Every number below resolves to a workspace record."
+        kicker="Organisation operating state"
+        title="Founder Command"
+        description="The decisions, risks, money, delivery, and evidence that require founder attention. Every signal resolves to a real organisation record."
         action={
           <Link className="button button-primary" href="/dashboard/leads">
-            Capture lead <ArrowUpRight size={15} aria-hidden="true" />
+            Capture opportunity <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         }
       />
 
-      <section className="metrics-grid" aria-label="Workspace metrics">
+      <section className="metrics-grid" aria-label="Organisation metrics">
         <MetricCard
-          label="Active pipeline"
+          label="Active opportunities"
           value={activeLeads.length}
           note={`${leads.length} total lead records`}
         />
         <MetricCard
-          label="Open projects"
+          label="Active delivery"
           value={activeProjects.length}
           note={`${projects.length} total projects`}
         />
         <MetricCard
-          label="Cash received"
+          label="Cash collected"
           value={formatMoney(cashReceivedPkr, "PKR")}
           note="Paid PKR invoices only"
         />
         <MetricCard
-          label="Approved proof"
+          label="Approved evidence"
           value={approvedProof}
           note={`${proofs.length} total proof assets`}
         />
@@ -109,25 +183,22 @@ export default async function DashboardPage() {
       <section className="dashboard-grid">
         <article className="panel">
           <div className="panel-head">
-            <h2>Next actions</h2>
-            <span>{upcoming.length} scheduled</span>
+            <h2>Founder attention</h2>
+            <span>{founderAttention.length} current signals</span>
           </div>
-          {upcoming.length ? (
+          {founderAttention.length ? (
             <div className="action-list">
-              {upcoming.map((lead) => (
-                <div className="action-row" key={lead.id}>
+              {founderAttention.map((item) => (
+                <Link className="action-row" href={item.href} key={item.id}>
                   <i aria-hidden="true" />
                   <div>
-                    <strong>{lead.next_action}</strong>
-                    <small>
-                      {lead.name}
-                      {lead.company ? ` · ${lead.company}` : ""}
-                    </small>
+                    <strong>{item.title}</strong>
+                    <small>{item.detail}</small>
                   </div>
-                  <time dateTime={lead.next_action_at!}>
-                    {formatRelativeDate(lead.next_action_at!)}
+                  <time dateTime={item.date ?? undefined}>
+                    {item.date ? formatRelativeDate(item.date) : "Review"}
                   </time>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (
@@ -136,10 +207,10 @@ export default async function DashboardPage() {
                 <span className="empty-state-icon">
                   <CheckCircle2 size={22} aria-hidden="true" />
                 </span>
-                <h3>No scheduled follow-ups</h3>
+                <h3>No urgent founder decisions</h3>
                 <p>
-                  Add a next action and date to each active lead so Orbit can surface
-                  what deserves attention.
+                  Orbit will surface overdue money, blocked delivery, late work,
+                  and near-term follow-ups here.
                 </p>
               </div>
             </div>
@@ -148,8 +219,8 @@ export default async function DashboardPage() {
 
         <article className="panel">
           <div className="panel-head">
-            <h2>Audit trail</h2>
-            <span>Latest changes</span>
+            <h2>System activity</h2>
+            <span>Latest audited changes</span>
           </div>
           {audit.length ? (
             <div className="action-list">
@@ -160,7 +231,7 @@ export default async function DashboardPage() {
                     <strong>
                       {humanize(event.action)} {humanize(event.entity_type)}
                     </strong>
-                    <small>Workspace mutation recorded</small>
+                    <small>Organisation mutation recorded</small>
                   </div>
                   <time dateTime={event.created_at}>
                     {formatRelativeDate(event.created_at)}
@@ -175,7 +246,7 @@ export default async function DashboardPage() {
                   <CheckCircle2 size={22} aria-hidden="true" />
                 </span>
                 <h3>No mutations yet</h3>
-                <p>Your insert, update, and delete history will appear here.</p>
+                <p>Your authorised insert, update, and delete history will appear here.</p>
               </div>
             </div>
           )}
