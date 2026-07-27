@@ -12,25 +12,26 @@ export default function HomePage() {
             Sign in
           </Link>
           <Link className="button button-primary" href="/login?mode=signup">
-            Start workspace <ArrowUpRight size={15} aria-hidden="true" />
+            Create your Orbit <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         </div>
       </nav>
 
       <section className="hero">
         <div>
-          <span className="eyebrow">Founder control plane</span>
+          <span className="eyebrow">Founder-first. Organisation-ready.</span>
           <h1>
-            See the business. <span>Move what matters.</span>
+            Run the company. <span>Not the chaos.</span>
           </h1>
           <p className="hero-copy">
-            Orbit gives founders one trustworthy view of leads, client delivery,
-            cash, proof, and the next action—without fake intelligence or invented
-            metrics.
+            Orbit is a secure operating system for founders. It brings leads,
+            delivery, cash, proof, decisions, and controlled team access into one
+            command layer—then grows with the organisation through isolated
+            modules, workflows, and permissions.
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" href="/login?mode=signup">
-              Build your command center
+              Build your command system
               <ArrowUpRight size={15} aria-hidden="true" />
             </Link>
             <Link className="button" href="/login">
@@ -38,43 +39,43 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="hero-proof" aria-label="Product foundations">
-            <span>Database-enforced isolation</span>
-            <span>Verified auth</span>
-            <span>Audited changes</span>
+            <span>Organisation-scoped data</span>
+            <span>Capability-based access</span>
+            <span>Audited actions</span>
           </div>
         </div>
 
-        <div className="control-preview" aria-label="Orbit product preview">
+        <div className="control-preview" aria-label="Orbit operating model preview">
           <div className="preview-top">
             <OrbitMark />
-            <span className="system-state">System truthful</span>
+            <span className="system-state">Founder in control</span>
           </div>
           <div className="preview-body">
             <article className="preview-card">
-              <div className="preview-label">Pipeline</div>
-              <div className="preview-value">Lead → Proof</div>
+              <div className="preview-label">Product model</div>
+              <div className="preview-value">Founder → Organisation</div>
             </article>
             <article className="preview-card">
               <div className="preview-label">Access model</div>
-              <div className="preview-value">RLS</div>
+              <div className="preview-value">Deny by default</div>
             </article>
             <article className="preview-card preview-card-wide">
-              <div className="preview-label">Operating loop</div>
+              <div className="preview-label">How Orbit works</div>
               <div className="preview-list">
                 <div className="preview-list-row">
                   <i />
-                  <span>Qualified lead receives a next action</span>
-                  <em>LEADS</em>
+                  <span>The founder sees decisions, risks, money, and next actions</span>
+                  <em>COMMAND</em>
                 </div>
                 <div className="preview-list-row">
                   <i />
-                  <span>Client delivery becomes measurable proof</span>
-                  <em>PROJECTS</em>
+                  <span>Teams work only inside approved modules and workflows</span>
+                  <em>ACCESS</em>
                 </div>
                 <div className="preview-list-row">
                   <i />
-                  <span>Approved proof becomes honest content</span>
-                  <em>CONTENT</em>
+                  <span>Every important action remains attributable and reviewable</span>
+                  <em>AUDIT</em>
                 </div>
               </div>
             </article>
@@ -83,12 +84,12 @@ export default function HomePage() {
               <ShieldCheck size={30} color="var(--success)" aria-hidden="true" />
             </article>
             <article className="preview-card">
-              <div className="preview-label">Control</div>
+              <div className="preview-label">Architecture</div>
               <Radar size={30} color="var(--accent)" aria-hidden="true" />
             </article>
           </div>
           <span className="sr-only">
-            <LockKeyhole /> Secure workspace authentication.
+            <LockKeyhole /> Secure organisation authentication and controlled access.
           </span>
         </div>
       </section>
