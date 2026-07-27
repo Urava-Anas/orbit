@@ -7,7 +7,7 @@ import { humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
 
 export const metadata: Metadata = {
-  title: "Settings & Security",
+  title: "Identity & Security",
   robots: { index: false, follow: false },
 };
 
@@ -22,15 +22,15 @@ export default async function SettingsPage({ searchParams }: PageProps) {
   return (
     <div className="page">
       <PageHeader
-        kicker="Access control"
-        title="Settings & Security"
-        description="Workspace identity, role, credential recovery, and session revocation. Sensitive authorization remains server-side and database-enforced."
+        kicker="Identity and access control"
+        title="Identity & Security"
+        description="Organisation membership, verified identity, credential recovery, and session revocation. Sensitive authority remains server-side and database-enforced."
       />
       <Notice error={params.error} notice={params.notice} />
 
       <section className="settings-grid">
         <article className="panel settings-card">
-          <h2>Workspace</h2>
+          <h2>Organisation</h2>
           <p>The active tenant boundary attached to this session.</p>
           <dl>
             <div>
@@ -42,10 +42,13 @@ export default async function SettingsPage({ searchParams }: PageProps) {
               <dd className="mono">{workspace.slug}</dd>
             </div>
             <div>
-              <dt>Your role</dt>
+              <dt>Your membership</dt>
               <dd>{humanize(role)}</dd>
             </div>
           </dl>
+          <Link className="button" href="/dashboard/organisation">
+            Open organisation
+          </Link>
         </article>
 
         <article className="panel settings-card">
