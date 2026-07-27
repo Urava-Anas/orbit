@@ -1,5 +1,6 @@
 import { OrbitMark } from "@/components/OrbitMark";
 import { AppNavigation } from "@/components/AppNavigation";
+import { humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
 
 export default async function DashboardLayout({
@@ -15,14 +16,14 @@ export default async function DashboardLayout({
       <aside className="sidebar">
         <OrbitMark />
         <div className="sidebar-workspace">
-          <small>Active workspace</small>
+          <small>Active organisation</small>
           <strong>{workspace.name}</strong>
         </div>
         <AppNavigation />
         <div className="sidebar-foot">
           <div className="sidebar-status">
             <i aria-hidden="true" />
-            Live data only
+            Organisation isolated
           </div>
         </div>
       </aside>
@@ -30,10 +31,10 @@ export default async function DashboardLayout({
       <main className="app-main">
         <header className="topbar">
           <AppNavigation mobile />
-          <span className="topbar-context">Lead → Project → Proof → Content</span>
+          <span className="topbar-context">Decisions → Execution → Evidence</span>
           <div className="topbar-user">
             <span>
-              {role} · {user.email}
+              {humanize(role)} · {user.email}
             </span>
             <span className="avatar" aria-hidden="true">
               {initial}
