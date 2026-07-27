@@ -22,7 +22,7 @@ export async function requireWorkspace() {
     .single();
 
   if (membershipError || !membership) {
-    redirect("/login?error=Workspace%20setup%20failed");
+    redirect("/login?error=Organisation%20setup%20failed");
   }
 
   const { data: workspace, error: workspaceError } = await supabase
@@ -32,7 +32,7 @@ export async function requireWorkspace() {
     .single();
 
   if (workspaceError || !workspace) {
-    redirect("/login?error=Workspace%20not%20found");
+    redirect("/login?error=Organisation%20not%20found");
   }
 
   return {
@@ -42,4 +42,3 @@ export async function requireWorkspace() {
     workspace: workspace as Workspace,
   };
 }
-
