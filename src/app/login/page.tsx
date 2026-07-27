@@ -39,12 +39,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <OrbitMark />
         </Link>
         <div className="auth-form">
-          <span className="eyebrow">{isSignup ? "Create workspace" : "Secure access"}</span>
-          <h1>{isSignup ? "Start with truth." : "Welcome back."}</h1>
+          <span className="eyebrow">
+            {isSignup ? "Create organisation" : "Secure access"}
+          </span>
+          <h1>{isSignup ? "Start with control." : "Welcome back."}</h1>
           <p>
             {isSignup
-              ? "Create the workspace that will hold your real operating data."
-              : "Sign in to your private founder command center."}
+              ? "Create the organisation boundary that will hold your real operating data, decisions, workflows, and future team access."
+              : "Sign in to your private founder command system."}
           </p>
 
           <Notice error={params.error} notice={params.notice} />
@@ -65,7 +67,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="workspaceName">Business or workspace</label>
+                  <label htmlFor="workspaceName">Organisation name</label>
                   <input
                     id="workspaceName"
                     name="workspaceName"
@@ -104,10 +106,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </div>
             <SubmitButton
               idleLabel={
-                isSignup ? "Create secure workspace" : "Sign in to Orbit"
+                isSignup ? "Create secure organisation" : "Sign in to Orbit"
               }
               pendingLabel={
-                isSignup ? "Creating secure workspace…" : "Signing in…"
+                isSignup ? "Creating organisation…" : "Signing in…"
               }
             />
           </form>
@@ -132,8 +134,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="auth-quote">
           <span className="eyebrow">Orbit principle 01</span>
           <p>
-            Confidence comes from evidence. Every metric in Orbit must resolve to
-            a real record.
+            The founder stays in control. Every signal must resolve to evidence,
+            authority, and a real organisation record.
           </p>
         </div>
       </aside>
