@@ -13,13 +13,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://orbit-urava-pros.vercel.app"),
+  metadataBase: new URL("https://orbit-two-delta.vercel.app"),
   title: {
-    default: "Orbit — Founder control, grounded in truth",
+    default: "Orbit — The operating system for founders",
     template: "%s — Orbit",
   },
   description:
-    "A secure operating control plane for leads, client delivery, cash, proof, and content.",
+    "A secure founder-first operating system for company decisions, delivery, cash, proof, workflows, and controlled organisational access.",
   applicationName: "Orbit by Urava",
   robots: {
     index: true,
