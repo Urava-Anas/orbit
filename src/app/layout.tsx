@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://orbit-two-delta.vercel.app"),
+  metadataBase: new URL("https://orbit-urava-pros.vercel.app"),
   title: {
     default: "Orbit — The operating system for founders",
     template: "%s — Orbit",
