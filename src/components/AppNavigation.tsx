@@ -4,23 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Banknote,
+  Building2,
   FileCheck2,
   FolderKanban,
   LayoutDashboard,
   Menu,
   MessageSquareText,
-  Settings,
+  ShieldCheck,
   UsersRound,
 } from "lucide-react";
 
 const links = [
-  { href: "/dashboard", label: "Command Center", icon: LayoutDashboard },
-  { href: "/dashboard/leads", label: "Leads", icon: UsersRound },
-  { href: "/dashboard/projects", label: "Projects", icon: FolderKanban },
-  { href: "/dashboard/cash", label: "Cash", icon: Banknote },
-  { href: "/dashboard/proof", label: "Proof", icon: FileCheck2 },
-  { href: "/dashboard/content", label: "Content", icon: MessageSquareText },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
+  { href: "/dashboard/leads", label: "Growth", icon: UsersRound },
+  { href: "/dashboard/projects", label: "Delivery", icon: FolderKanban },
+  { href: "/dashboard/cash", label: "Finance", icon: Banknote },
+  { href: "/dashboard/proof", label: "Evidence", icon: FileCheck2 },
+  { href: "/dashboard/content", label: "Publishing", icon: MessageSquareText },
+  { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
+  { href: "/dashboard/settings", label: "Security", icon: ShieldCheck },
 ] as const;
 
 type AppNavigationProps = {
@@ -30,7 +32,7 @@ type AppNavigationProps = {
 export function AppNavigation({ mobile = false }: AppNavigationProps) {
   const pathname = usePathname();
   const list = (
-    <nav className={mobile ? "mobile-nav-links" : "nav-list"} aria-label="Orbit modules">
+    <nav className={mobile ? "mobile-nav-links" : "nav-list"} aria-label="Orbit operating domains">
       {links.map(({ href, label, icon: Icon }) => {
         const active =
           href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -60,4 +62,3 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
     </details>
   );
 }
-
