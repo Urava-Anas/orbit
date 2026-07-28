@@ -5,7 +5,8 @@ import { OrbitMark } from "@/components/OrbitMark";
 import { Notice } from "@/components/Notice";
 import { PasswordField } from "@/components/PasswordField";
 import { SubmitButton } from "@/components/SubmitButton";
-import { login, signup } from "@/app/auth/actions";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { login, signInWithGoogle, signup } from "@/app/auth/actions";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -50,6 +51,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </p>
 
           <Notice error={params.error} notice={params.notice} />
+
+          <form className="oauth-form" action={signInWithGoogle}>
+            <GoogleSignInButton />
+          </form>
+          <div className="auth-divider">
+            <span>{isSignup ? "or create with email" : "or use email"}</span>
+          </div>
 
           <form className="form-stack" action={isSignup ? signup : login}>
             {isSignup ? (
