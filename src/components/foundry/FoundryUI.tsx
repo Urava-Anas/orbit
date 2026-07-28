@@ -38,10 +38,16 @@ export function HealthBadge({
   health: FoundryHealth;
   label?: string;
 }) {
+  const visibleLabel =
+    label ?? health.charAt(0).toUpperCase() + health.slice(1);
+
   return (
-    <span className={`health-badge health-${health}`}>
+    <span
+      aria-label={`Student health: ${health}`}
+      className={`health-badge health-${health} ${visibleLabel ? "" : "is-compact"}`}
+    >
       <i aria-hidden="true" />
-      {label ?? health.charAt(0).toUpperCase() + health.slice(1)}
+      {visibleLabel}
     </span>
   );
 }
@@ -58,6 +64,10 @@ export function FoundryProgressBar({
     <div
       className={`foundry-progress ${compact ? "is-compact" : ""}`}
       aria-label={`${safeValue}% progress`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={safeValue}
+      role="progressbar"
     >
       <span style={{ width: `${safeValue}%` }} />
     </div>

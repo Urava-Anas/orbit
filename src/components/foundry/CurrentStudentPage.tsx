@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { LockKeyhole, MailCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  Link2,
+  LockKeyhole,
+  LogOut,
+  MailCheck,
+  RefreshCw,
+} from "lucide-react";
+import { signOut } from "@/app/auth/actions";
 import {
   StudentPortalView,
   type StudentPortalTab,
@@ -19,20 +27,64 @@ export async function CurrentStudentPage({
   if (!data.student) {
     return (
       <section className="student-link-pending">
-        <span>
+        <span className="student-access-icon">
           <MailCheck aria-hidden="true" size={28} />
         </span>
         <small>Invite-only access</small>
-        <h1>Your Foundry record is not linked yet</h1>
+        <h1>Aap ka Foundry record abhi link nahi hua</h1>
         <p>
-          Application accept hone ke baad Urava aap ke email ko permanent Foundry
-          ID se link karega. Naya account banane ki zaroorat nahi.
+          Fikr na karein—account theek hai. Urava team aap ke isi email ko
+          permanent Foundry ID se link karegi. Naya account banane ki zaroorat
+          nahi.
         </p>
-        <div>
+
+        <ol className="student-access-steps" aria-label="Access linking process">
+          <li className="is-complete">
+            <span>
+              <CheckCircle2 aria-hidden="true" size={17} />
+            </span>
+            <div>
+              <strong>Sign-in complete</strong>
+              <small>Aap ka account secure hai</small>
+            </div>
+          </li>
+          <li className="is-current">
+            <span>
+              <Link2 aria-hidden="true" size={17} />
+            </span>
+            <div>
+              <strong>Record linking</strong>
+              <small>Urava team Foundry ID connect karegi</small>
+            </div>
+          </li>
+          <li>
+            <span>
+              <LockKeyhole aria-hidden="true" size={17} />
+            </span>
+            <div>
+              <strong>Student space opens</strong>
+              <small>Sirf aap ka learning record nazar aayega</small>
+            </div>
+          </li>
+        </ol>
+
+        <div className="student-access-note">
           <LockKeyhole aria-hidden="true" size={17} />
-          Admissions record remains private until invitation.
+          Aap ka admissions record invitation tak private rahega.
         </div>
-        <Link href="/dashboard">Back to Orbit</Link>
+
+        <div className="student-access-actions">
+          <Link className="student-primary-action" href="/learn">
+            Dobara check karein
+            <RefreshCw aria-hidden="true" size={16} />
+          </Link>
+          <form action={signOut}>
+            <button className="student-secondary-action" type="submit">
+              Dusra account use karein
+              <LogOut aria-hidden="true" size={15} />
+            </button>
+          </form>
+        </div>
       </section>
     );
   }

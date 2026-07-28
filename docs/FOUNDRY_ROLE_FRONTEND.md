@@ -6,6 +6,15 @@ Orbit uses one authentication entrance and two automatic role destinations. The
 login screen never asks a person to choose Founder or Student. Role and record
 membership will decide the destination when backend routing is connected.
 
+The frontend now has two explicit role modes:
+
+- Founder mode: dark Orbit command language, dense enough for decisions but not
+  a wall of reports.
+- Student mode: warm ivory, Urava red, low-bandwidth and Roman-Urdu-first.
+
+They share typography, spacing, radius, feedback, focus and status rules, but
+they do not share the same information hierarchy.
+
 ## Founder role
 
 Purpose: tell the Founder who is progressing, who needs help and who is ready
@@ -23,6 +32,10 @@ Primary navigation:
 The Founder experience prioritises decisions over reports. `Needs Attention
 Today` is the main operating queue. Every signal must open the real student,
 submission, task or class that caused it.
+
+The first screen always promotes one recommended next move. It is selected from
+pending submissions, students who need support, or the student roster in that
+order.
 
 The Founder may see:
 
@@ -48,6 +61,9 @@ Primary navigation:
 The Today screen has one primary action. Class joining and teacher feedback are
 secondary. Instructions default to Roman Urdu, while an English-preferring
 student receives English task instructions when available.
+
+Founder-side portal preview is deliberately non-mutating. Inputs and submission
+are disabled there so a design review cannot change a learner's real record.
 
 The Student may see:
 
@@ -79,6 +95,16 @@ Both roles need designed states for:
 - Recovery task
 - Studio Ready
 
+Implemented frontend states:
+
+- Founder loading and secure-retry error
+- Student loading and supportive retry error
+- Student access pending with account-linking steps
+- Work awaiting teacher review
+- No assigned task today
+- Recovery task
+- Empty class, task, submission and progress states
+
 ## Backend integration contract
 
 The frontend expects one post-auth role resolver:
@@ -99,3 +125,15 @@ but the frontend must receive one normalised Foundry student record.
 
 Backend work must enforce the same rules with row-level security. Hiding a link
 or page in the frontend is not authorisation.
+
+## Frontend phase boundary
+
+This phase does not:
+
+- change Supabase tables, policies or records
+- link student authentication accounts
+- resolve Founder versus Student after OAuth
+- change Airtable or Notion course/admissions data
+- promote the branch to production
+
+Those steps begin only after the private role preview is approved.

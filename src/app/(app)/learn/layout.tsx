@@ -9,6 +9,9 @@ export default async function LearnLayout({
   await requireWorkspace();
   return (
     <div className="student-shell">
+      <a className="role-skip-link" href="#student-main">
+        Seedha aaj ke task par jayen
+      </a>
       <header className="student-shell-header">
         <Link className="student-brand" href="/learn">
           <span>
@@ -16,6 +19,7 @@ export default async function LearnLayout({
           </span>
           <strong>Urava Foundry</strong>
         </Link>
+        <span className="student-header-promise">Seekho · Banao · Barho</span>
         <span
           className="student-role-pill"
           aria-label="Private student space showing only your learning record"
@@ -27,7 +31,9 @@ export default async function LearnLayout({
           </span>
         </span>
       </header>
-      <main className="student-shell-main">{children}</main>
+      <main className="student-shell-main" id="student-main">
+        {children}
+      </main>
       <StudentFoundryNavigation />
     </div>
   );

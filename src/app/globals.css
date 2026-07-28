@@ -1385,20 +1385,73 @@ a {
   border: 0;
 }
 
+.role-skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 10px;
+  left: 12px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: var(--foundry-red);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-140%);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.role-skip-link:focus {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .foundry-shell,
 .student-shell {
-  --foundry-ivory: #f7f1e7;
-  --foundry-paper: #fffdf8;
-  --foundry-paper-strong: #ffffff;
-  --foundry-charcoal: #25221f;
-  --foundry-muted: #746d65;
-  --foundry-line: rgba(44, 35, 29, 0.11);
   --foundry-red: #ee4338;
   --foundry-red-dark: #d9342b;
   --foundry-green: #3da56a;
   --foundry-yellow: #e6ad35;
   --foundry-gold: #b98920;
   --foundry-danger: #d93f37;
+}
+
+.foundry-shell {
+  --foundry-ivory: #080a0f;
+  --foundry-paper: #11151c;
+  --foundry-paper-strong: #171c25;
+  --foundry-charcoal: #f4f6f8;
+  --foundry-muted: #98a3b3;
+  --foundry-line: rgba(255, 255, 255, 0.09);
+  --foundry-line-strong: rgba(255, 255, 255, 0.16);
+  --foundry-control: #171c25;
+  --foundry-control-soft: #1b212b;
+  --foundry-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+  --foundry-red: #ff5d52;
+  --foundry-red-dark: #ff796f;
+  --foundry-green: #6ed69a;
+  --foundry-yellow: #f0bd59;
+  --foundry-gold: #d5ae54;
+  --foundry-danger: #ff7168;
+  color: var(--foundry-charcoal);
+  color-scheme: dark;
+}
+
+.student-shell,
+.student-portal-view.is-preview {
+  --foundry-ivory: #f7f1e7;
+  --foundry-paper: #fffdf8;
+  --foundry-paper-strong: #ffffff;
+  --foundry-charcoal: #25221f;
+  --foundry-muted: #746d65;
+  --foundry-line: rgba(44, 35, 29, 0.11);
+  --foundry-line-strong: rgba(44, 35, 29, 0.18);
+  --foundry-control: #ffffff;
+  --foundry-control-soft: #f3ece3;
   --foundry-shadow: 0 18px 48px rgba(75, 54, 40, 0.1);
   color: var(--foundry-charcoal);
   color-scheme: light;
@@ -1409,8 +1462,8 @@ a {
   min-height: calc(100vh - 72px);
   overflow: hidden;
   background:
-    radial-gradient(circle at 95% 4%, rgba(238, 67, 56, 0.08), transparent 24rem),
-    radial-gradient(circle at 8% 38%, rgba(238, 67, 56, 0.045), transparent 22rem),
+    radial-gradient(circle at 92% 2%, rgba(255, 93, 82, 0.11), transparent 28rem),
+    radial-gradient(circle at 4% 44%, rgba(94, 126, 255, 0.075), transparent 25rem),
     var(--foundry-ivory);
 }
 
@@ -1421,7 +1474,7 @@ a {
   justify-content: space-between;
   padding: 16px clamp(18px, 3vw, 44px);
   border-bottom: 1px solid var(--foundry-line);
-  background: rgba(247, 241, 231, 0.88);
+  background: rgba(8, 10, 15, 0.88);
   backdrop-filter: blur(18px);
 }
 
@@ -1442,7 +1495,7 @@ a {
 .foundry-brand > span:last-child {
   align-items: flex-start;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .foundry-brand strong {
@@ -1452,7 +1505,10 @@ a {
 
 .foundry-brand small {
   color: var(--foundry-muted);
-  font-size: 11px;
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .foundry-mini-mark {
@@ -1478,7 +1534,7 @@ a {
   border: 1px solid var(--foundry-line);
   border-radius: 999px;
   color: var(--foundry-muted);
-  background: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.035);
   font-size: 11px;
   font-weight: 700;
 }
@@ -1495,9 +1551,9 @@ a {
   min-height: 40px;
   gap: 9px;
   padding: 0 12px;
-  border: 1px solid rgba(238, 67, 56, 0.16);
+  border: 1px solid rgba(255, 93, 82, 0.24);
   border-radius: 14px;
-  background: #fff0ec;
+  background: rgba(255, 93, 82, 0.09);
   color: var(--foundry-red-dark);
 }
 
@@ -1521,7 +1577,7 @@ a {
 }
 
 .foundry-back-link:hover {
-  border-color: rgba(44, 35, 29, 0.22);
+  border-color: var(--foundry-line-strong);
   color: var(--foundry-charcoal);
 }
 
@@ -1535,8 +1591,8 @@ a {
   padding: 6px;
   border: 1px solid var(--foundry-line);
   border-radius: 20px;
-  background: rgba(255, 253, 248, 0.82);
-  box-shadow: 0 10px 30px rgba(75, 54, 40, 0.06);
+  background: rgba(17, 21, 28, 0.82);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(14px);
 }
 
@@ -1562,9 +1618,9 @@ a {
 }
 
 .foundry-nav-link.is-active {
-  background: var(--foundry-charcoal);
+  background: var(--foundry-red);
   color: white;
-  box-shadow: 0 8px 20px rgba(37, 34, 31, 0.15);
+  box-shadow: 0 10px 24px rgba(255, 93, 82, 0.2);
 }
 
 .foundry-content {
@@ -1591,6 +1647,10 @@ a {
 .foundry-hero > div:first-child,
 .foundry-page-title > div:first-child {
   max-width: 760px;
+}
+
+.foundry-hero > div:first-child {
+  align-self: center;
 }
 
 .foundry-kicker,
@@ -1627,6 +1687,70 @@ a {
   line-height: 1.65;
 }
 
+.foundry-hero-focus {
+  width: min(100%, 360px);
+  flex: 0 0 auto;
+  padding: 20px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(255, 93, 82, 0.14), transparent 12rem),
+    var(--foundry-paper);
+  box-shadow: var(--foundry-shadow);
+}
+
+.foundry-focus-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.foundry-focus-label span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--foundry-red-dark);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.foundry-focus-label i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--foundry-red);
+  box-shadow: 0 0 12px rgba(255, 93, 82, 0.7);
+}
+
+.foundry-focus-label small {
+  color: var(--foundry-muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.foundry-hero-focus > strong {
+  display: block;
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.foundry-hero-focus > p {
+  margin: 10px 0 18px;
+  color: var(--foundry-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.foundry-hero-focus .foundry-button {
+  width: 100%;
+}
+
 .foundry-button {
   display: inline-flex;
   min-height: 44px;
@@ -1660,21 +1784,21 @@ a {
 }
 
 .foundry-button-dark {
-  background: var(--foundry-charcoal);
+  background: var(--foundry-control-soft);
   color: white;
-  box-shadow: 0 10px 24px rgba(37, 34, 31, 0.14);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 .foundry-button-soft {
   border: 1px solid rgba(238, 67, 56, 0.18);
-  background: #fff3ef;
+  background: rgba(255, 93, 82, 0.1);
   color: var(--foundry-red-dark);
 }
 
 .foundry-button-save {
   min-height: 38px;
-  background: #eaf7ef;
-  color: #277749;
+  background: rgba(110, 214, 154, 0.12);
+  color: var(--foundry-green);
 }
 
 .foundry-metric-grid {
@@ -1691,8 +1815,8 @@ a {
   padding: 18px;
   border: 1px solid var(--foundry-line);
   border-radius: 22px;
-  background: rgba(255, 253, 248, 0.9);
-  box-shadow: 0 8px 25px rgba(75, 54, 40, 0.05);
+  background: var(--foundry-paper);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
 }
 
 .foundry-metric-icon {
@@ -1774,7 +1898,7 @@ a {
   padding: clamp(19px, 2vw, 26px);
   border: 1px solid var(--foundry-line);
   border-radius: 26px;
-  background: rgba(255, 253, 248, 0.94);
+  background: var(--foundry-paper);
   box-shadow: var(--foundry-shadow);
 }
 
@@ -1807,7 +1931,7 @@ a {
   height: 34px;
   place-items: center;
   border-radius: 11px;
-  background: #f1e8dc;
+  background: var(--foundry-control-soft);
   font-size: 12px;
   font-weight: 800;
 }
@@ -1877,14 +2001,14 @@ a {
   gap: 5px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #f1ece4;
+  background: var(--foundry-control-soft);
   color: var(--foundry-muted);
   font-size: 9px;
   font-weight: 750;
 }
 
 .due-pill.is-urgent {
-  background: #ffe8e4;
+  background: rgba(255, 113, 104, 0.12);
   color: var(--foundry-danger);
 }
 
@@ -1953,7 +2077,7 @@ a {
   padding: 16px;
   border: 1px solid var(--foundry-line);
   border-radius: 18px;
-  background: #fbf7f0;
+  background: var(--foundry-control);
 }
 
 .foundry-department-card > div:first-child,
@@ -1998,7 +2122,7 @@ a {
   height: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e9dfd3;
+  background: var(--foundry-control-soft);
 }
 
 .foundry-progress.is-compact {
@@ -2082,7 +2206,7 @@ a {
   margin-bottom: 12px;
   place-items: center;
   border-radius: 17px;
-  background: #fff0ec;
+  background: rgba(255, 93, 82, 0.1);
   color: var(--foundry-red);
 }
 
@@ -2122,15 +2246,15 @@ a {
 .foundry-notice.is-success,
 .student-message.is-success {
   border: 1px solid rgba(61, 165, 106, 0.18);
-  background: #eaf7ef;
-  color: #267749;
+  background: rgba(110, 214, 154, 0.11);
+  color: var(--foundry-green);
 }
 
 .foundry-notice.is-error,
 .student-message.is-error {
   border: 1px solid rgba(217, 63, 55, 0.18);
-  background: #ffebe8;
-  color: #ad3029;
+  background: rgba(255, 113, 104, 0.1);
+  color: var(--foundry-danger);
 }
 
 .foundry-segment-row {
@@ -2147,7 +2271,7 @@ a {
   padding: 12px 15px;
   border: 1px solid var(--foundry-line);
   border-radius: 17px;
-  background: rgba(255, 253, 248, 0.82);
+  background: var(--foundry-paper);
 }
 
 .foundry-segment strong {
@@ -2161,7 +2285,7 @@ a {
   padding: 12px;
   border: 1px solid var(--foundry-line);
   border-radius: 19px;
-  background: rgba(255, 253, 248, 0.84);
+  background: var(--foundry-paper);
 }
 
 .foundry-filter-bar label {
@@ -2183,7 +2307,7 @@ a {
   padding: 0 12px;
   border: 1px solid var(--foundry-line);
   border-radius: 12px;
-  background: white;
+  background: var(--foundry-control);
 }
 
 .foundry-search input {
@@ -2199,7 +2323,7 @@ a {
   border: 1px solid var(--foundry-line);
   border-radius: 12px;
   outline: 0;
-  background: white;
+  background: var(--foundry-control);
   color: var(--foundry-charcoal);
   font-size: 11px;
 }
@@ -2217,7 +2341,7 @@ a {
   border: 1px solid var(--foundry-line);
   border-radius: 23px;
   background: var(--foundry-paper);
-  box-shadow: 0 10px 28px rgba(75, 54, 40, 0.055);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -2244,7 +2368,7 @@ a {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 16px;
-  background: #f0e5d8;
+  background: var(--foundry-control-soft);
   color: var(--foundry-charcoal);
   font-size: 12px;
   font-weight: 820;
@@ -2308,7 +2432,7 @@ a {
   gap: 5px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #f1ece4;
+  background: var(--foundry-control-soft);
   color: var(--foundry-muted);
   font-size: 8px;
   font-weight: 700;
@@ -2438,7 +2562,7 @@ a {
   padding: 7px;
   border: 1px solid var(--foundry-line);
   border-radius: 17px;
-  background: rgba(255, 253, 248, 0.78);
+  background: var(--foundry-paper);
   scrollbar-width: none;
 }
 
@@ -2452,7 +2576,7 @@ a {
 }
 
 .student-record-tabs a:hover {
-  background: #f0e7dc;
+  background: var(--foundry-control-soft);
   color: var(--foundry-charcoal);
 }
 
@@ -2488,7 +2612,7 @@ a {
   border: 1px solid var(--foundry-line);
   border-radius: 12px;
   outline: none;
-  background: white;
+  background: var(--foundry-control);
   color: var(--foundry-charcoal);
   font-size: 11px;
   font-weight: 480;
@@ -2553,7 +2677,7 @@ a {
   justify-content: center;
   padding: 0 8px;
   border-radius: 999px;
-  background: #eee7de;
+  background: var(--foundry-control-soft);
   color: var(--foundry-muted);
   font-size: 8px;
   font-weight: 800;
@@ -2617,7 +2741,7 @@ a {
   width: 48px;
   height: 48px;
   place-items: center;
-  border: 5px solid #e5f5ea;
+  border: 5px solid rgba(110, 214, 154, 0.15);
   border-top-color: var(--foundry-green);
   border-radius: 50%;
   font-size: 9px;
@@ -2654,9 +2778,9 @@ a {
   place-items: center;
   align-content: center;
   padding: 24px;
-  border: 1px dashed rgba(44, 35, 29, 0.16);
+  border: 1px dashed var(--foundry-line-strong);
   border-radius: 19px;
-  background: #faf5ee;
+  background: var(--foundry-control);
   text-align: center;
 }
 
@@ -2667,13 +2791,13 @@ a {
   margin-bottom: 12px;
   place-items: center;
   border-radius: 19px;
-  background: #f0e6da;
+  background: var(--foundry-control-soft);
   color: var(--foundry-muted);
 }
 
 .studio-readiness-state.is-ready {
   border-color: rgba(185, 137, 32, 0.25);
-  background: #fff7db;
+  background: rgba(213, 174, 84, 0.08);
 }
 
 .studio-readiness-state.is-ready > span {
@@ -2766,7 +2890,7 @@ a {
   padding: 15px;
   border: 1px solid var(--foundry-line);
   border-radius: 18px;
-  background: #fbf7f0;
+  background: var(--foundry-control);
 }
 
 .foundry-class-date {
@@ -2840,7 +2964,7 @@ a {
   place-items: center;
   border: 1px solid var(--foundry-line);
   border-radius: 11px;
-  background: white;
+  background: var(--foundry-control-soft);
   color: var(--foundry-red);
 }
 
@@ -2851,7 +2975,7 @@ a {
   padding: 11px;
   border: 1px solid var(--foundry-line);
   border-radius: 16px;
-  background: #fbf7f0;
+  background: var(--foundry-control);
 }
 
 .attendance-student-row label.is-grow {
@@ -2866,7 +2990,7 @@ a {
   border: 1px solid var(--foundry-line);
   border-radius: 10px;
   outline: 0;
-  background: white;
+  background: var(--foundry-paper-strong);
   color: var(--foundry-charcoal);
   font-size: 10px;
 }
@@ -2930,12 +3054,12 @@ a {
   padding: 15px;
   border: 1px solid var(--foundry-line);
   border-radius: 18px;
-  background: #fbf7f0;
+  background: var(--foundry-control);
 }
 
 .assignment-card.is-recovery {
   border-color: rgba(111, 77, 161, 0.18);
-  background: #f8f3ff;
+  background: rgba(141, 131, 183, 0.1);
 }
 
 .assignment-card-head {
@@ -2970,7 +3094,7 @@ a {
   padding: 15px;
   border: 1px solid var(--foundry-line);
   border-radius: 18px;
-  background: #fbf7f0;
+  background: var(--foundry-control);
 }
 
 .task-template-grid h3 {
@@ -3013,7 +3137,7 @@ a {
   margin-bottom: 17px;
   padding: 16px;
   border-radius: 17px;
-  background: #f7f0e7;
+  background: var(--foundry-control);
 }
 
 .submission-work > span:first-child,
@@ -3070,7 +3194,7 @@ a {
 
 .progress-student-card.is-studio-ready {
   border-color: rgba(185, 137, 32, 0.25);
-  background: #fff9e7;
+  background: rgba(213, 174, 84, 0.08);
 }
 
 .progress-student-card > div:first-child {
@@ -3141,7 +3265,7 @@ a {
 }
 
 .foundry-view-switch a.is-active {
-  background: var(--foundry-charcoal);
+  background: var(--foundry-red);
   color: white;
 }
 
@@ -3171,7 +3295,7 @@ a {
   border: 1px solid var(--foundry-line);
   border-radius: 21px;
   background: var(--foundry-paper);
-  box-shadow: 0 9px 25px rgba(75, 54, 40, 0.05);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
 }
 
 .foundry-more-card > span,
@@ -3197,7 +3321,7 @@ a {
   padding: 17px;
   border: 1px solid var(--foundry-line);
   border-radius: 18px;
-  background: #fbf7f0;
+  background: var(--foundry-control);
 }
 
 .foundry-system-grid strong {
@@ -3216,36 +3340,143 @@ a {
   width: fit-content;
   padding: 5px 7px;
   border-radius: 999px;
-  background: #eee6dc;
+  background: var(--foundry-control-soft);
   color: var(--foundry-muted);
   font-size: 8px;
   font-weight: 760;
 }
 
-.foundry-corner-character {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 4;
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 4px solid rgba(255, 255, 255, 0.75);
-  border-radius: 19px 19px 19px 7px;
-  background: var(--foundry-red);
-  color: white;
-  box-shadow: 0 14px 30px rgba(238, 67, 56, 0.25);
-  animation: foundry-float 4s ease-in-out infinite;
+.health-badge.is-compact {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  justify-content: center;
+  padding: 0;
 }
 
-@keyframes foundry-float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2deg);
+.foundry-loading-hero {
+  display: grid;
+  max-width: 720px;
+  gap: 13px;
+}
+
+.foundry-loading-hero > span,
+.foundry-loading-hero > strong,
+.foundry-loading-hero > p,
+.foundry-skeleton span,
+.foundry-skeleton small,
+.foundry-skeleton strong,
+.foundry-skeleton p {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--foundry-control) 0%,
+    var(--foundry-control-soft) 48%,
+    var(--foundry-control) 100%
+  );
+  background-size: 220% 100%;
+  animation: role-skeleton 1.5s ease-in-out infinite;
+}
+
+.foundry-loading-hero > span {
+  width: 150px;
+  height: 10px;
+}
+
+.foundry-loading-hero > strong {
+  width: min(100%, 620px);
+  height: 58px;
+}
+
+.foundry-loading-hero > p {
+  width: min(90%, 520px);
+  height: 14px;
+}
+
+.foundry-skeleton > span {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+}
+
+.foundry-skeleton small {
+  width: 84px;
+  height: 9px;
+}
+
+.foundry-skeleton strong {
+  width: 48px;
+  height: 28px;
+  margin-top: 8px;
+}
+
+.foundry-skeleton p {
+  width: 110px;
+  max-width: 100%;
+  height: 8px;
+}
+
+.foundry-skeleton.is-tall {
+  min-height: 330px;
+}
+
+.foundry-role-error {
+  display: grid;
+  min-height: 520px;
+  place-items: center;
+  align-content: center;
+  padding: clamp(28px, 5vw, 60px);
+  border: 1px solid var(--foundry-line);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 93, 82, 0.12), transparent 18rem),
+    var(--foundry-paper);
+  text-align: center;
+}
+
+.foundry-role-error > span {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 18px;
+  place-items: center;
+  border-radius: 19px;
+  background: rgba(255, 113, 104, 0.12);
+  color: var(--foundry-danger);
+}
+
+.foundry-role-error > small {
+  color: var(--foundry-red-dark);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.foundry-role-error h1 {
+  max-width: 620px;
+  margin: 10px 0;
+  font-size: clamp(30px, 5vw, 52px);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.foundry-role-error p {
+  max-width: 520px;
+  margin: 0 0 22px;
+  color: var(--foundry-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@keyframes role-skeleton {
+  from {
+    background-position: 100% 0;
   }
-  50% {
-    transform: translateY(-5px) rotate(2deg);
+  to {
+    background-position: -100% 0;
   }
 }
 
@@ -3290,6 +3521,15 @@ a {
 .student-brand strong {
   font-size: 13px;
   letter-spacing: -0.02em;
+}
+
+.student-header-promise {
+  color: var(--foundry-muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .student-account {
@@ -3378,7 +3618,10 @@ a {
 .student-portal-view.is-preview {
   width: min(100%, 720px);
   margin: 0 auto;
-  padding: 4px 0 20px;
+  padding: 18px;
+  border-radius: 28px;
+  background: var(--foundry-ivory);
+  color: var(--foundry-charcoal);
 }
 
 .student-role-context {
@@ -3482,38 +3725,17 @@ a {
   line-height: 1.02;
 }
 
-.student-character {
-  position: relative;
+.student-hero-icon {
   display: grid;
-  width: 66px;
-  height: 66px;
+  width: 58px;
+  height: 58px;
   flex: 0 0 auto;
   place-items: center;
-  border: 5px solid rgba(255, 255, 255, 0.72);
-  border-radius: 25px 25px 25px 9px;
-  background: var(--foundry-red);
-  color: white;
-  box-shadow: 0 14px 30px rgba(238, 67, 56, 0.22);
-  animation: foundry-float 4s ease-in-out infinite;
-}
-
-.student-character i,
-.student-character i::after {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: white;
-  content: "";
-}
-
-.student-character i {
-  right: 20px;
-  bottom: 16px;
-}
-
-.student-character i::after {
-  right: 16px;
+  border: 1px solid rgba(238, 67, 56, 0.16);
+  border-radius: 20px;
+  background: #fff0ec;
+  color: var(--foundry-red);
+  box-shadow: 0 12px 28px rgba(75, 54, 40, 0.08);
 }
 
 .student-today-stack,
@@ -3676,6 +3898,23 @@ a {
   font-size: 13px;
   font-weight: 810;
   box-shadow: 0 14px 28px rgba(238, 67, 56, 0.22);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.student-primary-action:hover {
+  background: var(--foundry-red-dark);
+  transform: translateY(-1px);
+}
+
+.student-primary-action:disabled,
+.student-primary-action[aria-disabled="true"] {
+  background: #c9c1b8;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .student-complete-icon {
@@ -3687,6 +3926,11 @@ a {
   border-radius: 20px;
   background: #e5f5ea;
   color: var(--foundry-green);
+}
+
+.student-complete-icon.is-reviewing {
+  background: #fff0c9;
+  color: #966e16;
 }
 
 .student-next-class {
@@ -3796,6 +4040,47 @@ a {
   line-height: 1.65;
 }
 
+.student-day-progress {
+  display: grid;
+  gap: 11px;
+  padding: 16px 18px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 20px;
+  background: rgba(255, 253, 248, 0.74);
+}
+
+.student-day-progress > div {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.student-day-progress > div > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.student-day-progress small,
+.student-day-progress > div > span:last-child {
+  color: var(--foundry-muted);
+  font-size: 10px;
+}
+
+.student-day-progress strong {
+  font-size: 13px;
+}
+
+.student-day-progress > a {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  color: var(--foundry-red);
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .student-content-card {
   padding: clamp(20px, 4vw, 28px);
 }
@@ -3900,6 +4185,13 @@ a {
   font-size: 12px;
   font-weight: 450;
   line-height: 1.55;
+}
+
+.student-submit-form input:disabled,
+.student-submit-form textarea:disabled {
+  background: #f0ebe4;
+  color: var(--foundry-muted);
+  cursor: not-allowed;
 }
 
 .student-submit-form > p {
@@ -4098,10 +4390,11 @@ a {
 
 .student-link-pending {
   min-height: calc(100vh - 210px);
-  padding: 30px;
+  align-content: center;
+  padding: 30px 0;
 }
 
-.student-link-pending > span {
+.student-access-icon {
   display: grid;
   width: 62px;
   height: 62px;
@@ -4135,7 +4428,67 @@ a {
   line-height: 1.65;
 }
 
-.student-link-pending > div {
+.student-access-steps {
+  display: grid;
+  width: min(100%, 520px);
+  margin: 26px 0 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.student-access-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 16px;
+  background: var(--foundry-paper);
+  text-align: left;
+}
+
+.student-access-steps li > span {
+  display: grid;
+  width: 35px;
+  height: 35px;
+  place-items: center;
+  border-radius: 12px;
+  background: #eee8df;
+  color: var(--foundry-muted);
+}
+
+.student-access-steps li.is-complete > span {
+  background: #e9f6ee;
+  color: var(--foundry-green);
+}
+
+.student-access-steps li.is-current {
+  border-color: rgba(238, 67, 56, 0.2);
+  background: #fff3ef;
+}
+
+.student-access-steps li.is-current > span {
+  background: #ffe5df;
+  color: var(--foundry-red);
+}
+
+.student-access-steps li > div {
+  display: grid;
+  gap: 3px;
+}
+
+.student-access-steps strong {
+  font-size: 12px;
+}
+
+.student-access-steps small {
+  color: var(--foundry-muted);
+  font-size: 10px;
+}
+
+.student-access-note {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -4147,11 +4500,135 @@ a {
   font-size: 10px;
 }
 
-.student-link-pending > a {
+.student-access-actions {
+  display: grid;
+  width: min(100%, 520px);
   margin-top: 18px;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.student-access-actions .student-primary-action {
+  min-height: 44px;
+  margin: 0;
+}
+
+.student-access-actions form,
+.student-access-actions .student-secondary-action {
+  width: 100%;
+}
+
+.student-access-actions .student-secondary-action {
+  min-height: 44px;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.student-loading-greeting {
+  display: grid;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.student-loading-greeting > span,
+.student-loading-greeting > strong,
+.student-skeleton::before,
+.student-skeleton::after {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #eee6dc 0%,
+    #f8f2e9 48%,
+    #eee6dc 100%
+  );
+  background-size: 220% 100%;
+  animation: role-skeleton 1.5s ease-in-out infinite;
+  content: "";
+}
+
+.student-loading-greeting > span {
+  width: 110px;
+  height: 9px;
+}
+
+.student-loading-greeting > strong {
+  width: min(80%, 440px);
+  height: 42px;
+}
+
+.student-skeleton {
+  position: relative;
+  min-height: 58px;
+  overflow: hidden;
+}
+
+.student-skeleton::before {
+  position: absolute;
+  inset: 18px;
+  height: 12px;
+}
+
+.student-skeleton.is-tall {
+  min-height: 360px;
+}
+
+.student-skeleton.is-tall::before {
+  width: 45%;
+}
+
+.student-skeleton.is-tall::after {
+  position: absolute;
+  inset: 56px 18px auto;
+  width: 70%;
+  height: 32px;
+}
+
+.student-role-error {
+  display: grid;
+  min-height: calc(100vh - 210px);
+  place-items: center;
+  align-content: center;
+  padding: 32px 18px;
+  text-align: center;
+}
+
+.student-role-error > span {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 17px;
+  place-items: center;
+  border-radius: 21px;
+  background: #fff0ec;
+  color: var(--foundry-red);
+}
+
+.student-role-error > small {
   color: var(--foundry-red);
   font-size: 10px;
-  font-weight: 780;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.student-role-error h1 {
+  max-width: 480px;
+  margin: 9px 0;
+  font-size: clamp(28px, 6vw, 43px);
+  letter-spacing: -0.055em;
+  line-height: 1.05;
+}
+
+.student-role-error p {
+  max-width: 480px;
+  margin: 0;
+  color: var(--foundry-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.student-role-error .student-primary-action {
+  width: min(100%, 320px);
 }
 
 @media (max-width: 1120px) {
@@ -4185,9 +4662,6 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .foundry-corner-character {
-    display: none;
-  }
 }
 
 @media (max-width: 720px) {
@@ -4221,8 +4695,8 @@ a {
     border-bottom: 0;
     border-left: 0;
     border-radius: 20px 20px 0 0;
-    background: rgba(255, 253, 248, 0.97);
-    box-shadow: 0 -12px 30px rgba(75, 54, 40, 0.1);
+    background: rgba(17, 21, 28, 0.97);
+    box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.25);
   }
 
   .foundry-nav-link {
@@ -4234,8 +4708,8 @@ a {
   }
 
   .foundry-nav-link.is-active {
-    background: #fff0ec;
-    color: var(--foundry-red);
+    background: var(--foundry-red);
+    color: white;
     box-shadow: none;
   }
 
@@ -4347,6 +4821,10 @@ a {
     display: none;
   }
 
+  .student-header-promise {
+    display: none;
+  }
+
   .student-shell-main {
     width: min(100% - 22px, 720px);
     padding-top: 24px;
@@ -4375,10 +4853,10 @@ a {
     align-items: flex-start;
   }
 
-  .student-character {
+  .student-hero-icon {
     width: 54px;
     height: 54px;
-    border-radius: 20px 20px 20px 7px;
+    border-radius: 18px;
   }
 
   .student-roman-urdu {
@@ -4439,10 +4917,9 @@ a {
     font-size: 9px;
   }
 
-  .student-character {
+  .student-hero-icon {
     width: 48px;
     height: 48px;
-    border-width: 4px;
   }
 
   .student-next-class {
@@ -4477,18 +4954,31 @@ a {
     align-items: flex-start;
     flex-wrap: wrap;
   }
+
+  .student-access-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .foundry-corner-character,
-  .student-character {
-    animation: none;
-  }
-
   .foundry-button,
   .foundry-student-card,
   .foundry-attention-row,
   .foundry-nav-link {
     transition: none;
+  }
+
+  .foundry-loading-hero > span,
+  .foundry-loading-hero > strong,
+  .foundry-loading-hero > p,
+  .foundry-skeleton span,
+  .foundry-skeleton small,
+  .foundry-skeleton strong,
+  .foundry-skeleton p,
+  .student-loading-greeting > span,
+  .student-loading-greeting > strong,
+  .student-skeleton::before,
+  .student-skeleton::after {
+    animation: none;
   }
 }

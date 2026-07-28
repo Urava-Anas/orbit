@@ -109,15 +109,21 @@ export default async function FoundryDashboardPage() {
     ? {
         href: "/dashboard/foundry/submissions",
         label: `Review ${submissions.length} submission${submissions.length === 1 ? "" : "s"}`,
+        detail:
+          "Student work is waiting for a decision. Fast feedback keeps the learning loop moving.",
       }
     : atRisk.length
       ? {
           href: "/dashboard/foundry/students",
           label: `Support ${atRisk.length} student${atRisk.length === 1 ? "" : "s"}`,
+          detail:
+            "Open the protection queue and give each learner one clear recovery step.",
         }
       : {
           href: "/dashboard/foundry/students",
           label: "Open student roster",
+          detail:
+            "No urgent signal is blocking the cohort. Review the roster and prepare the next move.",
         };
 
   const departments = new Map<
@@ -140,10 +146,10 @@ export default async function FoundryDashboardPage() {
     <div className="foundry-page">
       <section className="foundry-hero">
         <div>
-          <span className="foundry-kicker">Founder command centre</span>
+          <span className="foundry-kicker">Founder Command · Foundry</span>
           <h1>
             {attention.length
-              ? `${attention.length} signals need a decision today`
+              ? `${attention.length} decisions protect today’s progress`
               : "Foundry is under control today"}
           </h1>
           <p>
@@ -151,13 +157,24 @@ export default async function FoundryDashboardPage() {
             work — without opening every student record.
           </p>
         </div>
-        <Link
-          className="foundry-button foundry-button-primary"
-          href={primaryAction.href}
-        >
-          {primaryAction.label}
-          <ArrowUpRight aria-hidden="true" size={17} />
-        </Link>
+        <aside className="foundry-hero-focus" aria-label="Recommended founder action">
+          <div className="foundry-focus-label">
+            <span>
+              <i aria-hidden="true" />
+              Recommended next move
+            </span>
+            <small>Orbit priority</small>
+          </div>
+          <strong>{primaryAction.label}</strong>
+          <p>{primaryAction.detail}</p>
+          <Link
+            className="foundry-button foundry-button-primary"
+            href={primaryAction.href}
+          >
+            Open now
+            <ArrowUpRight aria-hidden="true" size={17} />
+          </Link>
+        </aside>
       </section>
 
       <section className="foundry-metric-grid" aria-label="Foundry key metrics">

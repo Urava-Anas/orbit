@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import {
   submitCurrentStudentWork,
-  submitFoundryPreviewWork,
 } from "@/app/(app)/dashboard/foundry/actions";
 import { FoundryProgressBar, HealthBadge } from "@/components/foundry/FoundryUI";
 import {
@@ -111,6 +110,9 @@ export function StudentPortalView({
   const latestFeedback = submissions.find(
     (submission) => submission.feedback && submission.status !== "under_review",
   );
+  const pendingReview = submissions.find((submission) =>
+    ["submitted", "under_review"].includes(submission.status),
+  );
   const completedCount = assignments.filter(
     (assignment) => assignment.status === "completed",
   ).length;
@@ -197,9 +199,8 @@ export function StudentPortalView({
                     : student.full_name}
           </h1>
         </div>
-        <span className="student-character" aria-hidden="true">
+        <span className="student-hero-icon" aria-hidden="true">
           <Sparkles size={22} />
-          <i />
         </span>
       </header>
 
@@ -267,13 +268,24 @@ export function StudentPortalView({
               </>
             ) : (
               <>
-                <span className="student-complete-icon">
-                  <CheckCircle2 aria-hidden="true" size={28} />
+                <span
+                  className={`student-complete-icon ${pendingReview ? "is-reviewing" : ""}`}
+                >
+                  {pendingReview ? (
+                    <Clock3 aria-hidden="true" size={28} />
+                  ) : (
+                    <CheckCircle2 aria-hidden="true" size={28} />
+                  )}
                 </span>
-                <h2>Aaj ka assigned work complete hai</h2>
+                <h2>
+                  {pendingReview
+                    ? "Aap ka work teacher ke review mein hai"
+                    : "Aaj ka assigned work complete hai"}
+                </h2>
                 <p className="student-roman-urdu">
-                  Feedback parhein, progress dekhein aur next class ke liye ready
-                  rahein.
+                  {pendingReview
+                    ? "Abhi dobara submit karne ki zaroorat nahi. Feedback aate hi yahan next step nazar aayega."
+                    : "Feedback parhein, progress dekhein aur next class ke liye ready rahein."}
                 </p>
                 <Link
                   className="student-primary-action"
@@ -333,6 +345,21 @@ export function StudentPortalView({
               <p>{latestFeedback.feedback}</p>
             </section>
           ) : null}
+
+          <section className="student-day-progress" aria-label="Your Foundry progress">
+            <div>
+              <span>
+                <small>Your momentum</small>
+                <strong>{student.progress_percent}% Foundry journey</strong>
+              </span>
+              <span>{completedCount} tasks complete</span>
+            </div>
+            <FoundryProgressBar value={student.progress_percent} compact />
+            <Link href={preview ? "?tab=progress" : "/learn/progress"}>
+              Progress dekhein
+              <ArrowRight aria-hidden="true" size={15} />
+            </Link>
+          </section>
         </div>
       ) : null}
 
@@ -389,9 +416,7 @@ export function StudentPortalView({
           </div>
           {todayTask ? (
             <form
-              action={
-                preview ? submitFoundryPreviewWork : submitCurrentStudentWork
-              }
+              action={preview ? undefined : submitCurrentStudentWork}
               className="student-submit-form"
             >
               <input name="assignmentId" type="hidden" value={todayTask.id} />
@@ -403,6 +428,7 @@ export function StudentPortalView({
                   name="submissionUrl"
                   placeholder="https://drive.google.com/..."
                   type="url"
+                  disabled={preview}
                 />
               </label>
               <label>
@@ -411,14 +437,21 @@ export function StudentPortalView({
                   name="studentNote"
                   placeholder="Maine task complete kiya. Yeh mera work hai."
                   rows={4}
+                  disabled={preview}
                 />
               </label>
               <p>
-                Link nahi hai? Note likhein aur class mein screenshot / file
-                dikhayein.
+                {preview
+                  ? "Founder preview mein submission band hai. Student account se yeh action live hoga."
+                  : "Link nahi hai? Note likhein aur class mein screenshot / file dikhayein."}
               </p>
-              <button className="student-primary-action" type="submit">
-                Work submit karein
+              <button
+                aria-disabled={preview}
+                className="student-primary-action"
+                disabled={preview}
+                type="submit"
+              >
+                {preview ? "Preview only" : "Work submit karein"}
                 <Send aria-hidden="true" size={17} />
               </button>
             </form>

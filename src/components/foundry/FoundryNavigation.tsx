@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 const founderLinks = [
-  { href: "/dashboard/foundry", label: "Home", icon: House },
+  { href: "/dashboard/foundry", label: "Command", icon: House },
   { href: "/dashboard/foundry/students", label: "Students", icon: UsersRound },
   { href: "/dashboard/foundry/classes", label: "Classes", icon: CalendarDays },
   { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
@@ -48,6 +48,7 @@ export function FounderFoundryNavigation() {
             className={`foundry-nav-link ${active ? "is-active" : ""}`}
             href={href}
             key={href}
+            aria-current={active ? "page" : undefined}
           >
             <Icon aria-hidden="true" size={19} strokeWidth={2} />
             <span>{label}</span>
@@ -71,6 +72,7 @@ export function StudentFoundryNavigation() {
             className={`student-nav-link ${active ? "is-active" : ""}`}
             href={href}
             key={href}
+            aria-current={active ? "page" : undefined}
           >
             <Icon aria-hidden="true" size={20} strokeWidth={2.1} />
             <span>{label}</span>
