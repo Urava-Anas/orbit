@@ -1,0 +1,2 @@
+create index permission_bundle_capabilities_workspace_bundle_idx
+  on public.permission_bundle_capabilities(workspace_id, bundle_id);

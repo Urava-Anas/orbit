@@ -7,6 +7,7 @@ import {
   Building2,
   FileCheck2,
   FolderKanban,
+  GraduationCap,
   LayoutDashboard,
   Menu,
   MessageSquareText,
@@ -16,6 +17,7 @@ import {
 
 const links = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
+  { href: "/dashboard/foundry", label: "Foundry OS", icon: GraduationCap },
   { href: "/dashboard/leads", label: "Growth", icon: UsersRound },
   { href: "/dashboard/projects", label: "Delivery", icon: FolderKanban },
   { href: "/dashboard/cash", label: "Finance", icon: Banknote },

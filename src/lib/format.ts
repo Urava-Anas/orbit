@@ -1,5 +1,9 @@
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
+export function currentTimestamp() {
+  return Date.now();
+}
+
 export function formatMoney(value: number, currency = "PKR") {
   if (!currencyFormatters.has(currency)) {
     currencyFormatters.set(
@@ -45,4 +49,3 @@ export function humanize(value: string) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
-

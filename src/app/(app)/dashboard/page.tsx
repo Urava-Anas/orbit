@@ -3,7 +3,12 @@ import Link from "next/link";
 import { ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { MetricCard } from "@/components/MetricCard";
 import { PageHeader } from "@/components/PageHeader";
-import { formatMoney, formatRelativeDate, humanize } from "@/lib/format";
+import {
+  currentTimestamp,
+  formatMoney,
+  formatRelativeDate,
+  humanize,
+} from "@/lib/format";
 import type { AuditEvent, Lead, Project } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -58,7 +63,7 @@ export default async function DashboardPage() {
   const invoices = invoicesResult.data ?? [];
   const proofs = proofsResult.data ?? [];
   const audit = (auditResult.data ?? []) as AuditEvent[];
-  const now = Date.now();
+  const now = currentTimestamp();
   const nextThreeDays = now + 3 * 24 * 60 * 60 * 1000;
 
   const activeLeads = leads.filter(
