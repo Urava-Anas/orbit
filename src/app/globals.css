@@ -483,6 +483,49 @@ a {
   gap: 17px;
 }
 
+.oauth-form {
+  display: grid;
+}
+
+.button-google {
+  width: 100%;
+  min-height: 48px;
+  border-color: #dadce0;
+  background: #ffffff;
+  color: #1f1f1f;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+.button-google:hover {
+  border-color: #c7c9cc;
+  background: #f8fafd;
+  color: #1f1f1f;
+  box-shadow: 0 11px 26px rgba(0, 0, 0, 0.2);
+}
+
+.google-mark {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.auth-divider {
+  display: grid;
+  margin: 21px 0;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 13px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  height: 1px;
+  background: var(--line);
+  content: "";
+}
+
 .field {
   display: grid;
   gap: 8px;
