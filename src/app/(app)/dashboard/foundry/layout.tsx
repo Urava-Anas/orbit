@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Crown, Sparkles } from "lucide-react";
 import {
   FounderFoundryNavigation,
   FoundryMiniMark,
@@ -22,9 +22,15 @@ export default async function FoundryLayout({
           </span>
         </div>
         <div className="foundry-top-actions">
-          <span className="foundry-live-pill">
-            <i aria-hidden="true" />
-            Live pilot
+          <span
+            className="foundry-role-pill"
+            aria-label="Founder mode with full Foundry control"
+          >
+            <Crown aria-hidden="true" size={15} />
+            <span>
+              <strong>Founder mode</strong>
+              <small>Full control</small>
+            </span>
           </span>
           <Link className="foundry-back-link" href="/dashboard">
             <ArrowLeft aria-hidden="true" size={15} />

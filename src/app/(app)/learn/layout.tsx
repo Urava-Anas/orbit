@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { LogOut, Sparkles } from "lucide-react";
+import { ShieldCheck, Sparkles } from "lucide-react";
 import { StudentFoundryNavigation } from "@/components/foundry/FoundryNavigation";
 import { requireWorkspace } from "@/lib/workspace";
 
 export default async function LearnLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { user } = await requireWorkspace();
+  await requireWorkspace();
   return (
     <div className="student-shell">
       <header className="student-shell-header">
@@ -16,9 +16,15 @@ export default async function LearnLayout({
           </span>
           <strong>Urava Foundry</strong>
         </Link>
-        <span className="student-account">
-          {user.email}
-          <LogOut aria-hidden="true" size={15} />
+        <span
+          className="student-role-pill"
+          aria-label="Private student space showing only your learning record"
+        >
+          <ShieldCheck aria-hidden="true" size={16} />
+          <span>
+            <strong>Student space</strong>
+            <small>Only your record</small>
+          </span>
         </span>
       </header>
       <main className="student-shell-main">{children}</main>

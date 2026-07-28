@@ -13,6 +13,7 @@ import {
   Medal,
   MonitorSmartphone,
   Send,
+  ShieldCheck,
   Sparkles,
   Star,
   Trophy,
@@ -58,6 +59,27 @@ const previewTabs: Array<{ tab: StudentPortalTab; label: string }> = [
   { tab: "profile", label: "Profile" },
 ];
 
+const studentHealthLabels = {
+  green: "On track",
+  yellow: "Support ready",
+  red: "Let’s recover",
+  gold: "Studio Ready",
+} as const;
+
+function instructionFor(
+  student: FoundryStudent,
+  task: FoundryAssignment["foundry_tasks"],
+) {
+  if (!task) return "Teacher se task ki detail confirm karein.";
+  if (
+    student.preferred_language === "english" &&
+    task.instructions_english?.trim()
+  ) {
+    return task.instructions_english;
+  }
+  return task.instructions_roman_urdu;
+}
+
 function PortalNotice({ notice, error }: { notice?: string; error?: string }) {
   if (!notice && !error) return null;
   return (
@@ -96,6 +118,19 @@ export function StudentPortalView({
   const averageSkill = skills.length
     ? Math.round(skills.reduce((sum, skill) => sum + skill.score, 0) / skills.length)
     : 0;
+  const prefersEnglish = student.preferred_language === "english";
+  const isRecoveryTask = Boolean(todayTask?.recovery_for_assignment_id);
+  const taskFlow = prefersEnglish
+    ? [
+        ["1", "Read", "Understand the brief"],
+        ["2", "Build", "Complete your work"],
+        ["3", "Submit", "Send proof to teacher"],
+      ]
+    : [
+        ["1", "Samjho", "Brief poori parhein"],
+        ["2", "Banao", "Apna work complete karein"],
+        ["3", "Submit", "Teacher ko proof bhejein"],
+      ];
 
   return (
     <div className={`student-portal-view ${preview ? "is-preview" : ""}`}>
@@ -117,6 +152,25 @@ export function StudentPortalView({
       ) : null}
 
       <PortalNotice error={error} notice={notice} />
+
+      <section className="student-role-context" aria-label="Student access scope">
+        <div>
+          <span className="student-role-context-icon">
+            <ShieldCheck aria-hidden="true" size={18} />
+          </span>
+          <span>
+            <small>Private student space</small>
+            <strong>Sirf aap ka learning record</strong>
+          </span>
+        </div>
+        <div>
+          <span className="student-foundry-id">{student.foundry_id}</span>
+          <HealthBadge
+            health={student.health_status}
+            label={studentHealthLabels[student.health_status]}
+          />
+        </div>
+      </section>
 
       <header className="student-greeting">
         <div>
@@ -153,7 +207,7 @@ export function StudentPortalView({
         <div className="student-today-stack">
           <section className="student-primary-card">
             <div className="student-card-label">
-              <span>Aaj ka Task</span>
+              <span>{isRecoveryTask ? "Easy recovery task" : "Aaj ka Task"}</span>
               {todayTask ? (
                 <span className="student-streak">
                   <Flame aria-hidden="true" size={14} />
@@ -165,7 +219,7 @@ export function StudentPortalView({
               <>
                 <h2>{todayTask.foundry_tasks?.title}</h2>
                 <p className="student-roman-urdu">
-                  {todayTask.foundry_tasks?.instructions_roman_urdu}
+                  {instructionFor(student, todayTask.foundry_tasks)}
                 </p>
                 <div className="student-task-meta">
                   <span>
@@ -176,7 +230,29 @@ export function StudentPortalView({
                     <BookOpen aria-hidden="true" size={15} />
                     {todayTask.foundry_tasks?.difficulty}
                   </span>
+                  <span>
+                    <Languages aria-hidden="true" size={15} />
+                    {prefersEnglish ? "English" : "Roman Urdu"}
+                  </span>
                 </div>
+                {isRecoveryTask ? (
+                  <p className="student-recovery-note">
+                    Pichla work miss ho gaya tha, is liye yeh chhota step diya
+                    gaya hai. Isay complete karke aap normal track par wapas aa
+                    jayenge.
+                  </p>
+                ) : null}
+                <ol className="student-task-flow" aria-label="Task completion steps">
+                  {taskFlow.map(([step, title, detail]) => (
+                    <li key={step}>
+                      <span>{step}</span>
+                      <div>
+                        <strong>{title}</strong>
+                        <small>{detail}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
                 <Link
                   className="student-primary-action"
                   href={
@@ -284,7 +360,7 @@ export function StudentPortalView({
                   <div>
                     <small>{assignment.status.replaceAll("_", " ")}</small>
                     <strong>{assignment.foundry_tasks?.title}</strong>
-                    <p>{assignment.foundry_tasks?.instructions_roman_urdu}</p>
+                    <p>{instructionFor(student, assignment.foundry_tasks)}</p>
                   </div>
                   {assignment.status === "completed" ? (
                     <CheckCircle2 aria-hidden="true" size={19} />

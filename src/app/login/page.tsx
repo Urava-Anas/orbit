@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Crown, GraduationCap } from "lucide-react";
 import { OrbitMark } from "@/components/OrbitMark";
 import { Notice } from "@/components/Notice";
 import { PasswordField } from "@/components/PasswordField";
@@ -41,14 +42,27 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </Link>
         <div className="auth-form">
           <span className="eyebrow">
-            {isSignup ? "Create organisation" : "Secure access"}
+            {isSignup ? "Founder setup" : "One secure entrance"}
           </span>
-          <h1>{isSignup ? "Start with control." : "Welcome back."}</h1>
+          <h1>{isSignup ? "Start with control." : "Welcome to Orbit."}</h1>
           <p>
             {isSignup
               ? "Create the organisation boundary that will hold your real operating data, decisions, workflows, and future team access."
-              : "Sign in to your private founder command system."}
+              : "One secure sign-in serves both Founder and Student access."}
           </p>
+
+          {!isSignup ? (
+            <div className="auth-role-row" aria-label="Orbit workspaces">
+              <span>
+                <Crown aria-hidden="true" size={16} />
+                Founder command
+              </span>
+              <span>
+                <GraduationCap aria-hidden="true" size={17} />
+                Student space
+              </span>
+            </div>
+          ) : null}
 
           <Notice error={params.error} notice={params.notice} />
 
@@ -94,11 +108,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 id="email"
                 name="email"
                 type="email"
-                autoComplete="email"
-                maxLength={254}
-                required
-                placeholder="founder@company.com"
-              />
+                  autoComplete="email"
+                  maxLength={254}
+                  required
+                  placeholder="you@example.com"
+                />
             </div>
             <div className="field">
               <label htmlFor="password">Password</label>
@@ -127,7 +141,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               className="text-link"
               href={isSignup ? "/login" : "/login?mode=signup"}
             >
-              {isSignup ? "I already have an account" : "Create an account"}
+              {isSignup
+                ? "I already have an account"
+                : "Create a Founder workspace"}
             </Link>
             {!isSignup ? (
               <Link className="text-link" href="/forgot-password">
@@ -140,10 +156,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
-          <span className="eyebrow">Orbit principle 01</span>
+          <span className="eyebrow">One door, correct workspace</span>
           <p>
-            The founder stays in control. Every signal must resolve to evidence,
-            authority, and a real organisation record.
+            One secure entrance. Founder command and Student learning stay
+            clearly separated.
           </p>
         </div>
       </aside>

@@ -105,6 +105,21 @@ export default async function FoundryDashboardPage() {
       })),
   ].slice(0, 8);
 
+  const primaryAction = submissions.length
+    ? {
+        href: "/dashboard/foundry/submissions",
+        label: `Review ${submissions.length} submission${submissions.length === 1 ? "" : "s"}`,
+      }
+    : atRisk.length
+      ? {
+          href: "/dashboard/foundry/students",
+          label: `Support ${atRisk.length} student${atRisk.length === 1 ? "" : "s"}`,
+        }
+      : {
+          href: "/dashboard/foundry/students",
+          label: "Open student roster",
+        };
+
   const departments = new Map<
     string,
     { progress: number; count: number; atRisk: number }
@@ -126,14 +141,21 @@ export default async function FoundryDashboardPage() {
       <section className="foundry-hero">
         <div>
           <span className="foundry-kicker">Founder command centre</span>
-          <h1>Who needs your attention today?</h1>
+          <h1>
+            {attention.length
+              ? `${attention.length} signals need a decision today`
+              : "Foundry is under control today"}
+          </h1>
           <p>
-            Progress, risk and real-work readiness — ek screen par, real student
-            records ke saath.
+            See who is progressing, who needs support and who is ready for real
+            work — without opening every student record.
           </p>
         </div>
-        <Link className="foundry-button foundry-button-primary" href="/dashboard/foundry/students">
-          Open student roster
+        <Link
+          className="foundry-button foundry-button-primary"
+          href={primaryAction.href}
+        >
+          {primaryAction.label}
           <ArrowUpRight aria-hidden="true" size={17} />
         </Link>
       </section>
