@@ -52,6 +52,37 @@ export async function login(formData: FormData) {
   redirect("/dashboard");
 }
 
+export async function signInWithGoogle() {
+  const origin = await requestOrigin();
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${origin}/auth/callback?next=/dashboard`,
+      queryParams: {
+        prompt: "select_account",
+      },
+    },
+  });
+
+  if (error || !data.url) {
+    console.error("Orbit Google sign-in failed", {
+      code: error?.code,
+      status: error?.status,
+    });
+
+    redirect(
+      messagePath(
+        "/login",
+        "error",
+        "Google sign-in is unavailable right now. Use email or try again.",
+      ),
+    );
+  }
+
+  redirect(data.url);
+}
+
 export async function signup(formData: FormData) {
   const parsed = z
     .object({
