@@ -13,15 +13,18 @@ const founderTables = [
   "foundry_submissions",
   "foundry_progress_events",
   "foundry_skill_scores",
+  "foundry_notifications",
 ] as const;
 
 const studentTables = [
   "foundry_students",
+  "foundry_classes",
   "foundry_attendance",
   "foundry_task_assignments",
   "foundry_submissions",
   "foundry_progress_events",
   "foundry_skill_scores",
+  "foundry_notifications",
 ] as const;
 
 export function FoundryRealtime({

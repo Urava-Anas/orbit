@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { ShieldCheck, Sparkles } from "lucide-react";
+import { Bell, ShieldCheck, Sparkles } from "lucide-react";
 import { StudentFoundryNavigation } from "@/components/foundry/FoundryNavigation";
 import { FoundryRealtime } from "@/components/foundry/FoundryRealtime";
-import { requireStudentAccess } from "@/lib/access";
+import { getCurrentStudentUnreadCount } from "@/lib/foundry";
 
 export default async function LearnLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { workspace } = await requireStudentAccess();
+  const { workspace, unreadCount } = await getCurrentStudentUnreadCount();
   return (
     <div className="student-shell">
       <a className="role-skip-link" href="#student-main">
@@ -22,6 +22,15 @@ export default async function LearnLayout({
         </Link>
         <span className="student-header-promise">Seekho · Banao · Barho</span>
         <FoundryRealtime role="student" workspaceId={workspace.id} />
+        <Link
+          aria-label={`${unreadCount} unread Foundry updates`}
+          className="student-notification-link"
+          href="/learn#student-updates"
+        >
+          <Bell aria-hidden="true" size={17} />
+          <span>Updates</span>
+          {unreadCount ? <b>{unreadCount > 9 ? "9+" : unreadCount}</b> : null}
+        </Link>
         <span
           className="student-role-pill"
           aria-label="Private student space showing only your learning record"

@@ -5066,6 +5066,430 @@ a {
   }
 }
 
+/* Foundry V1 completion controls */
+
+.foundry-action-spinner {
+  animation: foundry-action-spin 700ms linear infinite;
+}
+
+@keyframes foundry-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.foundry-form-section {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 11px 12px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 13px;
+  background: var(--foundry-control-soft);
+}
+
+.foundry-form-section strong {
+  color: var(--foundry-charcoal);
+  font-size: 10px;
+}
+
+.foundry-form-section small {
+  color: var(--foundry-muted);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.foundry-class-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.foundry-class-actions form {
+  display: inline-flex;
+}
+
+.foundry-class-actions > a,
+.foundry-class-action {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 9px;
+  background: var(--foundry-paper-strong);
+  color: var(--foundry-charcoal);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 790;
+}
+
+.foundry-class-action.is-live {
+  border-color: rgba(61, 165, 106, 0.22);
+  background: rgba(61, 165, 106, 0.1);
+  color: #287344;
+}
+
+.foundry-class-action.is-danger {
+  border-color: rgba(238, 67, 56, 0.18);
+  color: var(--foundry-red);
+}
+
+.foundry-class-actions > a.is-required {
+  border-color: rgba(231, 174, 48, 0.26);
+  background: rgba(231, 174, 48, 0.1);
+  color: #9a7015;
+}
+
+.foundry-class-action:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.attendance-roster-form {
+  display: grid;
+  gap: 13px;
+}
+
+.attendance-row-state {
+  display: inline-flex;
+  min-width: 72px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--foundry-muted);
+  font-size: 8px;
+  font-weight: 730;
+}
+
+.attendance-row-state svg {
+  color: var(--foundry-green);
+}
+
+.attendance-roster-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 16px;
+  background: var(--foundry-control-soft);
+}
+
+.attendance-roster-actions > span {
+  color: var(--foundry-muted);
+  font-size: 9px;
+}
+
+.foundry-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.7fr);
+  gap: 14px;
+}
+
+.foundry-inline-form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.foundry-inline-form label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  color: var(--foundry-muted);
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.foundry-inline-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 12px;
+  outline: 0;
+  background: var(--foundry-control);
+  color: var(--foundry-charcoal);
+}
+
+.foundry-settings-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.foundry-settings-state > div {
+  display: grid;
+  gap: 3px;
+}
+
+.foundry-settings-state small,
+.foundry-settings-state p {
+  color: var(--foundry-muted);
+}
+
+.foundry-settings-state small {
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.foundry-settings-state strong {
+  font-size: 18px;
+  text-transform: capitalize;
+}
+
+.foundry-settings-state p {
+  margin: 2px 0 0;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.student-notification-link {
+  position: relative;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 12px;
+  background: rgba(255, 253, 248, 0.78);
+  color: var(--foundry-charcoal);
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.student-notification-link b {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--foundry-red);
+  color: white;
+  font-size: 8px;
+}
+
+.student-updates-card {
+  scroll-margin-top: 16px;
+  padding: 17px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 25px;
+  background: var(--foundry-paper);
+  box-shadow: var(--foundry-shadow);
+}
+
+.student-updates-head,
+.student-updates-head > div {
+  display: flex;
+  align-items: center;
+}
+
+.student-updates-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-updates-head > div {
+  gap: 10px;
+}
+
+.student-updates-head > div > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.student-updates-head small {
+  color: var(--foundry-muted);
+  font-size: 9px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.student-updates-head strong {
+  font-size: 13px;
+}
+
+.student-mark-read {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--foundry-line);
+  border-radius: 10px;
+  background: white;
+  color: var(--foundry-charcoal);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.student-update-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.student-update-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: #faf6f0;
+}
+
+.student-update-list article.is-unread {
+  border-color: rgba(238, 67, 56, 0.16);
+  background: #fff1ed;
+}
+
+.student-update-list article > span {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 10px;
+  background: white;
+  color: var(--foundry-red);
+}
+
+.student-update-list article > div {
+  min-width: 0;
+}
+
+.student-update-list strong {
+  display: block;
+  font-size: 11px;
+}
+
+.student-update-list p,
+.student-update-list time,
+.student-updates-empty {
+  color: var(--foundry-muted);
+  font-size: 10px;
+}
+
+.student-update-list p {
+  margin: 3px 0 4px;
+  line-height: 1.5;
+}
+
+.student-update-list time {
+  font-size: 8px;
+}
+
+.student-update-list article > i {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--foundry-red);
+}
+
+.student-updates-empty {
+  margin: 14px 0 0;
+  padding: 11px;
+  border-radius: 13px;
+  background: #faf6f0;
+  line-height: 1.5;
+}
+
+.student-next-class.is-empty {
+  box-shadow: none;
+}
+
+.student-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid var(--foundry-line);
+}
+
+@media (max-width: 900px) {
+  .foundry-settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .attendance-row-state {
+    justify-content: flex-start;
+  }
+
+  .attendance-roster-actions,
+  .foundry-inline-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .attendance-roster-actions .foundry-button,
+  .foundry-inline-form .foundry-button {
+    width: 100%;
+  }
+
+  .student-notification-link {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .student-notification-link > span {
+    display: none;
+  }
+
+  .student-notification-link b {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .foundry-form-section {
+    grid-column: auto;
+  }
+
+  .foundry-class-actions {
+    grid-column: 1 / -1;
+  }
+
+  .attendance-row-state {
+    grid-column: 1 / -1;
+  }
+
+  .student-brand strong,
+  .student-role-pill > span {
+    display: none;
+  }
+
+  .student-role-pill {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .student-updates-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .foundry-button,
   .foundry-student-card,
@@ -5089,7 +5513,8 @@ a {
   }
 
   .foundry-live-pill i.is-connecting,
-  .student-live-pill i.is-connecting {
+  .student-live-pill i.is-connecting,
+  .foundry-action-spinner {
     animation: none;
   }
 }

@@ -6,8 +6,9 @@ import {
   FoundryNotice,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import { formatFoundryDate, listFoundryClasses } from "@/lib/foundry";
-import { markFoundryAttendance } from "../actions";
+import { markFoundryAttendanceRoster } from "../actions";
 
 export const metadata: Metadata = {
   title: "Foundry Attendance",
@@ -34,6 +35,14 @@ export default async function FoundryAttendancePage({ searchParams }: Props) {
   const selectedAttendance = attendance.filter(
     (item) => item.class_id === defaultClassId,
   );
+  const selectedRoster = students.filter(
+    (student) =>
+      !["inactive", "graduated", "rejected"].includes(
+        student.lifecycle_status,
+      ) &&
+      (!selectedClass?.department ||
+        student.department === selectedClass.department),
+  );
   const attendanceByStudent = new Map(
     selectedAttendance.map((item) => [item.student_id, item]),
   );
@@ -55,11 +64,13 @@ export default async function FoundryAttendancePage({ searchParams }: Props) {
           <span className="foundry-title-stat">
             <UserRoundCheck aria-hidden="true" size={20} />
             {
-              selectedAttendance.filter((item) =>
-                ["present", "late"].includes(item.status),
+              selectedRoster.filter((student) =>
+                ["present", "late"].includes(
+                  attendanceByStudent.get(student.id)?.status ?? "",
+                ),
               ).length
             }
-            /{students.length} attended
+            /{selectedRoster.length} attended
           </span>
         ) : null}
       </section>
@@ -93,60 +104,87 @@ export default async function FoundryAttendancePage({ searchParams }: Props) {
               {selectedClass.status}
             </span>
           </div>
-          <div className="attendance-roster">
-            {students.map((student) => {
-              const existing = attendanceByStudent.get(student.id);
-              return (
-                <form
-                  action={markFoundryAttendance}
-                  className="attendance-student-row"
-                  key={student.id}
-                >
-                  <input name="classId" type="hidden" value={selectedClass.id} />
-                  <input name="studentId" type="hidden" value={student.id} />
-                  <div className="attendance-student-identity">
-                    <span className="foundry-avatar is-small">
-                      {student.full_name
-                        .split(" ")
-                        .slice(0, 2)
-                        .map((part) => part[0])
-                        .join("")
-                        .toUpperCase()}
-                    </span>
-                    <div>
-                      <strong>{student.full_name}</strong>
-                      <small>{student.foundry_id}</small>
+          {selectedRoster.length ? (
+            <form
+              action={markFoundryAttendanceRoster}
+              className="attendance-roster-form"
+            >
+              <input name="classId" type="hidden" value={selectedClass.id} />
+              <div className="attendance-roster">
+                {selectedRoster.map((student) => {
+                  const existing = attendanceByStudent.get(student.id);
+                  return (
+                    <div className="attendance-student-row" key={student.id}>
+                      <div className="attendance-student-identity">
+                        <span className="foundry-avatar is-small">
+                          {student.full_name
+                            .split(" ")
+                            .slice(0, 2)
+                            .map((part) => part[0])
+                            .join("")
+                            .toUpperCase()}
+                        </span>
+                        <div>
+                          <strong>{student.full_name}</strong>
+                          <small>{student.foundry_id}</small>
+                        </div>
+                        <HealthBadge health={student.health_status} label="" />
+                      </div>
+                      <label>
+                        <span className="sr-only">Attendance status</span>
+                        <select
+                          defaultValue={existing?.status ?? "present"}
+                          name={`status-${student.id}`}
+                        >
+                          <option value="present">Present</option>
+                          <option value="late">Late</option>
+                          <option value="absent">Absent</option>
+                          <option value="excused">Excused</option>
+                        </select>
+                      </label>
+                      <label className="is-grow">
+                        <span className="sr-only">Attendance note</span>
+                        <input
+                          defaultValue={existing?.note ?? ""}
+                          name={`note-${student.id}`}
+                          placeholder="Optional support note"
+                        />
+                      </label>
+                      <span className="attendance-row-state">
+                        {existing ? (
+                          <>
+                            <Check aria-hidden="true" size={14} />
+                            Saved
+                          </>
+                        ) : (
+                          "Not marked"
+                        )}
+                      </span>
                     </div>
-                    <HealthBadge health={student.health_status} label="" />
-                  </div>
-                  <label>
-                    <span className="sr-only">Attendance status</span>
-                    <select defaultValue={existing?.status ?? "present"} name="status">
-                      <option value="present">Present</option>
-                      <option value="late">Late</option>
-                      <option value="absent">Absent</option>
-                      <option value="excused">Excused</option>
-                    </select>
-                  </label>
-                  <label className="is-grow">
-                    <span className="sr-only">Attendance note</span>
-                    <input
-                      defaultValue={existing?.note ?? ""}
-                      name="note"
-                      placeholder="Optional support note"
-                    />
-                  </label>
-                  <button
-                    className="foundry-button foundry-button-save"
-                    type="submit"
-                  >
-                    <Check aria-hidden="true" size={15} />
-                    Save
-                  </button>
-                </form>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+              <div className="attendance-roster-actions">
+                <span>
+                  {selectedRoster.length} students · one secure roster save
+                </span>
+                <FoundryActionButton
+                  className="foundry-button foundry-button-dark"
+                  pendingLabel="Saving roster…"
+                >
+                  <Check aria-hidden="true" size={15} />
+                  Save full roster
+                </FoundryActionButton>
+              </div>
+            </form>
+          ) : (
+            <EmptyFoundryState
+              title="Is class ka roster empty hai"
+              detail="Department aur active student records check karein."
+              href="/dashboard/foundry/students"
+              action="Open students"
+            />
+          )}
         </section>
       ) : (
         <EmptyFoundryState

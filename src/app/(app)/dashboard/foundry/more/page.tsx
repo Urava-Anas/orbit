@@ -6,9 +6,16 @@ import {
   BookOpenCheck,
   Database,
   FileText,
+  Gauge,
+  Settings2,
   ShieldCheck,
+  UsersRound,
   UserRoundCheck,
 } from "lucide-react";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
+import { FoundryNotice } from "@/components/foundry/FoundryUI";
+import { getFoundrySettings } from "@/lib/foundry";
+import { updateFoundryCapacity } from "../actions";
 
 export const metadata: Metadata = {
   title: "Foundry More",
@@ -36,9 +43,17 @@ const moduleLinks = [
   },
 ] as const;
 
-export default function FoundryMorePage() {
+type Props = {
+  searchParams: Promise<{ notice?: string; error?: string }>;
+};
+
+export default async function FoundryMorePage({ searchParams }: Props) {
+  const messages = await searchParams;
+  const { moduleStatus, seatCapacity } = await getFoundrySettings();
+
   return (
     <div className="foundry-page">
+      <FoundryNotice error={messages.error} notice={messages.notice} />
       <section className="foundry-page-title">
         <div>
           <span className="foundry-kicker">MVP operations</span>
@@ -60,6 +75,55 @@ export default function FoundryMorePage() {
             <ArrowUpRight aria-hidden="true" size={18} />
           </Link>
         ))}
+      </section>
+
+      <section className="foundry-settings-grid">
+        <article className="foundry-card">
+          <div className="foundry-card-head">
+            <div>
+              <span className="foundry-card-eyebrow">Cohort control</span>
+              <h2>Seat capacity</h2>
+            </div>
+            <UsersRound aria-hidden="true" size={20} />
+          </div>
+          <p className="foundry-long-copy">
+            Dashboard availability isi trusted capacity se calculate hoti hai.
+          </p>
+          <form action={updateFoundryCapacity} className="foundry-inline-form">
+            <label>
+              Maximum active seats
+              <input
+                defaultValue={seatCapacity}
+                max="500"
+                min="1"
+                name="seatCapacity"
+                required
+                type="number"
+              />
+            </label>
+            <FoundryActionButton
+              className="foundry-button foundry-button-dark"
+              pendingLabel="Saving…"
+            >
+              Save capacity
+            </FoundryActionButton>
+          </form>
+        </article>
+
+        <article className="foundry-card foundry-settings-state">
+          <span className="foundry-metric-icon is-green">
+            <Gauge aria-hidden="true" size={20} />
+          </span>
+          <div>
+            <small>Foundry module</small>
+            <strong>{moduleStatus}</strong>
+            <p>
+              Auth, role routing, RLS, audited commands and live updates are the
+              operating boundary.
+            </p>
+          </div>
+          <Settings2 aria-hidden="true" size={20} />
+        </article>
       </section>
 
       <section className="foundry-card">

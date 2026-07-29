@@ -15,6 +15,7 @@ import {
   FoundryNotice,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import {
   formatFoundryDate,
   foundryDepartmentLabel,
@@ -220,9 +221,12 @@ export default async function FoundryTasksPage({ searchParams }: Props) {
                 <input name="dueAt" required type="datetime-local" />
               </label>
             </div>
-            <button className="foundry-button foundry-button-dark" type="submit">
+            <FoundryActionButton
+              className="foundry-button foundry-button-dark"
+              pendingLabel="Publishing task…"
+            >
               Publish & assign
-            </button>
+            </FoundryActionButton>
           </form>
         </aside>
       </section>

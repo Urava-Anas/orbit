@@ -12,24 +12,28 @@ A release is approved only when every required item is checked and linked to evi
 ## Product quality
 
 - [ ] `npm run lint` passes
+- [ ] `tsc --noEmit` passes
 - [ ] `npm run build` passes
 - [ ] Primary navigation works on desktop and mobile
 - [ ] Empty, loading, success and error states are reviewed
+- [ ] Browser console, page errors and failed requests are reviewed
 - [ ] No invented metrics, simulated integrations or placeholder production data
 
 ## Authentication
 
-- [ ] New signup succeeds
-- [ ] Verification email is delivered
-- [ ] Verification callback creates a valid session
-- [ ] Verified user can sign in
-- [ ] Invalid credentials fail without account enumeration
-- [ ] Password-reset email is delivered
-- [ ] Reset callback permits a password change
-- [ ] Old password no longer works
+- [ ] Google sign-in creates a valid session
+- [ ] Founder, Student and Access Pending destinations resolve correctly
 - [ ] Local sign-out ends the current browser session
-- [ ] Global sign-out revokes other sessions
 - [ ] Repeated form submission is blocked while pending
+- [ ] A learner can claim only the Foundry record matching their verified email
+
+Email/password checks are required only if that provider is enabled:
+
+- [ ] New signup, verification, sign-in and password reset succeed
+- [ ] Invalid credentials fail without account enumeration
+- [ ] Old password no longer works after reset
+- [ ] Global sign-out revokes other sessions
+- [ ] Leaked-password protection is enabled on a supporting Supabase plan
 
 ## Data and tenant security
 
@@ -41,7 +45,8 @@ A release is approved only when every required item is checked and linked to evi
 - [ ] Audit events remain tenant-scoped
 - [ ] Workspace teardown removes workspace-owned records safely
 - [ ] Supabase security advisor has no unresolved critical finding
-- [ ] Leaked-password protection is enabled
+- [ ] Foundry hardening, Foundry RLS and tenant-isolation SQL suites pass
+- [ ] Student counts and learning evidence are unchanged after rollback tests
 - [ ] No service-role or secret key is exposed to the browser or repository
 
 ## Operations

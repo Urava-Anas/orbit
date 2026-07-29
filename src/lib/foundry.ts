@@ -131,6 +131,25 @@ export type FoundryProgressEvent = {
   occurred_at: string;
 };
 
+export type FoundryNotification = {
+  id: string;
+  student_id: string;
+  kind:
+    | "assignment_assigned"
+    | "revision_requested"
+    | "submission_accepted"
+    | "class_scheduled"
+    | "class_updated"
+    | "class_live"
+    | "class_cancelled";
+  title: string;
+  body: string;
+  source_type: "assignment" | "submission" | "class";
+  source_id: string;
+  read_at: string | null;
+  created_at: string;
+};
+
 const studentFields =
   "id, foundry_id, auth_user_id, full_name, email, phone, photo_url, department, level, lifecycle_status, health_status, progress_percent, device_access, preferred_language, learning_difficulty, main_goal, founder_notes, next_action, batch_label, studio_eligible, last_active_at, created_at, updated_at";
 
@@ -384,7 +403,9 @@ export async function listFoundryClasses() {
       .order("marked_at", { ascending: false }),
     context.supabase
       .from("foundry_students")
-      .select("id, foundry_id, full_name, health_status")
+      .select(
+        "id, foundry_id, full_name, health_status, department, lifecycle_status",
+      )
       .eq("workspace_id", context.workspace.id)
       .order("foundry_id"),
   ]);
@@ -394,7 +415,15 @@ export async function listFoundryClasses() {
     classes: (classesResult.data ?? []) as unknown as FoundryClass[],
     attendance: (attendanceResult.data ?? []) as unknown as FoundryAttendance[],
     students: (studentsResult.data ?? []) as Array<
-      Pick<FoundryStudent, "id" | "foundry_id" | "full_name" | "health_status">
+      Pick<
+        FoundryStudent,
+        | "id"
+        | "foundry_id"
+        | "full_name"
+        | "health_status"
+        | "department"
+        | "lifecycle_status"
+      >
     >,
   };
 }
@@ -488,8 +517,14 @@ async function getPortalDataForStudent(
     | Awaited<ReturnType<typeof requireStudentAccess>>,
 ) {
   const { supabase, workspace } = context;
-  const [assignmentsResult, submissionsResult, classesResult, skillsResult, progressResult] =
-    await Promise.all([
+  const [
+    assignmentsResult,
+    submissionsResult,
+    classesResult,
+    skillsResult,
+    progressResult,
+    notificationsResult,
+  ] = await Promise.all([
       supabase
         .from("foundry_task_assignments")
         .select(
@@ -534,6 +569,15 @@ async function getPortalDataForStudent(
         .eq("student_id", student.id)
         .order("occurred_at", { ascending: false })
         .limit(20),
+      supabase
+        .from("foundry_notifications")
+        .select(
+          "id, student_id, kind, title, body, source_type, source_id, read_at, created_at",
+        )
+        .eq("workspace_id", workspace.id)
+        .eq("student_id", student.id)
+        .order("created_at", { ascending: false })
+        .limit(12),
     ]);
 
   return {
@@ -544,6 +588,47 @@ async function getPortalDataForStudent(
     classes: (classesResult.data ?? []) as unknown as FoundryClass[],
     skills: (skillsResult.data ?? []) as unknown as FoundrySkillScore[],
     progress: (progressResult.data ?? []) as unknown as FoundryProgressEvent[],
+    notifications: (notificationsResult.data ??
+      []) as unknown as FoundryNotification[],
+  };
+}
+
+export async function getCurrentStudentUnreadCount() {
+  const context = await requireStudentAccess();
+  const result = await context.supabase
+    .from("foundry_notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", context.workspace.id)
+    .eq("student_id", context.studentId)
+    .is("read_at", null);
+
+  return {
+    ...context,
+    unreadCount: result.count ?? 0,
+  };
+}
+
+export async function getFoundrySettings() {
+  const context = await requireFounderFoundry();
+  const result = await context.supabase
+    .from("organisation_modules")
+    .select("status, config")
+    .eq("workspace_id", context.workspace.id)
+    .eq("module_key", "foundry")
+    .maybeSingle();
+
+  const config =
+    result.data?.config &&
+    typeof result.data.config === "object" &&
+    !Array.isArray(result.data.config)
+      ? (result.data.config as Record<string, unknown>)
+      : {};
+
+  return {
+    ...context,
+    moduleStatus: result.data?.status ?? "disabled",
+    seatCapacity:
+      typeof config.seat_capacity === "number" ? config.seat_capacity : 20,
   };
 }
 

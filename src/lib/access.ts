@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Workspace } from "@/lib/types";
@@ -58,7 +59,7 @@ export function orbitHomePath(access: OrbitAccess) {
   return "/access-pending";
 }
 
-export async function getOrbitAccess() {
+export const getOrbitAccess = cache(async function getOrbitAccess() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -97,7 +98,7 @@ export async function getOrbitAccess() {
       foundryId: row.foundry_id,
     } satisfies OrbitAccess,
   };
-}
+});
 
 export async function requireOrbitAccess() {
   const context = await getOrbitAccess();

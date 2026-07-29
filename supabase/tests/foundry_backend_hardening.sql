@@ -198,6 +198,73 @@ begin
   )
   into class_web;
 
+  insert into public.foundry_attendance (
+    workspace_id,
+    class_id,
+    student_id,
+    status,
+    marked_by
+  )
+  values
+    (
+      target_workspace,
+      class_general,
+      target_student_a,
+      'present',
+      'a1000000-0000-4000-8000-000000000001'
+    ),
+    (
+      target_workspace,
+      class_general,
+      target_student_b,
+      'absent',
+      'a1000000-0000-4000-8000-000000000001'
+    );
+
+  update public.foundry_classes
+  set status = 'live'
+  where id = class_general;
+
+  update public.foundry_classes
+  set status = 'completed'
+  where id = class_general;
+
+  if (
+    select count(*)
+    from public.foundry_progress_events
+    where student_id = target_student_a
+      and event_type = 'class_completed'
+      and source_id = class_general
+  ) <> 1 then
+    raise exception 'Class completion evidence failure';
+  end if;
+
+  begin
+    update public.foundry_classes
+    set status = 'live'
+    where id = class_general;
+  exception
+    when others then
+      blocked := true;
+  end;
+  if not blocked then
+    raise exception 'Class lifecycle failure: completed class reopened';
+  end if;
+  blocked := false;
+
+  begin
+    update public.foundry_classes
+    set status = 'completed'
+    where id = class_creative;
+  exception
+    when others then
+      blocked := true;
+  end;
+  if not blocked then
+    raise exception 'Class completion failure: unmarked roster was accepted';
+  end if;
+  blocked := false;
+
   select command.assignment_id
   into assignment_a
   from public.create_foundry_task_assignment_command(
@@ -881,8 +948,8 @@ begin
     select count(*)
     from public.foundry_notifications
     where student_id = 'a4000000-0000-4000-8000-000000000004'
-  ) <> 5 then
-    raise exception 'Notification failure: Student A expected 5 notifications';
+  ) <> 8 then
+    raise exception 'Notification failure: Student A expected 8 notifications';
   end if;
   if exists (
     select 1
@@ -890,6 +957,20 @@ begin
     where student_id = 'a5000000-0000-4000-8000-000000000005'
   ) then
     raise exception 'Notification isolation failure after workflow completion';
+  end if;
+
+  update public.foundry_notifications
+  set read_at = now()
+  where student_id = 'a4000000-0000-4000-8000-000000000004'
+    and read_at is null;
+
+  if exists (
+    select 1
+    from public.foundry_notifications
+    where student_id = 'a4000000-0000-4000-8000-000000000004'
+      and read_at is null
+  ) then
+    raise exception 'Notification read-state failure';
   end if;
 end;
 $$;
@@ -918,7 +999,7 @@ begin
     select count(*)
     from public.foundry_notifications
     where student_id = 'a5000000-0000-4000-8000-000000000005'
-  ) <> 2 then
+  ) <> 5 then
     raise exception 'Recovery notification failure for Student B';
   end if;
   if exists (

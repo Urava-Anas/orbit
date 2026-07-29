@@ -3,14 +3,19 @@ import Link from "next/link";
 import {
   ArrowRight,
   Award,
+  Bell,
+  BellRing,
   BookOpen,
+  CalendarClock,
   CalendarDays,
+  CheckCheck,
   CheckCircle2,
   Clock3,
   ExternalLink,
   Flame,
   Languages,
   LockKeyhole,
+  LogOut,
   Medal,
   MonitorSmartphone,
   Send,
@@ -21,12 +26,16 @@ import {
   UserRound,
 } from "lucide-react";
 import {
+  markCurrentStudentNotificationsRead,
   submitCurrentStudentWork,
 } from "@/app/(app)/dashboard/foundry/actions";
+import { signOut } from "@/app/auth/actions";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import { FoundryProgressBar, HealthBadge } from "@/components/foundry/FoundryUI";
 import {
   type FoundryAssignment,
   type FoundryClass,
+  type FoundryNotification,
   type FoundryProgressEvent,
   type FoundrySkillScore,
   type FoundryStudent,
@@ -45,6 +54,7 @@ type StudentPortalProps = {
   classes: FoundryClass[];
   skills: FoundrySkillScore[];
   progress: FoundryProgressEvent[];
+  notifications: FoundryNotification[];
   tab: StudentPortalTab;
   preview?: boolean;
   notice?: string;
@@ -97,6 +107,7 @@ export function StudentPortalView({
   classes,
   skills,
   progress,
+  notifications,
   tab,
   preview = false,
   notice,
@@ -113,6 +124,9 @@ export function StudentPortalView({
   );
   const pendingReview = submissions.find((submission) =>
     ["submitted", "under_review"].includes(submission.status),
+  );
+  const unreadNotifications = notifications.filter(
+    (notification) => !notification.read_at,
   );
   const completedCount = assignments.filter(
     (assignment) => assignment.status === "completed",
@@ -190,7 +204,9 @@ export function StudentPortalView({
           </span>
           <h1>
             {tab === "today"
-              ? `${student.full_name.split(" ")[0]}, aaj ka next step ready hai`
+              ? todayTask
+                ? `${student.full_name.split(" ")[0]}, aaj ka next step ready hai`
+                : `${student.full_name.split(" ")[0]}, aaj ka kaam under control hai`
               : tab === "learn"
                 ? "Ek task, ek waqt"
                 : tab === "submit"
@@ -299,6 +315,77 @@ export function StudentPortalView({
             )}
           </section>
 
+          <section className="student-updates-card" id="student-updates">
+            <div className="student-updates-head">
+              <div>
+                <span
+                  className={`student-section-icon ${
+                    unreadNotifications.length ? "is-red" : ""
+                  }`}
+                >
+                  {unreadNotifications.length ? (
+                    <BellRing aria-hidden="true" size={20} />
+                  ) : (
+                    <Bell aria-hidden="true" size={20} />
+                  )}
+                </span>
+                <span>
+                  <small>Foundry updates</small>
+                  <strong>
+                    {unreadNotifications.length
+                      ? `${unreadNotifications.length} new update${
+                          unreadNotifications.length === 1 ? "" : "s"
+                        }`
+                      : "You are caught up"}
+                  </strong>
+                </span>
+              </div>
+              {!preview && unreadNotifications.length ? (
+                <form action={markCurrentStudentNotificationsRead}>
+                  <FoundryActionButton
+                    className="student-mark-read"
+                    pendingLabel="Saving…"
+                  >
+                    <CheckCheck aria-hidden="true" size={15} />
+                    Mark read
+                  </FoundryActionButton>
+                </form>
+              ) : null}
+            </div>
+            {notifications.length ? (
+              <div className="student-update-list">
+                {notifications.slice(0, 5).map((notification) => (
+                  <article
+                    className={notification.read_at ? "" : "is-unread"}
+                    key={notification.id}
+                  >
+                    <span aria-hidden="true">
+                      {notification.source_type === "class" ? (
+                        <CalendarClock size={17} />
+                      ) : notification.kind === "submission_accepted" ? (
+                        <CheckCircle2 size={17} />
+                      ) : (
+                        <Bell size={17} />
+                      )}
+                    </span>
+                    <div>
+                      <strong>{notification.title}</strong>
+                      <p>{notification.body}</p>
+                      <time dateTime={notification.created_at}>
+                        {formatFoundryDate(notification.created_at)}
+                      </time>
+                    </div>
+                    {!notification.read_at ? <i aria-label="Unread" /> : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="student-updates-empty">
+                Naya task, class ya teacher feedback yahan nazar aayega.
+              </p>
+            )}
+          </section>
+
           {nextClass ? (
             <section className="student-next-class">
               <span className="student-section-icon">
@@ -326,7 +413,18 @@ export function StudentPortalView({
                 <span className="student-secondary-action is-disabled">Link soon</span>
               )}
             </section>
-          ) : null}
+          ) : (
+            <section className="student-next-class is-empty">
+              <span className="student-section-icon">
+                <CalendarDays aria-hidden="true" size={20} />
+              </span>
+              <div>
+                <small>Next class</small>
+                <strong>Abhi class schedule nahi hui</strong>
+                <p>Schedule hote hi link aur time yahan aa jayega.</p>
+              </div>
+            </section>
+          )}
 
           {latestFeedback ? (
             <section className="student-feedback-card">
@@ -446,15 +544,25 @@ export function StudentPortalView({
                   ? "Founder preview mein submission band hai. Student account se yeh action live hoga."
                   : "Link nahi hai? Note likhein aur class mein screenshot / file dikhayein."}
               </p>
-              <button
-                aria-disabled={preview}
-                className="student-primary-action"
-                disabled={preview}
-                type="submit"
-              >
-                {preview ? "Preview only" : "Work submit karein"}
-                <Send aria-hidden="true" size={17} />
-              </button>
+              {preview ? (
+                <button
+                  aria-disabled="true"
+                  className="student-primary-action"
+                  disabled
+                  type="submit"
+                >
+                  Preview only
+                  <Send aria-hidden="true" size={17} />
+                </button>
+              ) : (
+                <FoundryActionButton
+                  className="student-primary-action"
+                  pendingLabel="Work submit ho raha hai…"
+                >
+                  Work submit karein
+                  <Send aria-hidden="true" size={17} />
+                </FoundryActionButton>
+              )}
             </form>
           ) : (
             <div className="student-empty-celebration">
@@ -578,6 +686,19 @@ export function StudentPortalView({
               </span>
             </div>
           </div>
+          {!preview ? (
+            <div className="student-profile-actions">
+              <form action={signOut}>
+                <FoundryActionButton
+                  className="student-secondary-action"
+                  pendingLabel="Signing out…"
+                >
+                  Sign out
+                  <LogOut aria-hidden="true" size={15} />
+                </FoundryActionButton>
+              </form>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </div>

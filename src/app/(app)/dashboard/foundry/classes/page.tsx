@@ -4,12 +4,17 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   CalendarDays,
+  CheckCircle2,
   Clock3,
+  ExternalLink,
   MapPin,
   Plus,
+  Radio,
   UserRoundCheck,
   Video,
+  XCircle,
 } from "lucide-react";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import {
   EmptyFoundryState,
   FoundryNotice,
@@ -19,7 +24,7 @@ import {
   foundryDepartmentLabel,
   listFoundryClasses,
 } from "@/lib/foundry";
-import { createFoundryClass } from "../actions";
+import { createFoundryClass, updateFoundryClassStatus } from "../actions";
 
 export const metadata: Metadata = {
   title: "Foundry Classes",
@@ -32,14 +37,19 @@ type Props = {
 
 export default async function FoundryClassesPage({ searchParams }: Props) {
   const messages = await searchParams;
-  const { classes, attendance } = await listFoundryClasses();
+  const { classes, attendance, students } = await listFoundryClasses();
   const attendanceByClass = new Map<string, number>();
+  const markedStudentsByClass = new Map<string, Set<string>>();
   for (const record of attendance) {
     attendanceByClass.set(
       record.class_id,
       (attendanceByClass.get(record.class_id) ?? 0) +
         (["present", "late"].includes(record.status) ? 1 : 0),
     );
+    const markedStudents =
+      markedStudentsByClass.get(record.class_id) ?? new Set<string>();
+    markedStudents.add(record.student_id);
+    markedStudentsByClass.set(record.class_id, markedStudents);
   }
 
   return (
@@ -71,8 +81,23 @@ export default async function FoundryClassesPage({ searchParams }: Props) {
           </div>
           {classes.length ? (
             <div className="foundry-class-cards">
-              {classes.map((foundryClass) => (
-                <article className="foundry-class-card" key={foundryClass.id}>
+              {classes.map((foundryClass) => {
+                const eligibleStudents = students.filter(
+                  (student) =>
+                    !["inactive", "graduated", "rejected"].includes(
+                      student.lifecycle_status,
+                    ) &&
+                    (!foundryClass.department ||
+                      student.department === foundryClass.department),
+                );
+                const markedStudents =
+                  markedStudentsByClass.get(foundryClass.id) ?? new Set<string>();
+                const rosterComplete = eligibleStudents.every((student) =>
+                  markedStudents.has(student.id),
+                );
+
+                return (
+                  <article className="foundry-class-card" key={foundryClass.id}>
                   <div className="foundry-class-date">
                     <strong>
                       {new Intl.DateTimeFormat("en-PK", {
@@ -114,6 +139,83 @@ export default async function FoundryClassesPage({ searchParams }: Props) {
                         {attendanceByClass.get(foundryClass.id) ?? 0} attended
                       </span>
                     </div>
+                    <div className="foundry-class-actions">
+                      {foundryClass.join_url &&
+                      !["completed", "cancelled"].includes(foundryClass.status) ? (
+                        <a
+                          href={foundryClass.join_url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Open room
+                          <ExternalLink aria-hidden="true" size={13} />
+                        </a>
+                      ) : null}
+                      {foundryClass.status === "scheduled" ? (
+                        <form action={updateFoundryClassStatus}>
+                          <input
+                            name="classId"
+                            type="hidden"
+                            value={foundryClass.id}
+                          />
+                          <FoundryActionButton
+                            className="foundry-class-action is-live"
+                            name="status"
+                            pendingLabel="Starting…"
+                            value="live"
+                          >
+                            <Radio aria-hidden="true" size={13} />
+                            Go live
+                          </FoundryActionButton>
+                        </form>
+                      ) : null}
+                      {["scheduled", "live"].includes(foundryClass.status) ? (
+                        <>
+                          {rosterComplete ? (
+                            <form action={updateFoundryClassStatus}>
+                              <input
+                                name="classId"
+                                type="hidden"
+                                value={foundryClass.id}
+                              />
+                              <FoundryActionButton
+                                className="foundry-class-action"
+                                name="status"
+                                pendingLabel="Completing…"
+                                value="completed"
+                              >
+                                <CheckCircle2 aria-hidden="true" size={13} />
+                                Complete
+                              </FoundryActionButton>
+                            </form>
+                          ) : (
+                            <Link
+                              className="is-required"
+                              href={`/dashboard/foundry/attendance?classId=${foundryClass.id}`}
+                            >
+                              <UserRoundCheck aria-hidden="true" size={13} />
+                              Mark roster to complete
+                            </Link>
+                          )}
+                          <form action={updateFoundryClassStatus}>
+                            <input
+                              name="classId"
+                              type="hidden"
+                              value={foundryClass.id}
+                            />
+                            <FoundryActionButton
+                              className="foundry-class-action is-danger"
+                              name="status"
+                              pendingLabel="Cancelling…"
+                              value="cancelled"
+                            >
+                              <XCircle aria-hidden="true" size={13} />
+                              Cancel
+                            </FoundryActionButton>
+                          </form>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                   <Link
                     className="foundry-icon-link"
@@ -122,8 +224,9 @@ export default async function FoundryClassesPage({ searchParams }: Props) {
                   >
                     <ArrowUpRight aria-hidden="true" size={17} />
                   </Link>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <EmptyFoundryState
@@ -193,9 +296,12 @@ export default async function FoundryClassesPage({ searchParams }: Props) {
                 />
               </label>
             </div>
-            <button className="foundry-button foundry-button-dark" type="submit">
+            <FoundryActionButton
+              className="foundry-button foundry-button-dark"
+              pendingLabel="Scheduling class…"
+            >
               Schedule class
-            </button>
+            </FoundryActionButton>
           </form>
         </aside>
       </section>

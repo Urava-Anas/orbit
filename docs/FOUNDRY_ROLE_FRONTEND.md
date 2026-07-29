@@ -4,7 +4,7 @@
 
 Orbit uses one authentication entrance and two automatic role destinations. The
 login screen never asks a person to choose Founder or Student. Role and record
-membership will decide the destination when backend routing is connected.
+membership decide the destination after Google sign-in.
 
 The frontend now has two explicit role modes:
 
@@ -45,6 +45,15 @@ The Founder may see:
 - Studio-readiness evidence
 - Foundry configuration and capacity
 
+The Founder can now:
+
+- maintain the complete learning and support record for each student;
+- schedule a class, move it through its valid lifecycle and open its room;
+- save the eligible class roster in one attendance command;
+- publish and assign work atomically;
+- review submissions and record evidence-backed skill scores;
+- manage Foundry seat capacity without exposing internal settings to students.
+
 ## Student role
 
 Purpose: make the next learning action obvious for a student with limited
@@ -72,6 +81,7 @@ The Student may see:
 - Their own class schedule
 - Their own submissions and teacher feedback
 - Their own progress, skills, badges and Studio-readiness state
+- Their own unread assignment, review and class updates
 
 The Student must never see:
 
@@ -104,6 +114,9 @@ Implemented frontend states:
 - No assigned task today
 - Recovery task
 - Empty class, task, submission and progress states
+- Pending and duplicate-click-safe command buttons
+- Read and unread student notifications
+- Scheduled, live, completed and cancelled class states
 
 ## Backend integration contract
 
@@ -126,14 +139,16 @@ but the frontend must receive one normalised Foundry student record.
 Backend work must enforce the same rules with row-level security. Hiding a link
 or page in the frontend is not authorisation.
 
-## Frontend phase boundary
+## Current V1 boundary
 
-This phase does not:
+Orbit Foundry V1 now includes the role resolver, live student data, atomic
+learning commands, notification inbox, class lifecycle, attendance roster and
+Founder operating controls.
 
-- change Supabase tables, policies or records
-- link student authentication accounts
-- resolve Founder versus Student after OAuth
-- change Airtable or Notion course/admissions data
-- promote the branch to production
+The following remain deliberately separate integrations:
 
-Those steps begin only after the private role preview is approved.
+- connecting a student identity before that student completes Google sign-in;
+- outbound email, WhatsApp or push delivery;
+- Airtable or Notion background workers consuming the durable Foundry outbox;
+- email/password authentication controls, including leaked-password
+  protection, while Orbit remains Google-only.

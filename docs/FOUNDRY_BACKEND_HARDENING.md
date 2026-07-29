@@ -73,6 +73,23 @@ The first migration remains compatible with the previous application during
 the short deployment window. The second migration is the enforcement gate and
 must follow the application deployment.
 
+## Foundry V1 completion migration
+
+`20260729133243_foundry_v1_completion.sql` completes the operating layer:
+
+- class status changes are constrained to valid forward transitions;
+- scheduled, changed, live and cancelled classes create department-scoped
+  learner notifications;
+- completing a class records one attendance-backed progress event per learner;
+- completing a class is blocked until every eligible learner has an attendance
+  status;
+- class and notification changes are included in the existing realtime channel.
+- the integration outbox actor foreign key has a covering index.
+
+This migration is backward-compatible with the deployed command application.
+Apply it before deploying the Founder class controls and Student notification
+inbox, then run all three SQL suites in rollback transactions.
+
 ## Verification
 
 `supabase/tests/foundry_backend_hardening.sql` covers:
@@ -85,8 +102,21 @@ must follow the application deployment.
 - invalid direct writes and hard-delete denial;
 - immutable connected identity;
 - notification isolation;
+- class lifecycle, notification scope and completion evidence;
 - deadline recovery;
 - audit metadata;
 - outbox privacy, claim, retry, and completion.
 
 The legacy `foundry_rls.sql` and `tenant_isolation.sql` suites remain required.
+
+## Reviewed advisor exceptions
+
+`claim_orbit_access()` is intentionally `SECURITY DEFINER` and executable only
+by `authenticated`. It needs protected access to `auth.users` so it can verify
+the current `auth.uid()`, require a confirmed email and atomically claim exactly
+one matching unlinked student row. It uses an empty search path and does not
+accept caller-provided identity parameters.
+
+Supabase leaked-password protection remains deferred while Orbit uses
+Google-only authentication and the project stays on a plan that does not
+include that control.

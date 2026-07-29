@@ -22,6 +22,7 @@ import {
   FoundryProgressBar,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import {
   formatFoundryDate,
   foundryDepartmentLabel,
@@ -155,6 +156,26 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
           <form action={updateFoundryStudent} className="foundry-form">
             <input name="studentId" type="hidden" value={student.id} />
             <div className="foundry-form-grid">
+              <div className="foundry-form-section is-wide">
+                <strong>Identity & access</strong>
+                <small>Permanent ID stays locked; operating details stay editable.</small>
+              </div>
+              <label>
+                Full name
+                <input
+                  defaultValue={student.full_name}
+                  name="fullName"
+                  required
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  defaultValue={student.phone ?? ""}
+                  inputMode="tel"
+                  name="phone"
+                />
+              </label>
               <label>
                 Department
                 <select defaultValue={student.department} name="department">
@@ -165,6 +186,38 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
                   <option value="sales_calling">Sales & Calling</option>
                   <option value="operations">Operations</option>
                   <option value="content_media">Content & Media</option>
+                </select>
+              </label>
+              <label>
+                Foundry level
+                <select defaultValue={student.level} name="level">
+                  <option value="applied">Applied</option>
+                  <option value="screening">Screening</option>
+                  <option value="trial">Trial</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="onboarding">Onboarding</option>
+                  <option value="explorer">Explorer</option>
+                  <option value="apprentice">Apprentice</option>
+                  <option value="operator">Operator</option>
+                  <option value="specialist">Specialist</option>
+                  <option value="mentor_alumni">Mentor / Alumni</option>
+                </select>
+              </label>
+              <label>
+                Lifecycle
+                <select
+                  defaultValue={student.lifecycle_status}
+                  name="lifecycleStatus"
+                >
+                  <option value="new">New</option>
+                  <option value="reviewing">Reviewing</option>
+                  <option value="shortlisted">Shortlisted</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="waitlisted">Waitlisted</option>
+                  <option value="enrolled">Enrolled</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="graduated">Graduated</option>
+                  <option value="rejected">Rejected</option>
                 </select>
               </label>
               <label>
@@ -185,6 +238,40 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
                   name="progressPercent"
                   type="number"
                 />
+              </label>
+              <label>
+                Batch
+                <input
+                  defaultValue={student.batch_label ?? ""}
+                  name="batchLabel"
+                  placeholder="Foundry Batch 01"
+                />
+              </label>
+              <div className="foundry-form-section is-wide">
+                <strong>Learning support</strong>
+                <small>Orbit uses these fields to keep instructions simple and useful.</small>
+              </div>
+              <label>
+                Device access
+                <select defaultValue={student.device_access} name="deviceAccess">
+                  <option value="own_laptop">Own laptop</option>
+                  <option value="shared_laptop">Shared laptop</option>
+                  <option value="mobile_only">Mobile only</option>
+                  <option value="no_reliable_device">No reliable device</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </label>
+              <label>
+                Preferred language
+                <select
+                  defaultValue={student.preferred_language}
+                  name="preferredLanguage"
+                >
+                  <option value="roman_urdu">Roman Urdu</option>
+                  <option value="urdu">Urdu</option>
+                  <option value="english">English</option>
+                  <option value="bilingual">Bilingual</option>
+                </select>
               </label>
               <label className="is-wide">
                 Orbit sign-in email
@@ -210,6 +297,15 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
                 />
               </label>
               <label className="is-wide">
+                30-day goal
+                <textarea
+                  defaultValue={student.main_goal ?? ""}
+                  name="mainGoal"
+                  placeholder="One measurable outcome for the next 30 days."
+                  rows={3}
+                />
+              </label>
+              <label className="is-wide">
                 One next action
                 <textarea
                   defaultValue={student.next_action ?? ""}
@@ -217,10 +313,22 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
                   rows={3}
                 />
               </label>
+              <label className="is-wide">
+                Founder private note
+                <textarea
+                  defaultValue={student.founder_notes ?? ""}
+                  name="founderNotes"
+                  placeholder="Support context that only the Founder should see."
+                  rows={4}
+                />
+              </label>
             </div>
-            <button className="foundry-button foundry-button-dark" type="submit">
+            <FoundryActionButton
+              className="foundry-button foundry-button-dark"
+              pendingLabel="Saving record…"
+            >
               Save student record
-            </button>
+            </FoundryActionButton>
           </form>
         </article>
 

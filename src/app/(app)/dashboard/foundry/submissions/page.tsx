@@ -14,6 +14,7 @@ import {
   FoundryNotice,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import { formatFoundryDate, listFoundrySubmissions } from "@/lib/foundry";
 import { reviewFoundrySubmission } from "../actions";
 
@@ -126,24 +127,24 @@ export default async function FoundrySubmissionsPage({ searchParams }: Props) {
                   />
                 </label>
                 <div className="submission-review-actions">
-                  <button
+                  <FoundryActionButton
                     className="foundry-button foundry-button-soft"
                     name="status"
-                    type="submit"
+                    pendingLabel="Sending revision…"
                     value="revision_required"
                   >
                     <RotateCcw aria-hidden="true" size={15} />
                     Send revision
-                  </button>
-                  <button
+                  </FoundryActionButton>
+                  <FoundryActionButton
                     className="foundry-button foundry-button-dark"
                     name="status"
-                    type="submit"
+                    pendingLabel="Accepting work…"
                     value="accepted"
                   >
                     <CheckCircle2 aria-hidden="true" size={15} />
                     Accept work
-                  </button>
+                  </FoundryActionButton>
                 </div>
               </form>
             </article>

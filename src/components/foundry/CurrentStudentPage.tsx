@@ -95,6 +95,7 @@ export async function CurrentStudentPage({
       classes={data.classes}
       error={error}
       notice={notice}
+      notifications={data.notifications}
       progress={data.progress}
       skills={data.skills}
       student={data.student}

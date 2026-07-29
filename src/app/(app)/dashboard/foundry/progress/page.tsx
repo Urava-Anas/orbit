@@ -12,6 +12,7 @@ import {
   FoundryProgressBar,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
+import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import {
   formatFoundryDate,
   foundryDepartmentLabel,
@@ -227,9 +228,12 @@ export default async function FoundryProgressPage({ searchParams }: Props) {
                 />
               </label>
             </div>
-            <button className="foundry-button foundry-button-dark" type="submit">
+            <FoundryActionButton
+              className="foundry-button foundry-button-dark"
+              pendingLabel="Saving evidence…"
+            >
               Save evidence score
-            </button>
+            </FoundryActionButton>
           </form>
           <p className="foundry-form-note">
             Studio Ready automatically turns Gold after at least 4 dimensions,

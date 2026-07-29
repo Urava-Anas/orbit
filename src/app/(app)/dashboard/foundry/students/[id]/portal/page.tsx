@@ -37,6 +37,7 @@ export default async function StudentPortalPreviewPage({
       classes={data.classes}
       error={query.error}
       notice={query.notice}
+      notifications={data.notifications}
       preview
       progress={data.progress}
       skills={data.skills}

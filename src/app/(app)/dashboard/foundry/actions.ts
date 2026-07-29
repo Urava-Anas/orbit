@@ -19,6 +19,38 @@ const departments = [
 const healthStates = ["green", "yellow", "red", "gold"] as const;
 const attendanceStates = ["present", "late", "absent", "excused"] as const;
 const difficultyStates = ["starter", "standard", "stretch", "recovery"] as const;
+const classStates = ["scheduled", "live", "completed", "cancelled"] as const;
+const levelStates = [
+  "applied",
+  "screening",
+  "trial",
+  "accepted",
+  "onboarding",
+  "explorer",
+  "apprentice",
+  "operator",
+  "specialist",
+  "mentor_alumni",
+] as const;
+const lifecycleStates = [
+  "new",
+  "reviewing",
+  "shortlisted",
+  "accepted",
+  "waitlisted",
+  "enrolled",
+  "inactive",
+  "graduated",
+  "rejected",
+] as const;
+const deviceStates = [
+  "own_laptop",
+  "shared_laptop",
+  "mobile_only",
+  "no_reliable_device",
+  "unknown",
+] as const;
+const languageStates = ["roman_urdu", "urdu", "english", "bilingual"] as const;
 const skillDimensions = [
   "quality",
   "deadline",
@@ -38,13 +70,16 @@ function optional(input: string) {
 }
 
 function fail(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}error=${encodeURIComponent(message)}`);
 }
 
 function succeed(path: string, message: string): never {
   revalidatePath("/dashboard/foundry", "layout");
+  revalidatePath("/learn", "layout");
   revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent(message)}`);
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}notice=${encodeURIComponent(message)}`);
 }
 
 function pakistanDateTime(input: string) {
@@ -109,48 +144,131 @@ export async function createFoundryClass(formData: FormData) {
   succeed("/dashboard/foundry/classes", "Class schedule ho gayi.");
 }
 
-export async function markFoundryAttendance(formData: FormData) {
+export async function updateFoundryClassStatus(formData: FormData) {
   const parsed = z
     .object({
       classId: idSchema,
-      studentId: idSchema,
-      status: z.enum(attendanceStates),
-      note: z.string().max(500),
+      status: z.enum(classStates),
     })
     .safeParse({
       classId: value(formData, "classId"),
-      studentId: value(formData, "studentId"),
       status: value(formData, "status"),
-      note: value(formData, "note"),
     });
 
   if (!parsed.success) {
-    fail("/dashboard/foundry/attendance", "Attendance update valid nahi hai.");
+    fail("/dashboard/foundry/classes", "Class status valid nahi hai.");
   }
 
-  const { supabase, user, workspace } = await requireFounderFoundry();
+  const { supabase, workspace } = await requireFounderFoundry();
   const { data, error } = await supabase
-    .from("foundry_attendance")
-    .upsert(
-      {
-        workspace_id: workspace.id,
-        class_id: parsed.data.classId,
-        student_id: parsed.data.studentId,
-        status: parsed.data.status,
-        note: optional(parsed.data.note),
-        marked_by: user.id,
-        marked_at: new Date().toISOString(),
-      },
-      { onConflict: "workspace_id,class_id,student_id" },
-    )
+    .from("foundry_classes")
+    .update({ status: parsed.data.status })
+    .eq("workspace_id", workspace.id)
+    .eq("id", parsed.data.classId)
     .select("id")
     .maybeSingle();
 
   if (error || !data) {
-    fail("/dashboard/foundry/attendance", "Attendance save nahi ho saki.");
+    fail(
+      "/dashboard/foundry/classes",
+      parsed.data.status === "completed"
+        ? "Complete karne se pehle poori attendance roster save karein."
+        : "Class status update nahi hua. Current state dobara check karein.",
+    );
   }
 
-  succeed("/dashboard/foundry/attendance", "Attendance update ho gayi.");
+  const statusMessage = {
+    scheduled: "Class schedule par wapas aa gayi.",
+    live: "Class ab live hai.",
+    completed: "Class complete mark ho gayi.",
+    cancelled: "Class cancel ho gayi aur students ko update mil jayegi.",
+  }[parsed.data.status];
+
+  succeed("/dashboard/foundry/classes", statusMessage);
+}
+
+export async function markFoundryAttendanceRoster(formData: FormData) {
+  const parsedClassId = idSchema.safeParse(value(formData, "classId"));
+  if (!parsedClassId.success) {
+    fail("/dashboard/foundry/attendance", "Class dobara select karein.");
+  }
+
+  const { supabase, user, workspace } = await requireFounderFoundry();
+  const [classResult, studentsResult] = await Promise.all([
+    supabase
+      .from("foundry_classes")
+      .select("id, department")
+      .eq("workspace_id", workspace.id)
+      .eq("id", parsedClassId.data)
+      .maybeSingle(),
+    supabase
+      .from("foundry_students")
+      .select("id, department, lifecycle_status")
+      .eq("workspace_id", workspace.id),
+  ]);
+
+  const selectedClass = classResult.data;
+  if (classResult.error || !selectedClass || studentsResult.error) {
+    fail("/dashboard/foundry/attendance", "Class roster load nahi hua.");
+  }
+
+  const eligibleStudents = (studentsResult.data ?? []).filter(
+    (student) =>
+      !["inactive", "graduated", "rejected"].includes(
+        student.lifecycle_status,
+      ) &&
+      (!selectedClass.department ||
+        student.department === selectedClass.department),
+  );
+
+  const markedAt = new Date().toISOString();
+  const records = eligibleStudents.flatMap((student) => {
+    const status = value(formData, `status-${student.id}`);
+    const note = value(formData, `note-${student.id}`);
+    const parsed = z
+      .object({
+        status: z.enum(attendanceStates),
+        note: z.string().max(500),
+      })
+      .safeParse({ status, note });
+
+    if (!parsed.success) return [];
+
+    return [
+      {
+        workspace_id: workspace.id,
+        class_id: selectedClass.id,
+        student_id: student.id,
+        status: parsed.data.status,
+        note: optional(parsed.data.note),
+        marked_by: user.id,
+        marked_at: markedAt,
+      },
+    ];
+  });
+
+  if (!records.length || records.length !== eligibleStudents.length) {
+    fail(
+      `/dashboard/foundry/attendance?classId=${parsedClassId.data}`,
+      "Har student ki attendance dobara check karein.",
+    );
+  }
+
+  const { error } = await supabase.from("foundry_attendance").upsert(records, {
+    onConflict: "workspace_id,class_id,student_id",
+  });
+
+  if (error) {
+    fail(
+      `/dashboard/foundry/attendance?classId=${parsedClassId.data}`,
+      "Attendance roster save nahi hua.",
+    );
+  }
+
+  succeed(
+    `/dashboard/foundry/attendance?classId=${parsedClassId.data}`,
+    `${records.length} students ki attendance save ho gayi.`,
+  );
 }
 
 export async function createFoundryTask(formData: FormData) {
@@ -260,21 +378,39 @@ export async function updateFoundryStudent(formData: FormData) {
   const parsed = z
     .object({
       studentId: idSchema,
+      fullName: z.string().min(2).max(120),
+      phone: z.string().max(40),
       department: z.enum(departments),
+      level: z.enum(levelStates),
+      lifecycleStatus: z.enum(lifecycleStates),
       healthStatus: z.enum(healthStates),
       progressPercent: z.coerce.number().int().min(0).max(100),
+      deviceAccess: z.enum(deviceStates),
+      preferredLanguage: z.enum(languageStates),
       email: z.string().trim().email().max(254).or(z.literal("")),
+      batchLabel: z.string().max(80),
+      mainGoal: z.string().max(1000),
       nextAction: z.string().max(500),
       learningDifficulty: z.string().max(500),
+      founderNotes: z.string().max(4000),
     })
     .safeParse({
       studentId: value(formData, "studentId"),
+      fullName: value(formData, "fullName"),
+      phone: value(formData, "phone"),
       department: value(formData, "department"),
+      level: value(formData, "level"),
+      lifecycleStatus: value(formData, "lifecycleStatus"),
       healthStatus: value(formData, "healthStatus"),
       progressPercent: value(formData, "progressPercent"),
+      deviceAccess: value(formData, "deviceAccess"),
+      preferredLanguage: value(formData, "preferredLanguage"),
       email: value(formData, "email"),
+      batchLabel: value(formData, "batchLabel"),
+      mainGoal: value(formData, "mainGoal"),
       nextAction: value(formData, "nextAction"),
       learningDifficulty: value(formData, "learningDifficulty"),
+      founderNotes: value(formData, "founderNotes"),
     });
 
   if (!parsed.success) {
@@ -309,12 +445,21 @@ export async function updateFoundryStudent(formData: FormData) {
   const { data, error } = await supabase
     .from("foundry_students")
     .update({
+      full_name: parsed.data.fullName,
+      phone: optional(parsed.data.phone),
       department: parsed.data.department,
+      level: parsed.data.level,
+      lifecycle_status: parsed.data.lifecycleStatus,
       health_status: parsed.data.healthStatus,
       progress_percent: parsed.data.progressPercent,
+      device_access: parsed.data.deviceAccess,
+      preferred_language: parsed.data.preferredLanguage,
       email: optional(nextEmail),
+      batch_label: optional(parsed.data.batchLabel),
+      main_goal: optional(parsed.data.mainGoal),
       next_action: optional(parsed.data.nextAction),
       learning_difficulty: optional(parsed.data.learningDifficulty),
+      founder_notes: optional(parsed.data.founderNotes),
     })
     .eq("workspace_id", workspace.id)
     .eq("id", parsed.data.studentId)
@@ -375,6 +520,73 @@ export async function updateFoundrySkillScore(formData: FormData) {
   }
 
   succeed("/dashboard/foundry/progress", "Skill score aur readiness update ho gayi.");
+}
+
+export async function updateFoundryCapacity(formData: FormData) {
+  const parsed = z
+    .object({
+      seatCapacity: z.coerce.number().int().min(1).max(500),
+    })
+    .safeParse({
+      seatCapacity: value(formData, "seatCapacity"),
+    });
+
+  if (!parsed.success) {
+    fail("/dashboard/foundry/more", "Seat capacity 1 se 500 ke darmiyan rakhein.");
+  }
+
+  const { supabase, workspace } = await requireFounderFoundry();
+  const current = await supabase
+    .from("organisation_modules")
+    .select("config")
+    .eq("workspace_id", workspace.id)
+    .eq("module_key", "foundry")
+    .maybeSingle();
+
+  if (current.error || !current.data) {
+    fail("/dashboard/foundry/more", "Foundry settings load nahi huin.");
+  }
+
+  const currentConfig =
+    current.data.config &&
+    typeof current.data.config === "object" &&
+    !Array.isArray(current.data.config)
+      ? (current.data.config as Record<string, unknown>)
+      : {};
+  const { data, error } = await supabase
+    .from("organisation_modules")
+    .update({
+      config: {
+        ...currentConfig,
+        seat_capacity: parsed.data.seatCapacity,
+      },
+    })
+    .eq("workspace_id", workspace.id)
+    .eq("module_key", "foundry")
+    .select("module_key")
+    .maybeSingle();
+
+  if (error || !data) {
+    fail("/dashboard/foundry/more", "Seat capacity save nahi hui.");
+  }
+
+  succeed("/dashboard/foundry/more", "Foundry seat capacity update ho gayi.");
+}
+
+export async function markCurrentStudentNotificationsRead() {
+  const { supabase, studentId, workspace } = await requireStudentAccess();
+  const { error } = await supabase
+    .from("foundry_notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("workspace_id", workspace.id)
+    .eq("student_id", studentId)
+    .is("read_at", null);
+
+  if (error) {
+    fail("/learn", "Updates read mark nahi huin. Dobara try karein.");
+  }
+
+  succeed("/learn", "Aap ke updates read mark ho gaye.");
 }
 
 const submissionSchema = z
