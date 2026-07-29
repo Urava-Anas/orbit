@@ -56,6 +56,7 @@ function pakistanDateTime(input: string) {
 export async function createFoundryClass(formData: FormData) {
   const parsed = z
     .object({
+      requestId: idSchema,
       title: z.string().min(2).max(180),
       instructorName: z.string().min(2).max(120),
       department: z.enum(departments).or(z.literal("")),
@@ -66,6 +67,7 @@ export async function createFoundryClass(formData: FormData) {
       notes: z.string().max(2000),
     })
     .safeParse({
+      requestId: value(formData, "requestId"),
       title: value(formData, "title"),
       instructorName: value(formData, "instructorName"),
       department: value(formData, "department"),
@@ -86,19 +88,18 @@ export async function createFoundryClass(formData: FormData) {
     fail("/dashboard/foundry/classes", "Class ka start aur end time valid hona chahiye.");
   }
 
-  const { supabase, user, workspace } = await requireFounderFoundry();
-  const { error } = await supabase.from("foundry_classes").insert({
-    workspace_id: workspace.id,
-    title: parsed.data.title,
-    instructor_name: parsed.data.instructorName,
-    department: optional(parsed.data.department),
-    starts_at: startsAt.toISOString(),
-    ends_at: endsAt.toISOString(),
-    mode: parsed.data.mode,
-    join_url: optional(parsed.data.joinUrl),
-    status: "scheduled",
-    notes: optional(parsed.data.notes),
-    created_by: user.id,
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc("create_foundry_class_command", {
+    target_workspace_id: workspace.id,
+    command_request_id: parsed.data.requestId,
+    class_title: parsed.data.title,
+    class_instructor_name: parsed.data.instructorName,
+    class_department: parsed.data.department,
+    class_starts_at: startsAt.toISOString(),
+    class_ends_at: endsAt.toISOString(),
+    class_mode: parsed.data.mode,
+    class_join_url: parsed.data.joinUrl,
+    class_notes: parsed.data.notes,
   });
 
   if (error) {
@@ -128,20 +129,24 @@ export async function markFoundryAttendance(formData: FormData) {
   }
 
   const { supabase, user, workspace } = await requireFounderFoundry();
-  const { error } = await supabase.from("foundry_attendance").upsert(
-    {
-      workspace_id: workspace.id,
-      class_id: parsed.data.classId,
-      student_id: parsed.data.studentId,
-      status: parsed.data.status,
-      note: optional(parsed.data.note),
-      marked_by: user.id,
-      marked_at: new Date().toISOString(),
-    },
-    { onConflict: "workspace_id,class_id,student_id" },
-  );
+  const { data, error } = await supabase
+    .from("foundry_attendance")
+    .upsert(
+      {
+        workspace_id: workspace.id,
+        class_id: parsed.data.classId,
+        student_id: parsed.data.studentId,
+        status: parsed.data.status,
+        note: optional(parsed.data.note),
+        marked_by: user.id,
+        marked_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id,class_id,student_id" },
+    )
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
+  if (error || !data) {
     fail("/dashboard/foundry/attendance", "Attendance save nahi ho saki.");
   }
 
@@ -151,6 +156,7 @@ export async function markFoundryAttendance(formData: FormData) {
 export async function createFoundryTask(formData: FormData) {
   const parsed = z
     .object({
+      requestId: idSchema,
       title: z.string().min(2).max(180),
       instructions: z.string().min(10).max(8000),
       department: z.enum(departments),
@@ -161,6 +167,7 @@ export async function createFoundryTask(formData: FormData) {
       dueAt: z.string(),
     })
     .safeParse({
+      requestId: value(formData, "requestId"),
       title: value(formData, "title"),
       instructions: value(formData, "instructions"),
       department: value(formData, "department"),
@@ -180,51 +187,25 @@ export async function createFoundryTask(formData: FormData) {
     fail("/dashboard/foundry/tasks", "Task deadline valid nahi hai.");
   }
 
-  const { supabase, user, workspace } = await requireFounderFoundry();
-  const { data: student } = await supabase
-    .from("foundry_students")
-    .select("id")
-    .eq("workspace_id", workspace.id)
-    .eq("id", parsed.data.studentId)
-    .maybeSingle();
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc(
+    "create_foundry_task_assignment_command",
+    {
+      target_workspace_id: workspace.id,
+      target_student_id: parsed.data.studentId,
+      command_request_id: parsed.data.requestId,
+      task_title: parsed.data.title,
+      task_instructions_roman_urdu: parsed.data.instructions,
+      task_department: parsed.data.department,
+      task_difficulty: parsed.data.difficulty,
+      task_skill_dimension: parsed.data.skillDimension,
+      task_points: parsed.data.points,
+      assignment_due_at: dueAt.toISOString(),
+    },
+  );
 
-  if (!student) {
-    fail("/dashboard/foundry/tasks", "Student is organisation mein nahi mila.");
-  }
-
-  const { data: task, error: taskError } = await supabase
-    .from("foundry_tasks")
-    .insert({
-      workspace_id: workspace.id,
-      title: parsed.data.title,
-      instructions_roman_urdu: parsed.data.instructions,
-      department: parsed.data.department,
-      difficulty: parsed.data.difficulty,
-      skill_dimension: optional(parsed.data.skillDimension),
-      points: parsed.data.points,
-      status: "published",
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
-
-  if (taskError || !task) {
-    fail("/dashboard/foundry/tasks", "Task save nahi ho saka.");
-  }
-
-  const { error: assignmentError } = await supabase
-    .from("foundry_task_assignments")
-    .insert({
-      workspace_id: workspace.id,
-      task_id: task.id,
-      student_id: parsed.data.studentId,
-      status: "assigned",
-      due_at: dueAt.toISOString(),
-      assigned_by: user.id,
-    });
-
-  if (assignmentError) {
-    fail("/dashboard/foundry/tasks", "Task bana, lekin student ko assign nahi ho saka.");
+  if (error) {
+    fail("/dashboard/foundry/tasks", "Task publish aur assign nahi ho saka.");
   }
 
   succeed("/dashboard/foundry/tasks", "Task publish aur assign ho gaya.");
@@ -233,12 +214,14 @@ export async function createFoundryTask(formData: FormData) {
 export async function reviewFoundrySubmission(formData: FormData) {
   const parsed = z
     .object({
+      requestId: idSchema,
       submissionId: idSchema,
       status: z.enum(["accepted", "revision_required"]),
       feedback: z.string().min(3).max(8000),
       score: z.coerce.number().int().min(0).max(100),
     })
     .safeParse({
+      requestId: value(formData, "requestId"),
       submissionId: value(formData, "submissionId"),
       status: value(formData, "status"),
       feedback: value(formData, "feedback"),
@@ -249,18 +232,17 @@ export async function reviewFoundrySubmission(formData: FormData) {
     fail("/dashboard/foundry/submissions", "Feedback aur score dobara check karein.");
   }
 
-  const { supabase, user, workspace } = await requireFounderFoundry();
-  const { error } = await supabase
-    .from("foundry_submissions")
-    .update({
-      status: parsed.data.status,
-      feedback: parsed.data.feedback,
-      score: parsed.data.score,
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: user.id,
-    })
-    .eq("workspace_id", workspace.id)
-    .eq("id", parsed.data.submissionId);
+  const { supabase } = await requireFounderFoundry();
+  const { error } = await supabase.rpc(
+    "review_foundry_submission_command",
+    {
+      target_submission_id: parsed.data.submissionId,
+      command_request_id: parsed.data.requestId,
+      review_decision: parsed.data.status,
+      review_feedback: parsed.data.feedback,
+      review_score: parsed.data.score,
+    },
+  );
 
   if (error) {
     fail("/dashboard/foundry/submissions", "Submission review save nahi ho saka.");
@@ -324,7 +306,7 @@ export async function updateFoundryStudent(formData: FormData) {
     );
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("foundry_students")
     .update({
       department: parsed.data.department,
@@ -335,10 +317,12 @@ export async function updateFoundryStudent(formData: FormData) {
       learning_difficulty: optional(parsed.data.learningDifficulty),
     })
     .eq("workspace_id", workspace.id)
-    .eq("id", parsed.data.studentId);
+    .eq("id", parsed.data.studentId)
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === "23505") {
+  if (error || !data) {
+    if (error?.code === "23505") {
       fail(path, "Yeh sign-in email kisi aur active student record par hai.");
     }
     fail(path, "Student record update nahi hua.");
@@ -369,109 +353,67 @@ export async function updateFoundrySkillScore(formData: FormData) {
   }
 
   const { supabase, user, workspace } = await requireFounderFoundry();
-  const { error } = await supabase.from("foundry_skill_scores").upsert(
-    {
-      workspace_id: workspace.id,
-      student_id: parsed.data.studentId,
-      dimension: parsed.data.dimension,
-      score: parsed.data.score,
-      evidence_count: parsed.data.evidenceCount,
-      note: optional(parsed.data.note),
-      updated_by: user.id,
-    },
-    { onConflict: "workspace_id,student_id,dimension" },
-  );
+  const { data, error } = await supabase
+    .from("foundry_skill_scores")
+    .upsert(
+      {
+        workspace_id: workspace.id,
+        student_id: parsed.data.studentId,
+        dimension: parsed.data.dimension,
+        score: parsed.data.score,
+        evidence_count: parsed.data.evidenceCount,
+        note: optional(parsed.data.note),
+        updated_by: user.id,
+      },
+      { onConflict: "workspace_id,student_id,dimension" },
+    )
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
+  if (error || !data) {
     fail("/dashboard/foundry/progress", "Skill score save nahi hua.");
   }
 
   succeed("/dashboard/foundry/progress", "Skill score aur readiness update ho gayi.");
 }
 
-async function insertSubmission({
-  assignmentId,
-  studentId,
-  submissionUrl,
-  studentNote,
-  path,
-  founderPreview,
-}: {
-  assignmentId: string;
-  studentId: string;
-  submissionUrl: string;
-  studentNote: string;
-  path: string;
-  founderPreview: boolean;
-}) {
-  const context = founderPreview
-    ? await requireFounderFoundry()
-    : await requireStudentAccess();
-  const { supabase, workspace } = context;
-
-  if (!founderPreview) {
-    if (!("studentId" in context) || context.studentId !== studentId) {
-      fail(path, "Yeh task aap ke account se linked nahi hai.");
-    }
-  }
-
-  const { data: assignment } = await supabase
-    .from("foundry_task_assignments")
-    .select("id")
-    .eq("workspace_id", workspace.id)
-    .eq("id", assignmentId)
-    .eq("student_id", studentId)
-    .maybeSingle();
-  if (!assignment) fail(path, "Assigned task nahi mila.");
-
-  const { error } = await supabase.from("foundry_submissions").insert({
-    workspace_id: workspace.id,
-    assignment_id: assignmentId,
-    student_id: studentId,
-    submission_url: optional(submissionUrl),
-    student_note: optional(studentNote),
-    status: "submitted",
-    submitted_at: new Date().toISOString(),
+const submissionSchema = z
+  .object({
+    requestId: idSchema,
+    assignmentId: idSchema,
+    submissionUrl: z.string().url().max(1000).or(z.literal("")),
+    studentNote: z.string().max(4000),
+  })
+  .refine((submission) => submission.submissionUrl || submission.studentNote, {
+    message: "Add a work link or note.",
   });
-
-  if (error) {
-    fail(path, "Work submit nahi ho saka. Link aur note dobara check karein.");
-  }
-
-  succeed(path, "Shabash — work teacher review ke liye submit ho gaya.");
-}
-
-const submissionSchema = z.object({
-  assignmentId: idSchema,
-  studentId: idSchema,
-  submissionUrl: z.string().url().max(1000).or(z.literal("")),
-  studentNote: z.string().max(4000),
-});
-
-export async function submitFoundryPreviewWork(formData: FormData) {
-  const parsed = submissionSchema.safeParse({
-    assignmentId: value(formData, "assignmentId"),
-    studentId: value(formData, "studentId"),
-    submissionUrl: value(formData, "submissionUrl"),
-    studentNote: value(formData, "studentNote"),
-  });
-  const studentId = value(formData, "studentId");
-  const path = `/dashboard/foundry/students/${encodeURIComponent(studentId)}/portal`;
-  if (!parsed.success) fail(path, "Submission details dobara check karein.");
-  await insertSubmission({ ...parsed.data, path, founderPreview: true });
-}
 
 export async function submitCurrentStudentWork(formData: FormData) {
   const parsed = submissionSchema.safeParse({
+    requestId: value(formData, "requestId"),
     assignmentId: value(formData, "assignmentId"),
-    studentId: value(formData, "studentId"),
     submissionUrl: value(formData, "submissionUrl"),
     studentNote: value(formData, "studentNote"),
   });
   if (!parsed.success) fail("/learn/submit", "Link ya note dobara check karein.");
-  await insertSubmission({
-    ...parsed.data,
-    path: "/learn/submit",
-    founderPreview: false,
+
+  const { supabase } = await requireStudentAccess();
+  const { error } = await supabase.rpc("submit_foundry_assignment_command", {
+    target_assignment_id: parsed.data.assignmentId,
+    command_request_id: parsed.data.requestId,
+    work_url: parsed.data.submissionUrl,
+    work_note: parsed.data.studentNote,
   });
+
+  if (error) {
+    fail(
+      "/learn/submit",
+      "Work submit nahi ho saka. Link, task status aur note dobara check karein.",
+    );
+  }
+
+  succeed(
+    "/learn/submit",
+    "Shabash — work teacher review ke liye submit ho gaya.",
+  );
 }

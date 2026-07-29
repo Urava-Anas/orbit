@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -141,6 +142,7 @@ export default async function FoundryClassesPage({ searchParams }: Props) {
             <Plus aria-hidden="true" size={20} />
           </div>
           <form action={createFoundryClass} className="foundry-form">
+            <input name="requestId" type="hidden" value={randomUUID()} />
             <label>
               Class title
               <input name="title" placeholder="Day 3 Practical Lab" required />

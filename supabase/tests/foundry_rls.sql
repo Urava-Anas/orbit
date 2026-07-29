@@ -32,18 +32,38 @@ values
     now()
   );
 
+insert into public.workspaces (id, name, slug, owner_id)
+values
+  (
+    '31000000-0000-4000-8000-000000000003',
+    'Foundry RLS Workspace One',
+    'foundry-rls-workspace-one',
+    '30000000-0000-4000-8000-000000000003'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000004',
+    'Foundry RLS Workspace Two',
+    'foundry-rls-workspace-two',
+    '40000000-0000-4000-8000-000000000004'
+  );
+
+insert into public.workspace_members (workspace_id, user_id, role)
+values
+  (
+    '31000000-0000-4000-8000-000000000003',
+    '30000000-0000-4000-8000-000000000003',
+    'owner'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000004',
+    '40000000-0000-4000-8000-000000000004',
+    'owner'
+  );
+
 create temporary table foundry_test_context as
 select
-  (
-    select workspace_id
-    from public.workspace_members
-    where user_id = '30000000-0000-4000-8000-000000000003'::uuid
-  ) as workspace_one,
-  (
-    select workspace_id
-    from public.workspace_members
-    where user_id = '40000000-0000-4000-8000-000000000004'::uuid
-  ) as workspace_two;
+  '31000000-0000-4000-8000-000000000003'::uuid as workspace_one,
+  '41000000-0000-4000-8000-000000000004'::uuid as workspace_two;
 
 grant select on foundry_test_context to authenticated;
 

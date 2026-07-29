@@ -78,6 +78,7 @@ export type FoundrySubmission = {
   id: string;
   assignment_id: string;
   student_id: string;
+  attempt_number: number;
   submission_url: string | null;
   student_note: string | null;
   status: string;
@@ -209,7 +210,7 @@ export async function getFoundryDashboard() {
     supabase
       .from("foundry_submissions")
       .select(
-        "id, assignment_id, student_id, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_students(id, foundry_id, full_name, health_status), foundry_task_assignments(id, foundry_tasks(id, title, points))",
+        "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_students(id, foundry_id, full_name, health_status), foundry_task_assignments(id, foundry_tasks(id, title, points))",
       )
       .eq("workspace_id", workspace.id)
       .in("status", ["submitted", "under_review"])
@@ -322,7 +323,7 @@ export async function getFoundryStudent(studentId: string) {
     supabase
       .from("foundry_submissions")
       .select(
-        "id, assignment_id, student_id, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at",
+        "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at",
       )
       .eq("workspace_id", workspace.id)
       .eq("student_id", studentId)
@@ -437,7 +438,7 @@ export async function listFoundrySubmissions() {
   const result = await context.supabase
     .from("foundry_submissions")
     .select(
-      "id, assignment_id, student_id, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_students(id, foundry_id, full_name, health_status), foundry_task_assignments(id, foundry_tasks(id, title, points))",
+      "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_students(id, foundry_id, full_name, health_status), foundry_task_assignments(id, foundry_tasks(id, title, points))",
     )
     .eq("workspace_id", context.workspace.id)
     .order("submitted_at", { ascending: false });
@@ -500,7 +501,7 @@ async function getPortalDataForStudent(
       supabase
         .from("foundry_submissions")
         .select(
-          "id, assignment_id, student_id, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at",
+          "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at",
         )
         .eq("workspace_id", workspace.id)
         .eq("student_id", student.id)

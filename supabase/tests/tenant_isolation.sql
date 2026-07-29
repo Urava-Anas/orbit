@@ -32,20 +32,40 @@ values
     now()
   );
 
+insert into public.workspaces (id, name, slug, owner_id)
+values
+  (
+    '11000000-0000-4000-8000-000000000001',
+    'RLS Workspace One',
+    'rls-workspace-one',
+    '10000000-0000-4000-8000-000000000001'
+  ),
+  (
+    '21000000-0000-4000-8000-000000000002',
+    'RLS Workspace Two',
+    'rls-workspace-two',
+    '20000000-0000-4000-8000-000000000002'
+  );
+
+insert into public.workspace_members (workspace_id, user_id, role)
+values
+  (
+    '11000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000001',
+    'owner'
+  ),
+  (
+    '21000000-0000-4000-8000-000000000002',
+    '20000000-0000-4000-8000-000000000002',
+    'owner'
+  );
+
 create temporary table orbit_test_context as
 select
   '10000000-0000-4000-8000-000000000001'::uuid as user_one,
   '20000000-0000-4000-8000-000000000002'::uuid as user_two,
-  (
-    select workspace_id
-    from public.workspace_members
-    where user_id = '10000000-0000-4000-8000-000000000001'::uuid
-  ) as workspace_one,
-  (
-    select workspace_id
-    from public.workspace_members
-    where user_id = '20000000-0000-4000-8000-000000000002'::uuid
-  ) as workspace_two;
+  '11000000-0000-4000-8000-000000000001'::uuid as workspace_one,
+  '21000000-0000-4000-8000-000000000002'::uuid as workspace_two;
 
 grant select on orbit_test_context to authenticated;
 
@@ -178,7 +198,11 @@ begin
     raise exception 'RLS failure: user one can read % foreign leads', leaked_leads;
   end if;
 
-  select count(*) into visible_audit_events from public.audit_events;
+  select count(*)
+  into visible_audit_events
+  from public.audit_events
+  where entity_type = 'leads'
+    and action = 'insert';
   if visible_audit_events <> 1 then
     raise exception
       'Audit failure: user one expected 1 visible event, found %',

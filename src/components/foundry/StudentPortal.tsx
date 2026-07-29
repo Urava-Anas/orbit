@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -419,8 +420,8 @@ export function StudentPortalView({
               action={preview ? undefined : submitCurrentStudentWork}
               className="student-submit-form"
             >
+              <input name="requestId" type="hidden" value={randomUUID()} />
               <input name="assignmentId" type="hidden" value={todayTask.id} />
-              <input name="studentId" type="hidden" value={student.id} />
               <label>
                 Work link <small>(agar link hai)</small>
                 <input

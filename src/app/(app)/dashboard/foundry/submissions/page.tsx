@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -102,6 +103,7 @@ export default async function FoundrySubmissionsPage({ searchParams }: Props) {
                 )}
               </div>
               <form action={reviewFoundrySubmission} className="foundry-form">
+                <input name="requestId" type="hidden" value={randomUUID()} />
                 <input name="submissionId" type="hidden" value={submission.id} />
                 <label>
                   Roman Urdu feedback
