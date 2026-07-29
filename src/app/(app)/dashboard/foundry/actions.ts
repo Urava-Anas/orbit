@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudentAccess } from "@/lib/access";
+import { scheduleFoundryWorker } from "@/lib/foundry-integrations/schedule";
+import { runFoundryWorker } from "@/lib/foundry-integrations/worker";
 import { requireFounderFoundry } from "@/lib/foundry";
 
 const idSchema = z.string().uuid();
@@ -75,6 +77,7 @@ function fail(path: string, message: string): never {
 }
 
 function succeed(path: string, message: string): never {
+  scheduleFoundryWorker();
   revalidatePath("/dashboard/foundry", "layout");
   revalidatePath("/learn", "layout");
   revalidatePath(path);
@@ -571,6 +574,288 @@ export async function updateFoundryCapacity(formData: FormData) {
   }
 
   succeed("/dashboard/foundry/more", "Foundry seat capacity update ho gayi.");
+}
+
+export async function recordFoundryDailyIssue(formData: FormData) {
+  const parsed = z
+    .object({
+      studentId: idSchema,
+      checkDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      issueCode: z.enum([
+        "login",
+        "account_link",
+        "task",
+        "submission",
+        "feedback",
+        "attendance",
+        "device",
+        "other",
+      ]),
+      issueNote: z.string().max(1000),
+      resolved: z.boolean(),
+    })
+    .safeParse({
+      studentId: value(formData, "studentId"),
+      checkDate: value(formData, "checkDate"),
+      issueCode: value(formData, "issueCode"),
+      issueNote: value(formData, "issueNote"),
+      resolved: value(formData, "resolved") === "on",
+    });
+
+  if (!parsed.success) {
+    fail("/dashboard/foundry/operations", "Daily test note valid nahi hai.");
+  }
+
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc("record_foundry_daily_issue", {
+    target_workspace_id: workspace.id,
+    target_student_id: parsed.data.studentId,
+    target_date: parsed.data.checkDate,
+    target_issue_code: parsed.data.issueCode,
+    target_issue_note: parsed.data.issueNote,
+    mark_resolved: parsed.data.resolved,
+  });
+
+  if (error) {
+    fail("/dashboard/foundry/operations", "Daily test note save nahi hui.");
+  }
+  succeed(
+    "/dashboard/foundry/operations",
+    parsed.data.resolved
+      ? "Student issue resolved mark ho gaya."
+      : "Student issue daily test board par save ho gaya.",
+  );
+}
+
+export async function updateFoundryDeliveryPreferences(formData: FormData) {
+  const parsed = z
+    .object({
+      studentId: idSchema,
+      emailEnabled: z.boolean(),
+      whatsappEnabled: z.boolean(),
+      whatsappNumber: z.string().max(40),
+      consentNote: z.string().max(1000),
+    })
+    .refine(
+      (data) =>
+        !data.whatsappEnabled || Boolean(data.whatsappNumber.trim()),
+      { message: "WhatsApp number required" },
+    )
+    .safeParse({
+      studentId: value(formData, "studentId"),
+      emailEnabled: value(formData, "emailEnabled") === "on",
+      whatsappEnabled: value(formData, "whatsappEnabled") === "on",
+      whatsappNumber: value(formData, "whatsappNumber"),
+      consentNote: value(formData, "consentNote"),
+    });
+
+  if (!parsed.success) {
+    fail(
+      "/dashboard/foundry/operations",
+      "Notification consent aur number dobara check karein.",
+    );
+  }
+
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc(
+    "update_foundry_delivery_preferences",
+    {
+      target_workspace_id: workspace.id,
+      target_student_id: parsed.data.studentId,
+      enable_email: parsed.data.emailEnabled,
+      enable_whatsapp: parsed.data.whatsappEnabled,
+      target_whatsapp_number: parsed.data.whatsappNumber,
+      target_consent_note: parsed.data.consentNote,
+    },
+  );
+
+  if (error) {
+    fail(
+      "/dashboard/foundry/operations",
+      "Notifications enable nahi huin. Email, number aur consent check karein.",
+    );
+  }
+  succeed(
+    "/dashboard/foundry/operations",
+    "Notification consent aur channels update ho gaye.",
+  );
+}
+
+export async function reviewFoundryStudioReadiness(formData: FormData) {
+  const parsed = z
+    .object({
+      requestId: idSchema,
+      studentId: idSchema,
+      decision: z.enum(["changes_required", "approved", "revoked"]),
+      skillQuality: z.coerce.number().int().min(1).max(5),
+      deadline: z.coerce.number().int().min(1).max(5),
+      communication: z.coerce.number().int().min(1).max(5),
+      revisionAttitude: z.coerce.number().int().min(1).max(5),
+      reliability: z.coerce.number().int().min(1).max(5),
+      confidentiality: z.coerce.number().int().min(1).max(5),
+      evidenceSummary: z.string().min(20).max(4000),
+      decisionNote: z.string().max(2000),
+    })
+    .safeParse({
+      requestId: value(formData, "requestId"),
+      studentId: value(formData, "studentId"),
+      decision: value(formData, "decision"),
+      skillQuality: value(formData, "skillQuality"),
+      deadline: value(formData, "deadline"),
+      communication: value(formData, "communication"),
+      revisionAttitude: value(formData, "revisionAttitude"),
+      reliability: value(formData, "reliability"),
+      confidentiality: value(formData, "confidentiality"),
+      evidenceSummary: value(formData, "evidenceSummary"),
+      decisionNote: value(formData, "decisionNote"),
+    });
+
+  const path = "/dashboard/foundry/progress?view=studio";
+  if (!parsed.success) {
+    fail(path, "Six standards aur evidence dobara check karein.");
+  }
+
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc(
+    "review_foundry_studio_readiness",
+    {
+      target_workspace_id: workspace.id,
+      target_student_id: parsed.data.studentId,
+      command_request_id: parsed.data.requestId,
+      decision: parsed.data.decision,
+      score_skill_quality: parsed.data.skillQuality,
+      score_deadline: parsed.data.deadline,
+      score_communication: parsed.data.communication,
+      score_revision_attitude: parsed.data.revisionAttitude,
+      score_reliability: parsed.data.reliability,
+      score_confidentiality: parsed.data.confidentiality,
+      target_evidence_summary: parsed.data.evidenceSummary,
+      target_decision_note: parsed.data.decisionNote,
+    },
+  );
+
+  if (error) {
+    fail(
+      path,
+      parsed.data.decision === "approved"
+        ? "Approval ke liye har standard 3+ aur average 4+ hona chahiye."
+        : "Studio review save nahi hui.",
+    );
+  }
+  succeed(
+    path,
+    parsed.data.decision === "approved"
+      ? "Studio Ready Founder approval save ho gaya."
+      : "Studio readiness review update ho gayi.",
+  );
+}
+
+export async function issueFoundryCertificate(formData: FormData) {
+  const parsed = z
+    .object({
+      requestId: idSchema,
+      studentId: idSchema,
+      certificateType: z.enum([
+        "track_completion",
+        "foundry_completion",
+        "studio_readiness",
+      ]),
+      title: z.string().min(3).max(180),
+    })
+    .safeParse({
+      requestId: value(formData, "requestId"),
+      studentId: value(formData, "studentId"),
+      certificateType: value(formData, "certificateType"),
+      title: value(formData, "title"),
+    });
+  const path = "/dashboard/foundry/progress?view=studio";
+  if (!parsed.success) {
+    fail(path, "Certificate details dobara check karein.");
+  }
+
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc("issue_foundry_certificate", {
+    target_workspace_id: workspace.id,
+    target_student_id: parsed.data.studentId,
+    command_request_id: parsed.data.requestId,
+    target_certificate_type: parsed.data.certificateType,
+    target_title: parsed.data.title,
+  });
+
+  if (error) {
+    fail(
+      path,
+      "Certificate issue nahi hua. Required progress aur accepted evidence check karein.",
+    );
+  }
+  succeed(path, "Verified certificate issue ho gaya.");
+}
+
+export async function revokeFoundryCertificate(formData: FormData) {
+  const parsed = z
+    .object({
+      certificateId: idSchema,
+      reason: z.string().min(5).max(1000),
+    })
+    .safeParse({
+      certificateId: value(formData, "certificateId"),
+      reason: value(formData, "reason"),
+    });
+  const path = "/dashboard/foundry/progress?view=studio";
+  if (!parsed.success) {
+    fail(path, "Certificate aur revocation reason required hain.");
+  }
+
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { error } = await supabase.rpc("revoke_foundry_certificate", {
+    target_workspace_id: workspace.id,
+    target_certificate_id: parsed.data.certificateId,
+    target_reason: parsed.data.reason,
+  });
+  if (error) {
+    fail(path, "Active certificate revoke nahi hua.");
+  }
+  succeed(path, "Certificate revoke ho gaya; public verification updated hai.");
+}
+
+export async function queueFoundryFullSync() {
+  const { supabase, workspace } = await requireFounderFoundry();
+  const { data, error } = await supabase.rpc("queue_foundry_full_sync", {
+    target_workspace_id: workspace.id,
+  });
+  if (error) {
+    fail("/dashboard/foundry/operations", "Full sync queue nahi hui.");
+  }
+  succeed(
+    "/dashboard/foundry/operations",
+    `${data ?? 0} student sync events durable queue mein hain.`,
+  );
+}
+
+export async function runFoundryWorkerNow() {
+  await requireFounderFoundry();
+  let result;
+  try {
+    result = await runFoundryWorker({
+      outboxBatch: 100,
+      deliveryBatch: 100,
+    });
+  } catch {
+    fail(
+      "/dashboard/foundry/operations",
+      "Worker safely stop hua; queued work retry ke liye preserved hai.",
+    );
+  }
+  if (!result.configured) {
+    fail(
+      "/dashboard/foundry/operations",
+      "Server worker key abhi configured nahi hai.",
+    );
+  }
+  succeed(
+    "/dashboard/foundry/operations",
+    `${result.deliveriesSucceeded} deliveries complete; ${result.deliveriesFailed} retry queue mein.`,
+  );
 }
 
 export async function markCurrentStudentNotificationsRead() {

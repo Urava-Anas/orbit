@@ -599,7 +599,7 @@ begin
   end if;
 
   update public.foundry_outbox_events
-  set available_at = now()
+  set available_at = '2000-01-01 00:00:00+00'::timestamptz
   where id = claimed_event_id;
 
   if (

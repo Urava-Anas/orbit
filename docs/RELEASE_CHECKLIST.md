@@ -46,6 +46,7 @@ Email/password checks are required only if that provider is enabled:
 - [ ] Workspace teardown removes workspace-owned records safely
 - [ ] Supabase security advisor has no unresolved critical finding
 - [ ] Foundry hardening, Foundry RLS and tenant-isolation SQL suites pass
+- [ ] Foundry final-7 consent, Studio, certificate and delivery suite passes
 - [ ] Student counts and learning evidence are unchanged after rollback tests
 - [ ] No service-role or secret key is exposed to the browser or repository
 
@@ -59,6 +60,12 @@ Email/password checks are required only if that provider is enabled:
 - [ ] Custom-domain decision is recorded
 - [ ] DNS and TLS are healthy when a custom domain is used
 - [ ] Rollback procedure is tested or explicitly reviewed
+- [ ] Every active student appears on the real daily-test matrix
+- [ ] Remaining account rows are Connected, Ready after sign-in, or explicitly blocked
+- [ ] Airtable and Notion each have a reviewed successful delivery receipt
+- [ ] Email/WhatsApp remain off for students without recorded consent
+- [ ] Public certificate verification works while direct table reads remain denied
+- [ ] Studio approval references all six guide standards and written evidence
 
 ## Documentation and release control
 

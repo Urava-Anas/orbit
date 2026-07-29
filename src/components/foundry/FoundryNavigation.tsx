@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   CalendarDays,
-  CircleEllipsis,
   Gauge,
   House,
+  Workflow,
   Send,
   Sparkles,
   Trophy,
@@ -21,7 +21,7 @@ const founderLinks = [
   { href: "/dashboard/foundry/classes", label: "Classes", icon: CalendarDays },
   { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
   { href: "/dashboard/foundry/progress?view=studio", label: "Studio", icon: Sparkles },
-  { href: "/dashboard/foundry/more", label: "More", icon: CircleEllipsis },
+  { href: "/dashboard/foundry/operations", label: "Ops", icon: Workflow },
 ] as const;
 
 const studentLinks = [

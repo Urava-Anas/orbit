@@ -97,6 +97,8 @@ export async function CurrentStudentPage({
       notice={notice}
       notifications={data.notifications}
       progress={data.progress}
+      studioReviews={data.studioReviews}
+      certificates={data.certificates}
       skills={data.skills}
       student={data.student}
       submissions={data.submissions}

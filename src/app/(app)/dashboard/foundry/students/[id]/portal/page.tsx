@@ -40,6 +40,8 @@ export default async function StudentPortalPreviewPage({
       notifications={data.notifications}
       preview
       progress={data.progress}
+      studioReviews={data.studioReviews}
+      certificates={data.certificates}
       skills={data.skills}
       student={data.student}
       submissions={data.submissions}

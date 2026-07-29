@@ -141,12 +141,100 @@ export type FoundryNotification = {
     | "class_scheduled"
     | "class_updated"
     | "class_live"
-    | "class_cancelled";
+    | "class_cancelled"
+    | "studio_reviewed"
+    | "certificate_issued";
   title: string;
   body: string;
-  source_type: "assignment" | "submission" | "class";
+  source_type:
+    | "assignment"
+    | "submission"
+    | "class"
+    | "studio_review"
+    | "certificate";
   source_id: string;
   read_at: string | null;
+  created_at: string;
+};
+
+export type FoundryDailyCheck = {
+  id: string;
+  student_id: string;
+  check_date: string;
+  portal_opened_at: string | null;
+  task_opened_at: string | null;
+  submission_tested_at: string | null;
+  feedback_viewed_at: string | null;
+  attendance_recorded_at: string | null;
+  issue_code: string | null;
+  issue_note: string | null;
+  resolved_at: string | null;
+  updated_at: string;
+};
+
+export type FoundryDeliveryPreference = {
+  id: string;
+  student_id: string;
+  email_enabled: boolean;
+  whatsapp_enabled: boolean;
+  whatsapp_number: string | null;
+  email_consented_at: string | null;
+  whatsapp_consented_at: string | null;
+  consent_note: string | null;
+  updated_at: string;
+};
+
+export type FoundryStudioReview = {
+  id: string;
+  student_id: string;
+  status: "changes_required" | "approved" | "revoked";
+  skill_quality: number;
+  deadline: number;
+  communication: number;
+  revision_attitude: number;
+  reliability: number;
+  confidentiality: number;
+  evidence_summary: string;
+  decision_note: string | null;
+  reviewed_at: string;
+  revoked_at: string | null;
+};
+
+export type FoundryCertificate = {
+  id: string;
+  student_id: string;
+  certificate_number: string;
+  verification_token: string;
+  certificate_type:
+    | "track_completion"
+    | "foundry_completion"
+    | "studio_readiness";
+  title: string;
+  statement: string;
+  status: "issued" | "revoked";
+  issued_at: string;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+};
+
+export type FoundryExternalRecord = {
+  id: string;
+  student_id: string;
+  provider: "airtable" | "notion";
+  remote_record_id: string;
+  remote_url: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+};
+
+export type FoundryExternalDelivery = {
+  id: number;
+  student_id: string;
+  channel: "airtable" | "notion" | "email" | "whatsapp";
+  status: "pending" | "processing" | "succeeded" | "failed";
+  attempt_count: number;
+  processed_at: string | null;
+  last_error: string | null;
   created_at: string;
 };
 
@@ -508,7 +596,13 @@ export async function listFoundrySubmissions() {
 
 export async function listFoundryProgress() {
   const context = await requireFounderFoundry();
-  const [studentsResult, skillsResult, progressResult] = await Promise.all([
+  const [
+    studentsResult,
+    skillsResult,
+    progressResult,
+    studioReviewsResult,
+    certificatesResult,
+  ] = await Promise.all([
     context.supabase
       .from("foundry_students")
       .select(studentFields)
@@ -528,6 +622,20 @@ export async function listFoundryProgress() {
       .eq("workspace_id", context.workspace.id)
       .order("occurred_at", { ascending: false })
       .limit(30),
+    context.supabase
+      .from("foundry_studio_readiness_reviews")
+      .select(
+        "id, student_id, status, skill_quality, deadline, communication, revision_attitude, reliability, confidentiality, evidence_summary, decision_note, reviewed_at, revoked_at",
+      )
+      .eq("workspace_id", context.workspace.id)
+      .order("reviewed_at", { ascending: false }),
+    context.supabase
+      .from("foundry_certificates")
+      .select(
+        "id, student_id, certificate_number, verification_token, certificate_type, title, statement, status, issued_at, revoked_at, revocation_reason",
+      )
+      .eq("workspace_id", context.workspace.id)
+      .order("issued_at", { ascending: false }),
   ]);
 
   return {
@@ -535,6 +643,10 @@ export async function listFoundryProgress() {
     students: (studentsResult.data ?? []) as unknown as FoundryStudent[],
     skills: (skillsResult.data ?? []) as unknown as FoundrySkillScore[],
     progress: (progressResult.data ?? []) as unknown as FoundryProgressEvent[],
+    studioReviews: (studioReviewsResult.data ??
+      []) as unknown as FoundryStudioReview[],
+    certificates: (certificatesResult.data ??
+      []) as unknown as FoundryCertificate[],
   };
 }
 
@@ -552,6 +664,8 @@ async function getPortalDataForStudent(
     skillsResult,
     progressResult,
     notificationsResult,
+    studioReviewsResult,
+    certificatesResult,
   ] = await Promise.all([
       supabase
         .from("foundry_task_assignments")
@@ -606,6 +720,23 @@ async function getPortalDataForStudent(
         .eq("student_id", student.id)
         .order("created_at", { ascending: false })
         .limit(12),
+      supabase
+        .from("foundry_studio_readiness_reviews")
+        .select(
+          "id, student_id, status, skill_quality, deadline, communication, revision_attitude, reliability, confidentiality, evidence_summary, decision_note, reviewed_at, revoked_at",
+        )
+        .eq("workspace_id", workspace.id)
+        .eq("student_id", student.id)
+        .order("reviewed_at", { ascending: false })
+        .limit(10),
+      supabase
+        .from("foundry_certificates")
+        .select(
+          "id, student_id, certificate_number, verification_token, certificate_type, title, statement, status, issued_at, revoked_at, revocation_reason",
+        )
+        .eq("workspace_id", workspace.id)
+        .eq("student_id", student.id)
+        .order("issued_at", { ascending: false }),
     ]);
 
   return {
@@ -618,6 +749,10 @@ async function getPortalDataForStudent(
     progress: (progressResult.data ?? []) as unknown as FoundryProgressEvent[],
     notifications: (notificationsResult.data ??
       []) as unknown as FoundryNotification[],
+    studioReviews: (studioReviewsResult.data ??
+      []) as unknown as FoundryStudioReview[],
+    certificates: (certificatesResult.data ??
+      []) as unknown as FoundryCertificate[],
   };
 }
 
@@ -633,6 +768,163 @@ export async function getCurrentStudentUnreadCount() {
   return {
     ...context,
     unreadCount: result.count ?? 0,
+  };
+}
+
+export async function getFoundryOperations() {
+  const context = await requireFounderFoundry();
+  const { supabase, workspace } = context;
+  const today = pakistanDateKey();
+  const bounds = dayBounds();
+  const [
+    studentsResult,
+    checksResult,
+    preferencesResult,
+    assignmentsResult,
+    feedbackResult,
+    classesResult,
+    outboxResult,
+    deliveriesResult,
+    externalRecordsResult,
+    studioReviewsResult,
+    certificatesResult,
+  ] = await Promise.all([
+    supabase
+      .from("foundry_students")
+      .select(studentFields)
+      .eq("workspace_id", workspace.id)
+      .order("foundry_id"),
+    supabase
+      .from("foundry_daily_checks")
+      .select(
+        "id, student_id, check_date, portal_opened_at, task_opened_at, submission_tested_at, feedback_viewed_at, attendance_recorded_at, issue_code, issue_note, resolved_at, updated_at",
+      )
+      .eq("workspace_id", workspace.id)
+      .eq("check_date", today),
+    supabase
+      .from("foundry_delivery_preferences")
+      .select(
+        "id, student_id, email_enabled, whatsapp_enabled, whatsapp_number, email_consented_at, whatsapp_consented_at, consent_note, updated_at",
+      )
+      .eq("workspace_id", workspace.id),
+    supabase
+      .from("foundry_task_assignments")
+      .select("student_id, status, due_at")
+      .eq("workspace_id", workspace.id)
+      .not("status", "in", '("completed","missed")'),
+    supabase
+      .from("foundry_submissions")
+      .select("student_id, reviewed_at")
+      .eq("workspace_id", workspace.id)
+      .gte("reviewed_at", bounds.start)
+      .lte("reviewed_at", bounds.end),
+    supabase
+      .from("foundry_classes")
+      .select("id, department, status")
+      .eq("workspace_id", workspace.id)
+      .gte("starts_at", bounds.start)
+      .lte("starts_at", bounds.end)
+      .neq("status", "cancelled"),
+    supabase
+      .from("foundry_outbox_events")
+      .select("id, status, attempt_count, last_error, created_at")
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("foundry_external_deliveries")
+      .select(
+        "id, student_id, channel, status, attempt_count, processed_at, last_error, created_at",
+      )
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("foundry_external_records")
+      .select(
+        "id, student_id, provider, remote_record_id, remote_url, last_synced_at, last_error",
+      )
+      .eq("workspace_id", workspace.id),
+    supabase
+      .from("foundry_studio_readiness_reviews")
+      .select(
+        "id, student_id, status, skill_quality, deadline, communication, revision_attitude, reliability, confidentiality, evidence_summary, decision_note, reviewed_at, revoked_at",
+      )
+      .eq("workspace_id", workspace.id)
+      .order("reviewed_at", { ascending: false }),
+    supabase
+      .from("foundry_certificates")
+      .select(
+        "id, student_id, certificate_number, verification_token, certificate_type, title, statement, status, issued_at, revoked_at, revocation_reason",
+      )
+      .eq("workspace_id", workspace.id)
+      .order("issued_at", { ascending: false }),
+  ]);
+
+  return {
+    ...context,
+    today,
+    students: dataOrThrow(
+      studentsResult.data,
+      studentsResult.error,
+      "Operations students",
+    ) as unknown as FoundryStudent[],
+    checks: dataOrThrow(
+      checksResult.data,
+      checksResult.error,
+      "Daily checks",
+    ) as unknown as FoundryDailyCheck[],
+    preferences: dataOrThrow(
+      preferencesResult.data,
+      preferencesResult.error,
+      "Delivery preferences",
+    ) as unknown as FoundryDeliveryPreference[],
+    activeAssignments: dataOrThrow(
+      assignmentsResult.data,
+      assignmentsResult.error,
+      "Operations assignments",
+    ) as Array<{ student_id: string; status: string; due_at: string }>,
+    reviewedSubmissions: dataOrThrow(
+      feedbackResult.data,
+      feedbackResult.error,
+      "Reviewed submissions",
+    ) as Array<{ student_id: string; reviewed_at: string }>,
+    todayClasses: dataOrThrow(
+      classesResult.data,
+      classesResult.error,
+      "Today classes",
+    ) as Array<{ id: string; department: string | null; status: string }>,
+    outbox: dataOrThrow(
+      outboxResult.data,
+      outboxResult.error,
+      "Integration outbox",
+    ) as Array<{
+      id: number;
+      status: string;
+      attempt_count: number;
+      last_error: string | null;
+      created_at: string;
+    }>,
+    deliveries: dataOrThrow(
+      deliveriesResult.data,
+      deliveriesResult.error,
+      "External deliveries",
+    ) as unknown as FoundryExternalDelivery[],
+    externalRecords: dataOrThrow(
+      externalRecordsResult.data,
+      externalRecordsResult.error,
+      "External records",
+    ) as unknown as FoundryExternalRecord[],
+    studioReviews: dataOrThrow(
+      studioReviewsResult.data,
+      studioReviewsResult.error,
+      "Studio reviews",
+    ) as unknown as FoundryStudioReview[],
+    certificates: dataOrThrow(
+      certificatesResult.data,
+      certificatesResult.error,
+      "Certificates",
+    ) as unknown as FoundryCertificate[],
   };
 }
 

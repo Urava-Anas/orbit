@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  Award,
   BarChart3,
+  ClipboardCheck,
+  FileBadge2,
   ShieldCheck,
   Sparkles,
   Trophy,
@@ -18,7 +22,12 @@ import {
   foundryDepartmentLabel,
   listFoundryProgress,
 } from "@/lib/foundry";
-import { updateFoundrySkillScore } from "../actions";
+import {
+  issueFoundryCertificate,
+  reviewFoundryStudioReadiness,
+  revokeFoundryCertificate,
+  updateFoundrySkillScore,
+} from "../actions";
 
 export const metadata: Metadata = {
   title: "Foundry Progress",
@@ -35,7 +44,8 @@ type Props = {
 
 export default async function FoundryProgressPage({ searchParams }: Props) {
   const filters = await searchParams;
-  const { students, skills, progress } = await listFoundryProgress();
+  const { students, skills, progress, studioReviews, certificates } =
+    await listFoundryProgress();
   const studioView = filters.view === "studio";
   const visibleStudents = studioView
     ? [...students].sort((a, b) => {
@@ -48,6 +58,10 @@ export default async function FoundryProgressPage({ searchParams }: Props) {
 
   function studentSkills(studentId: string) {
     return skills.filter((skill) => skill.student_id === studentId);
+  }
+
+  function latestReview(studentId: string) {
+    return studioReviews.find((review) => review.student_id === studentId);
   }
 
   return (
@@ -83,6 +97,7 @@ export default async function FoundryProgressPage({ searchParams }: Props) {
       <section className="progress-student-grid">
         {visibleStudents.map((student) => {
           const scores = studentSkills(student.id);
+          const review = latestReview(student.id);
           const average = scores.length
             ? Math.round(
                 scores.reduce((sum, skill) => sum + skill.score, 0) /
@@ -126,6 +141,11 @@ export default async function FoundryProgressPage({ searchParams }: Props) {
                     <Sparkles aria-hidden="true" size={17} />
                     Ready
                   </>
+                ) : review?.status === "changes_required" ? (
+                  <>
+                    <ClipboardCheck aria-hidden="true" size={17} />
+                    Changes required
+                  </>
                 ) : (
                   <>
                     <ShieldCheck aria-hidden="true" size={17} />
@@ -137,6 +157,217 @@ export default async function FoundryProgressPage({ searchParams }: Props) {
           );
         })}
       </section>
+
+      {studioView ? (
+        <>
+          <section className="studio-standard-grid" aria-label="Studio readiness standards">
+            {[
+              ["Skill Quality", "Work client-facing standard ke qareeb ho."],
+              ["Deadline", "Commitment realistic ho aur time par deliver ho."],
+              ["Communication", "Clear updates, questions aur status sharing."],
+              ["Revision Attitude", "Feedback ko calmly apply karna."],
+              ["Reliability", "Repeatable follow-through without chasing."],
+              ["Confidentiality", "Client files, data aur access private rakhna."],
+            ].map(([title, detail], index) => (
+              <article key={title}>
+                <span>{index + 1}</span>
+                <strong>{title}</strong>
+                <p>{detail}</p>
+              </article>
+            ))}
+          </section>
+
+          <section className="foundry-split-layout studio-review-layout">
+            <article className="foundry-card">
+              <div className="foundry-card-head">
+                <div>
+                  <span className="foundry-card-eyebrow">Founder decision</span>
+                  <h2>Review six standards</h2>
+                </div>
+                <ClipboardCheck aria-hidden="true" size={20} />
+              </div>
+              <form
+                action={reviewFoundryStudioReadiness}
+                className="foundry-form"
+              >
+                <input name="requestId" type="hidden" value={randomUUID()} />
+                <label>
+                  Student
+                  <select name="studentId" required>
+                    <option value="">Select student</option>
+                    {students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.foundry_id} · {student.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="studio-score-grid">
+                  {[
+                    ["skillQuality", "Skill Quality"],
+                    ["deadline", "Deadline"],
+                    ["communication", "Communication"],
+                    ["revisionAttitude", "Revision Attitude"],
+                    ["reliability", "Reliability"],
+                    ["confidentiality", "Confidentiality"],
+                  ].map(([name, label]) => (
+                    <label key={name}>
+                      {label}
+                      <select defaultValue="3" name={name} required>
+                        <option value="1">1 · Not ready</option>
+                        <option value="2">2 · Early evidence</option>
+                        <option value="3">3 · Minimum pass</option>
+                        <option value="4">4 · Strong</option>
+                        <option value="5">5 · Excellent</option>
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <label>
+                  Evidence summary
+                  <textarea
+                    minLength={20}
+                    name="evidenceSummary"
+                    placeholder="Name the tasks, observed behaviour, deadlines and confidentiality evidence."
+                    required
+                    rows={5}
+                  />
+                </label>
+                <label>
+                  Decision note for student
+                  <textarea
+                    name="decisionNote"
+                    placeholder="What happens next?"
+                    rows={3}
+                  />
+                </label>
+                <label>
+                  Decision
+                  <select name="decision" required>
+                    <option value="changes_required">Changes required</option>
+                    <option value="approved">Approve Studio Ready</option>
+                    <option value="revoked">Revoke current readiness</option>
+                  </select>
+                </label>
+                <FoundryActionButton
+                  className="foundry-button foundry-button-dark"
+                  pendingLabel="Recording decision…"
+                >
+                  Save evidence review
+                </FoundryActionButton>
+              </form>
+              <p className="foundry-form-note">
+                Approval requires every standard 3+ and an average of 4+.
+                Approval does not automatically assign paid work.
+              </p>
+            </article>
+
+            <article className="foundry-card">
+              <div className="foundry-card-head">
+                <div>
+                  <span className="foundry-card-eyebrow">Verifiable evidence</span>
+                  <h2>Issue certificate</h2>
+                </div>
+                <FileBadge2 aria-hidden="true" size={20} />
+              </div>
+              <form action={issueFoundryCertificate} className="foundry-form">
+                <input name="requestId" type="hidden" value={randomUUID()} />
+                <label>
+                  Student
+                  <select name="studentId" required>
+                    <option value="">Select student</option>
+                    {students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.foundry_id} · {student.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Certificate type
+                  <select name="certificateType" required>
+                    <option value="track_completion">Track completion</option>
+                    <option value="foundry_completion">Foundry completion</option>
+                    <option value="studio_readiness">Studio readiness</option>
+                  </select>
+                </label>
+                <label>
+                  Public title
+                  <input
+                    defaultValue="Urava Foundry Verified Achievement"
+                    maxLength={180}
+                    minLength={3}
+                    name="title"
+                    required
+                  />
+                </label>
+                <FoundryActionButton
+                  className="foundry-button foundry-button-dark"
+                  pendingLabel="Issuing certificate…"
+                >
+                  Issue verified certificate
+                </FoundryActionButton>
+              </form>
+              <p className="foundry-form-note">
+                Track: 60% + accepted work. Foundry: 80% + two accepted
+                submissions. Studio: current approved six-standard review.
+              </p>
+
+              <div className="studio-certificate-admin-list">
+                {certificates.length ? (
+                  certificates.map((certificate) => {
+                    const student = students.find(
+                      (item) => item.id === certificate.student_id,
+                    );
+                    return (
+                      <article key={certificate.id}>
+                        <Award aria-hidden="true" size={18} />
+                        <span>
+                          <strong>{student?.full_name ?? "Student"}</strong>
+                          <small>
+                            {certificate.certificate_number} ·{" "}
+                            {certificate.status}
+                          </small>
+                        </span>
+                        <Link
+                          href={`/certificates/${certificate.verification_token}`}
+                          target="_blank"
+                        >
+                          Verify
+                        </Link>
+                        {certificate.status === "issued" ? (
+                          <form action={revokeFoundryCertificate}>
+                            <input
+                              name="certificateId"
+                              type="hidden"
+                              value={certificate.id}
+                            />
+                            <input
+                              aria-label="Revocation reason"
+                              minLength={5}
+                              name="reason"
+                              placeholder="Reason"
+                              required
+                            />
+                            <FoundryActionButton
+                              className="studio-revoke-button"
+                              pendingLabel="…"
+                            >
+                              Revoke
+                            </FoundryActionButton>
+                          </form>
+                        ) : null}
+                      </article>
+                    );
+                  })
+                ) : (
+                  <p className="foundry-empty-copy">No certificates issued yet.</p>
+                )}
+              </div>
+            </article>
+          </section>
+        </>
+      ) : null}
 
       <section className="foundry-split-layout">
         <article className="foundry-card">
@@ -236,8 +467,8 @@ export default async function FoundryProgressPage({ searchParams }: Props) {
             </FoundryActionButton>
           </form>
           <p className="foundry-form-note">
-            Studio Ready automatically turns Gold after at least 4 dimensions,
-            75+ average and no score below 65.
+            Skill scores are evidence only. Studio Ready needs a separate
+            Founder review against all six guide standards.
           </p>
         </aside>
       </section>

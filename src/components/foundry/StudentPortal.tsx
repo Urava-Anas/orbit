@@ -31,13 +31,16 @@ import {
 } from "@/app/(app)/dashboard/foundry/actions";
 import { signOut } from "@/app/auth/actions";
 import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
+import { StudentDailyHeartbeat } from "@/components/foundry/StudentDailyHeartbeat";
 import { FoundryProgressBar, HealthBadge } from "@/components/foundry/FoundryUI";
 import {
   type FoundryAssignment,
+  type FoundryCertificate,
   type FoundryClass,
   type FoundryNotification,
   type FoundryProgressEvent,
   type FoundrySkillScore,
+  type FoundryStudioReview,
   type FoundryStudent,
   type FoundrySubmission,
   formatFoundryDate,
@@ -55,6 +58,8 @@ type StudentPortalProps = {
   skills: FoundrySkillScore[];
   progress: FoundryProgressEvent[];
   notifications: FoundryNotification[];
+  studioReviews: FoundryStudioReview[];
+  certificates: FoundryCertificate[];
   tab: StudentPortalTab;
   preview?: boolean;
   notice?: string;
@@ -108,6 +113,8 @@ export function StudentPortalView({
   skills,
   progress,
   notifications,
+  studioReviews,
+  certificates,
   tab,
   preview = false,
   notice,
@@ -137,6 +144,19 @@ export function StudentPortalView({
     : 0;
   const prefersEnglish = student.preferred_language === "english";
   const isRecoveryTask = Boolean(todayTask?.recovery_for_assignment_id);
+  const latestStudioReview = studioReviews[0] ?? null;
+  const issuedCertificates = certificates.filter(
+    (certificate) => certificate.status === "issued",
+  );
+  const dailyCheckpoints = [
+    "portal_opened" as const,
+    ...((tab === "today" || tab === "learn") && todayTask
+      ? (["task_opened"] as const)
+      : []),
+    ...(tab === "progress" && latestFeedback
+      ? (["feedback_viewed"] as const)
+      : []),
+  ];
   const taskFlow = prefersEnglish
     ? [
         ["1", "Read", "Understand the brief"],
@@ -151,6 +171,9 @@ export function StudentPortalView({
 
   return (
     <div className={`student-portal-view ${preview ? "is-preview" : ""}`}>
+      {!preview ? (
+        <StudentDailyHeartbeat checkpoints={dailyCheckpoints} />
+      ) : null}
       {preview ? (
         <div className="student-preview-banner">
           <span>Founder preview · {student.foundry_id}</span>
@@ -631,6 +654,37 @@ export function StudentPortalView({
                 <Sparkles size={18} /> Studio Ready
               </span>
             </div>
+            {latestStudioReview ? (
+              <div className="student-studio-review">
+                <span>
+                  Studio review ·{" "}
+                  {latestStudioReview.status.replaceAll("_", " ")}
+                </span>
+                <p>{latestStudioReview.decision_note ?? latestStudioReview.evidence_summary}</p>
+              </div>
+            ) : null}
+            {issuedCertificates.length ? (
+              <div className="student-certificate-list">
+                {issuedCertificates.map((certificate) => (
+                  <Link
+                    href={`/certificates/${certificate.verification_token}`}
+                    key={certificate.id}
+                  >
+                    <Award aria-hidden="true" size={18} />
+                    <span>
+                      <strong>{certificate.title}</strong>
+                      <small>{certificate.certificate_number}</small>
+                    </span>
+                    <ExternalLink aria-hidden="true" size={15} />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="student-certificate-note">
+                Certificates Founder-verified evidence ke baad yahan appear
+                honge. Yeh job ya income guarantee nahi karte.
+              </p>
+            )}
           </section>
         </div>
       ) : null}
