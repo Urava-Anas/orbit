@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getOrbitAccess, orbitHomePath } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 
 const emailSchema = z.string().trim().email().max(254);
@@ -49,7 +50,11 @@ export async function login(formData: FormData) {
     redirect(messagePath("/login", "error", "Email or password is incorrect."));
   }
 
-  redirect("/dashboard");
+  const context = await getOrbitAccess();
+  if (!context) {
+    redirect(messagePath("/login", "error", "Sign-in session could not be verified."));
+  }
+  redirect(orbitHomePath(context.access));
 }
 
 export async function signInWithGoogle() {
@@ -58,7 +63,7 @@ export async function signInWithGoogle() {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${origin}/auth/callback?next=/dashboard`,
+      redirectTo: `${origin}/auth/callback`,
       queryParams: {
         prompt: "select_account",
       },
@@ -81,80 +86,6 @@ export async function signInWithGoogle() {
   }
 
   redirect(data.url);
-}
-
-export async function signup(formData: FormData) {
-  const parsed = z
-    .object({
-      fullName: z.string().trim().min(2).max(80),
-      workspaceName: z.string().trim().min(2).max(80),
-      email: emailSchema,
-      password: passwordSchema,
-    })
-    .safeParse({
-      fullName: value(formData, "fullName"),
-      workspaceName: value(formData, "workspaceName"),
-      email: value(formData, "email"),
-      password: value(formData, "password"),
-    });
-
-  if (!parsed.success) {
-    redirect(
-      messagePath(
-        "/login?mode=signup",
-        "error",
-        "Complete every field and use a password with at least 12 characters.",
-      ),
-    );
-  }
-
-  const origin = await requestOrigin();
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?next=/dashboard`,
-      data: {
-        full_name: parsed.data.fullName,
-        workspace_name: parsed.data.workspaceName,
-      },
-    },
-  });
-
-  if (error) {
-    console.error("Orbit signup failed", {
-      code: error.code,
-      status: error.status,
-    });
-
-    const isEmailRateLimited =
-      error.status === 429 ||
-      error.code === "over_email_send_rate_limit" ||
-      error.message.toLowerCase().includes("rate limit");
-
-    redirect(
-      messagePath(
-        "/login?mode=signup",
-        "error",
-        isEmailRateLimited
-          ? "Email verification is temporarily busy. Wait a few minutes, then try once."
-          : "Account creation failed. Please try again.",
-      ),
-    );
-  }
-
-  if (!data.session) {
-    redirect(
-      messagePath(
-        "/login",
-        "notice",
-        "Check your email to verify the account, then sign in.",
-      ),
-    );
-  }
-
-  redirect("/dashboard");
 }
 
 export async function requestPasswordReset(formData: FormData) {

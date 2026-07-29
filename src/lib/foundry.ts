@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { requireStudentAccess } from "@/lib/access";
 import { requireWorkspace } from "@/lib/workspace";
 
 export type FoundryHealth = "green" | "yellow" | "red" | "gold";
@@ -481,7 +482,9 @@ export async function listFoundryProgress() {
 
 async function getPortalDataForStudent(
   student: FoundryStudent,
-  context: Awaited<ReturnType<typeof requireWorkspace>>,
+  context:
+    | Awaited<ReturnType<typeof requireWorkspace>>
+    | Awaited<ReturnType<typeof requireStudentAccess>>,
 ) {
   const { supabase, workspace } = context;
   const [assignmentsResult, submissionsResult, classesResult, skillsResult, progressResult] =
@@ -508,6 +511,7 @@ async function getPortalDataForStudent(
           "id, title, department, instructor_name, starts_at, ends_at, mode, join_url, room_label, status, capacity, notes",
         )
         .eq("workspace_id", workspace.id)
+        .or(`department.is.null,department.eq.${student.department}`)
         .gte("ends_at", new Date().toISOString())
         .neq("status", "cancelled")
         .order("starts_at")
@@ -559,11 +563,12 @@ export async function getFounderStudentPreview(studentId: string) {
 }
 
 export async function getCurrentStudentPortal() {
-  const context = await requireWorkspace();
+  const context = await requireStudentAccess();
   const result = await context.supabase
     .from("foundry_students")
     .select(studentFields)
     .eq("workspace_id", context.workspace.id)
+    .eq("id", context.studentId)
     .eq("auth_user_id", context.user.id)
     .maybeSingle();
 

@@ -1,44 +1,27 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireOrbitAccess } from "@/lib/access";
 import type { Workspace } from "@/lib/types";
 
 export async function requireWorkspace() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const context = await requireOrbitAccess();
+  const { access } = context;
 
-  if (authError || !user) {
-    redirect("/login");
+  if (access.accountRole === "student") {
+    redirect("/learn");
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, role")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
-
-  if (membershipError || !membership) {
-    redirect("/login?error=Organisation%20setup%20failed");
-  }
-
-  const { data: workspace, error: workspaceError } = await supabase
-    .from("workspaces")
-    .select("id, name, slug")
-    .eq("id", membership.workspace_id)
-    .single();
-
-  if (workspaceError || !workspace) {
-    redirect("/login?error=Organisation%20not%20found");
+  if (
+    access.accountRole !== "founder" ||
+    !access.workspace ||
+    !access.membershipRole
+  ) {
+    redirect("/access-pending");
   }
 
   return {
-    supabase,
-    user,
-    role: membership.role as "owner" | "admin" | "member",
-    workspace: workspace as Workspace,
+    supabase: context.supabase,
+    user: context.user,
+    role: access.membershipRole,
+    workspace: access.workspace as Workspace,
   };
 }

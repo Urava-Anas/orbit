@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
+  CircleUserRound,
   ClipboardCheck,
   GraduationCap,
   MonitorSmartphone,
@@ -51,6 +52,9 @@ export default async function FoundryDashboardPage() {
     ["yellow", "red"].includes(student.health_status),
   );
   const studioReady = students.filter((student) => student.studio_eligible);
+  const connectedStudents = students.filter(
+    (student) => student.auth_user_id,
+  ).length;
   const now = currentTimestamp();
   const nextTwentyFourHours = now + 24 * 60 * 60 * 1000;
 
@@ -229,6 +233,19 @@ export default async function FoundryDashboardPage() {
             <small>Studio Ready</small>
             <strong>{studioReady.length}</strong>
             <p>Evidence threshold reached</p>
+          </div>
+        </article>
+        <article className="foundry-metric">
+          <span className="foundry-metric-icon is-blue">
+            <CircleUserRound aria-hidden="true" size={20} />
+          </span>
+          <div>
+            <small>Orbit connected</small>
+            <strong>
+              {connectedStudents}
+              <em>/{students.length}</em>
+            </strong>
+            <p>Verified student identities</p>
           </div>
         </article>
       </section>

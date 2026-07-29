@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { requireStudentAccess } from "@/lib/access";
 import { requireFounderFoundry } from "@/lib/foundry";
-import { requireWorkspace } from "@/lib/workspace";
 
 const idSchema = z.string().uuid();
 const departments = [
@@ -281,6 +281,7 @@ export async function updateFoundryStudent(formData: FormData) {
       department: z.enum(departments),
       healthStatus: z.enum(healthStates),
       progressPercent: z.coerce.number().int().min(0).max(100),
+      email: z.string().trim().email().max(254).or(z.literal("")),
       nextAction: z.string().max(500),
       learningDifficulty: z.string().max(500),
     })
@@ -289,6 +290,7 @@ export async function updateFoundryStudent(formData: FormData) {
       department: value(formData, "department"),
       healthStatus: value(formData, "healthStatus"),
       progressPercent: value(formData, "progressPercent"),
+      email: value(formData, "email"),
       nextAction: value(formData, "nextAction"),
       learningDifficulty: value(formData, "learningDifficulty"),
     });
@@ -300,12 +302,35 @@ export async function updateFoundryStudent(formData: FormData) {
 
   const path = `/dashboard/foundry/students/${parsed.data.studentId}`;
   const { supabase, workspace } = await requireFounderFoundry();
+  const { data: currentStudent } = await supabase
+    .from("foundry_students")
+    .select("auth_user_id, email")
+    .eq("workspace_id", workspace.id)
+    .eq("id", parsed.data.studentId)
+    .maybeSingle();
+
+  if (!currentStudent) {
+    fail(path, "Student record nahi mila.");
+  }
+
+  const nextEmail = parsed.data.email.toLowerCase();
+  if (
+    currentStudent.auth_user_id &&
+    (currentStudent.email ?? "").toLowerCase() !== nextEmail
+  ) {
+    fail(
+      path,
+      "Connected sign-in email locked hai. Identity badalne ke liye access review karein.",
+    );
+  }
+
   const { error } = await supabase
     .from("foundry_students")
     .update({
       department: parsed.data.department,
       health_status: parsed.data.healthStatus,
       progress_percent: parsed.data.progressPercent,
+      email: optional(nextEmail),
       next_action: optional(parsed.data.nextAction),
       learning_difficulty: optional(parsed.data.learningDifficulty),
     })
@@ -313,6 +338,9 @@ export async function updateFoundryStudent(formData: FormData) {
     .eq("id", parsed.data.studentId);
 
   if (error) {
+    if (error.code === "23505") {
+      fail(path, "Yeh sign-in email kisi aur active student record par hai.");
+    }
     fail(path, "Student record update nahi hua.");
   }
 
@@ -378,18 +406,13 @@ async function insertSubmission({
 }) {
   const context = founderPreview
     ? await requireFounderFoundry()
-    : await requireWorkspace();
-  const { supabase, workspace, user } = context;
+    : await requireStudentAccess();
+  const { supabase, workspace } = context;
 
   if (!founderPreview) {
-    const { data: ownStudent } = await supabase
-      .from("foundry_students")
-      .select("id")
-      .eq("workspace_id", workspace.id)
-      .eq("id", studentId)
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
-    if (!ownStudent) fail(path, "Yeh task aap ke account se linked nahi hai.");
+    if (!("studentId" in context) || context.studentId !== studentId) {
+      fail(path, "Yeh task aap ke account se linked nahi hai.");
+    }
   }
 
   const { data: assignment } = await supabase

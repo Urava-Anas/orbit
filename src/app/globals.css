@@ -452,6 +452,11 @@ a {
   color: var(--accent);
 }
 
+.auth-invite-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .auth-art {
   position: relative;
   display: flex;
@@ -1411,7 +1416,8 @@ a {
 }
 
 .foundry-shell,
-.student-shell {
+.student-shell,
+.access-pending-shell {
   --foundry-red: #ee4338;
   --foundry-red-dark: #d9342b;
   --foundry-green: #3da56a;
@@ -1442,6 +1448,7 @@ a {
 }
 
 .student-shell,
+.access-pending-shell,
 .student-portal-view.is-preview {
   --foundry-ivory: #f7f1e7;
   --foundry-paper: #fffdf8;
@@ -1545,6 +1552,20 @@ a {
   border-radius: 50%;
   background: var(--foundry-green);
   box-shadow: 0 0 0 4px rgba(61, 165, 106, 0.12);
+}
+
+.foundry-live-pill i.is-connecting,
+.student-live-pill i.is-connecting {
+  background: var(--foundry-yellow);
+  box-shadow: 0 0 0 4px rgba(230, 173, 53, 0.13);
+  animation: live-connecting 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes live-connecting {
+  to {
+    opacity: 0.45;
+    transform: scale(0.76);
+  }
 }
 
 .foundry-role-pill {
@@ -1803,7 +1824,7 @@ a {
 
 .foundry-metric-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1851,6 +1872,11 @@ a {
 .foundry-metric-icon.is-gold {
   background: #fff2c8;
   color: #9c721e;
+}
+
+.foundry-metric-icon.is-blue {
+  background: #e8efff;
+  color: #4f6fd6;
 }
 
 .foundry-metric > div:last-child {
@@ -2444,6 +2470,11 @@ a {
   color: #88620f !important;
 }
 
+.foundry-access-state.is-connected {
+  background: rgba(61, 165, 106, 0.12) !important;
+  color: var(--foundry-green) !important;
+}
+
 .foundry-student-progress > span {
   display: flex;
   justify-content: space-between;
@@ -2618,6 +2649,19 @@ a {
   font-weight: 480;
   line-height: 1.5;
   resize: vertical;
+}
+
+.foundry-form label > small {
+  color: var(--foundry-muted);
+  font-size: 9px;
+  font-weight: 520;
+  line-height: 1.5;
+}
+
+.foundry-form input[readonly] {
+  border-style: dashed;
+  color: var(--foundry-green);
+  cursor: not-allowed;
 }
 
 .foundry-form input:focus,
@@ -3502,10 +3546,31 @@ a {
 
 .student-brand,
 .student-account,
-.student-role-pill {
+.student-role-pill,
+.student-live-pill {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+}
+
+.student-live-pill {
+  min-height: 31px;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(61, 165, 106, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.78);
+  color: var(--foundry-green);
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.student-live-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--foundry-green);
+  box-shadow: 0 0 0 4px rgba(61, 165, 106, 0.11);
 }
 
 .student-brand > span {
@@ -4208,6 +4273,40 @@ a {
   text-align: center;
 }
 
+.access-pending-shell {
+  min-height: 100vh;
+  padding: 0 clamp(18px, 4vw, 44px) 44px;
+  background:
+    radial-gradient(circle at 82% 3%, rgba(238, 67, 56, 0.11), transparent 25rem),
+    var(--foundry-ivory);
+  color: var(--foundry-charcoal);
+}
+
+.access-pending-shell > header {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--foundry-line);
+}
+
+.access-pending-shell > header > span {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 11px;
+  border: 1px solid rgba(61, 165, 106, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--foundry-green);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.access-pending-shell .student-link-pending {
+  min-height: calc(100vh - 120px);
+}
+
 .student-empty-celebration {
   min-height: 260px;
   color: var(--foundry-green);
@@ -4825,6 +4924,13 @@ a {
     display: none;
   }
 
+  .student-live-pill {
+    width: 29px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
   .student-shell-main {
     width: min(100% - 22px, 720px);
     padding-top: 24px;
@@ -4979,6 +5085,11 @@ a {
   .student-loading-greeting > strong,
   .student-skeleton::before,
   .student-skeleton::after {
+    animation: none;
+  }
+
+  .foundry-live-pill i.is-connecting,
+  .student-live-pill i.is-connecting {
     animation: none;
   }
 }

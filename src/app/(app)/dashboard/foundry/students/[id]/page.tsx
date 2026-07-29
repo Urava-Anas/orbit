@@ -6,6 +6,8 @@ import {
   ArrowUpRight,
   BookOpen,
   CalendarCheck,
+  CircleCheck,
+  Clock3,
   Languages,
   MessageSquareText,
   MonitorSmartphone,
@@ -83,6 +85,20 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
             </p>
             <div className="student-record-badges">
               <HealthBadge health={student.health_status} />
+              <span
+                className={
+                  student.auth_user_id
+                    ? "foundry-access-state is-connected"
+                    : "foundry-access-state"
+                }
+              >
+                {student.auth_user_id ? (
+                  <CircleCheck aria-hidden="true" size={14} />
+                ) : (
+                  <Clock3 aria-hidden="true" size={14} />
+                )}
+                {student.auth_user_id ? "Orbit connected" : "Waiting for sign-in"}
+              </span>
               <span>
                 <MonitorSmartphone aria-hidden="true" size={14} />
                 {student.device_access.replaceAll("_", " ")}
@@ -169,6 +185,21 @@ export default async function FoundryStudentPage({ params, searchParams }: Props
                   name="progressPercent"
                   type="number"
                 />
+              </label>
+              <label className="is-wide">
+                Orbit sign-in email
+                <input
+                  defaultValue={student.email ?? ""}
+                  name="email"
+                  placeholder="student@example.com"
+                  readOnly={Boolean(student.auth_user_id)}
+                  type="email"
+                />
+                <small>
+                  {student.auth_user_id
+                    ? "Verified identity connected—email is now locked."
+                    : "Exact verified email sign-in par record automatically connect hoga."}
+                </small>
               </label>
               <label className="is-wide">
                 Learning difficulty

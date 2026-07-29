@@ -4,12 +4,13 @@ import {
   FounderFoundryNavigation,
   FoundryMiniMark,
 } from "@/components/foundry/FoundryNavigation";
+import { FoundryRealtime } from "@/components/foundry/FoundryRealtime";
 import { requireFounderFoundry } from "@/lib/foundry";
 
 export default async function FoundryLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  await requireFounderFoundry();
+  const { workspace } = await requireFounderFoundry();
 
   return (
     <div className="foundry-shell">
@@ -25,10 +26,7 @@ export default async function FoundryLayout({
           </span>
         </Link>
         <div className="foundry-top-actions">
-          <span className="foundry-live-pill" aria-label="Foundry live state">
-            <i aria-hidden="true" />
-            Live operating view
-          </span>
+          <FoundryRealtime role="founder" workspaceId={workspace.id} />
           <span
             className="foundry-role-pill"
             aria-label="Founder mode with full Foundry control"

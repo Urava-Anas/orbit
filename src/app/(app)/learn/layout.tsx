@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { StudentFoundryNavigation } from "@/components/foundry/FoundryNavigation";
-import { requireWorkspace } from "@/lib/workspace";
+import { FoundryRealtime } from "@/components/foundry/FoundryRealtime";
+import { requireStudentAccess } from "@/lib/access";
 
 export default async function LearnLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  await requireWorkspace();
+  const { workspace } = await requireStudentAccess();
   return (
     <div className="student-shell">
       <a className="role-skip-link" href="#student-main">
@@ -20,6 +21,7 @@ export default async function LearnLayout({
           <strong>Urava Foundry</strong>
         </Link>
         <span className="student-header-promise">Seekho · Banao · Barho</span>
+        <FoundryRealtime role="student" workspaceId={workspace.id} />
         <span
           className="student-role-pill"
           aria-label="Private student space showing only your learning record"

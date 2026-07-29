@@ -11,8 +11,8 @@ export default function HomePage() {
           <Link className="button button-quiet" href="/login">
             Sign in
           </Link>
-          <Link className="button button-primary" href="/login?mode=signup">
-            Create your Orbit <ArrowUpRight size={15} aria-hidden="true" />
+          <Link className="button button-primary" href="/login">
+            Open Orbit <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         </div>
       </nav>
@@ -30,8 +30,8 @@ export default function HomePage() {
             modules, workflows, and permissions.
           </p>
           <div className="hero-actions">
-            <Link className="button button-primary" href="/login?mode=signup">
-              Build your command system
+            <Link className="button button-primary" href="/login">
+              Enter your workspace
               <ArrowUpRight size={15} aria-hidden="true" />
             </Link>
             <Link className="button" href="/login">

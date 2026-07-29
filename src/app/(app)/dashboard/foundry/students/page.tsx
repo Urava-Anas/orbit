@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  CircleCheck,
+  Clock3,
   Filter,
   Search,
   Smartphone,
@@ -150,6 +152,20 @@ export default async function FoundryStudentsPage({ searchParams }: Props) {
               </div>
               <div className="foundry-student-signals">
                 <HealthBadge health={student.health_status} />
+                <span
+                  className={
+                    student.auth_user_id
+                      ? "foundry-access-state is-connected"
+                      : "foundry-access-state"
+                  }
+                >
+                  {student.auth_user_id ? (
+                    <CircleCheck aria-hidden="true" size={14} />
+                  ) : (
+                    <Clock3 aria-hidden="true" size={14} />
+                  )}
+                  {student.auth_user_id ? "Connected" : "Awaiting access"}
+                </span>
                 <span>
                   <Smartphone aria-hidden="true" size={14} />
                   {student.device_access.replaceAll("_", " ")}
