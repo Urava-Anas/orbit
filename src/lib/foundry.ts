@@ -229,7 +229,7 @@ export async function getFoundryDashboard() {
     supabase
       .from("foundry_submissions")
       .select(
-        "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_students(id, foundry_id, full_name, health_status), foundry_task_assignments(id, foundry_tasks(id, title, points))",
+        "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_task_assignments(id, foundry_tasks(id, title, points))",
       )
       .eq("workspace_id", workspace.id)
       .in("status", ["submitted", "under_review"])
@@ -257,11 +257,16 @@ export async function getFoundryDashboard() {
     assignmentsResult.error,
     "Foundry assignments",
   ) as unknown as FoundryAssignment[];
-  const submissions = dataOrThrow(
+  const rawSubmissions = dataOrThrow(
     submissionsResult.data,
     submissionsResult.error,
     "Foundry submissions",
   ) as unknown as FoundrySubmission[];
+  const studentsById = new Map(students.map((student) => [student.id, student]));
+  const submissions = rawSubmissions.map((submission) => ({
+    ...submission,
+    foundry_students: studentsById.get(submission.student_id) ?? null,
+  }));
   const todayClassIds = (todayClassesResult.data ?? []).map((item) => item.id);
 
   let todayAttendance: Array<{ status: string }> = [];
@@ -464,17 +469,40 @@ export async function listFoundryTasks() {
 
 export async function listFoundrySubmissions() {
   const context = await requireFounderFoundry();
-  const result = await context.supabase
-    .from("foundry_submissions")
-    .select(
-      "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_students(id, foundry_id, full_name, health_status), foundry_task_assignments(id, foundry_tasks(id, title, points))",
-    )
-    .eq("workspace_id", context.workspace.id)
-    .order("submitted_at", { ascending: false });
+  const [submissionsResult, studentsResult] = await Promise.all([
+    context.supabase
+      .from("foundry_submissions")
+      .select(
+        "id, assignment_id, student_id, attempt_number, submission_url, student_note, status, feedback, score, submitted_at, reviewed_at, foundry_task_assignments(id, foundry_tasks(id, title, points))",
+      )
+      .eq("workspace_id", context.workspace.id)
+      .order("submitted_at", { ascending: false }),
+    context.supabase
+      .from("foundry_students")
+      .select("id, foundry_id, full_name, health_status")
+      .eq("workspace_id", context.workspace.id),
+  ]);
+
+  const rawSubmissions = dataOrThrow(
+    submissionsResult.data,
+    submissionsResult.error,
+    "Foundry submissions",
+  ) as unknown as FoundrySubmission[];
+  const students = dataOrThrow(
+    studentsResult.data,
+    studentsResult.error,
+    "Foundry submission students",
+  ) as Array<
+    Pick<FoundryStudent, "id" | "foundry_id" | "full_name" | "health_status">
+  >;
+  const studentsById = new Map(students.map((student) => [student.id, student]));
 
   return {
     ...context,
-    submissions: (result.data ?? []) as unknown as FoundrySubmission[],
+    submissions: rawSubmissions.map((submission) => ({
+      ...submission,
+      foundry_students: studentsById.get(submission.student_id) ?? null,
+    })),
   };
 }
 
