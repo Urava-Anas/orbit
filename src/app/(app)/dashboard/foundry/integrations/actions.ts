@@ -14,12 +14,6 @@ export type OrbitActionKeyState = {
   error: string | null;
 };
 
-export const initialOrbitActionKeyState: OrbitActionKeyState = {
-  token: null,
-  prefix: null,
-  error: null,
-};
-
 export async function createOrbitActionKeyAction(
   _previousState: OrbitActionKeyState,
   formData: FormData,
