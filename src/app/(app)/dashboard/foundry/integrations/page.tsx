@@ -23,8 +23,8 @@ const schemaUrl =
   "https://orbit-two-delta.vercel.app/orbit-gpt-actions.openapi.json";
 
 export default async function FoundryIntegrationsPage() {
-  const { workspace } = await requireFounderFoundry();
-  const keys = await listOrbitActionKeys(workspace.id);
+  const { supabase, workspace } = await requireFounderFoundry();
+  const keys = await listOrbitActionKeys(supabase, workspace.id);
   const activeKeys = keys.filter(
     (key) =>
       !key.revoked_at &&
