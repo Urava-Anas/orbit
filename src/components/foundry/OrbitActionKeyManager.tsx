@@ -6,6 +6,7 @@ import {
   createOrbitActionKeyAction,
   initialOrbitActionKeyState,
 } from "@/app/(app)/dashboard/foundry/integrations/actions";
+import styles from "@/app/(app)/dashboard/foundry/integrations/integrations.module.css";
 
 export function OrbitActionKeyManager() {
   const [state, formAction, pending] = useActionState(
@@ -50,7 +51,7 @@ export function OrbitActionKeyManager() {
           type="submit"
         >
           {pending ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={17} />
+            <LoaderCircle aria-hidden="true" className={styles.spin} size={17} />
           ) : (
             <KeyRound aria-hidden="true" size={17} />
           )}
@@ -58,10 +59,10 @@ export function OrbitActionKeyManager() {
         </button>
       </form>
 
-      {state.error ? <p className="foundry-form-error">{state.error}</p> : null}
+      {state.error ? <p className={styles.error}>{state.error}</p> : null}
 
       {state.token ? (
-        <div className="foundry-token-box">
+        <div className={styles.tokenBox}>
           <div>
             <small>Shown once · store it in the GPT Action authentication field</small>
             <code>{state.token}</code>
