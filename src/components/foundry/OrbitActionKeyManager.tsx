@@ -4,9 +4,15 @@ import { Check, Copy, KeyRound, LoaderCircle } from "lucide-react";
 import { useActionState, useState } from "react";
 import {
   createOrbitActionKeyAction,
-  initialOrbitActionKeyState,
+  type OrbitActionKeyState,
 } from "@/app/(app)/dashboard/foundry/integrations/actions";
 import styles from "@/app/(app)/dashboard/foundry/integrations/integrations.module.css";
+
+const initialOrbitActionKeyState: OrbitActionKeyState = {
+  token: null,
+  prefix: null,
+  error: null,
+};
 
 export function OrbitActionKeyManager() {
   const [state, formAction, pending] = useActionState(
