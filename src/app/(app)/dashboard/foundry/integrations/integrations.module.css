@@ -1,0 +1,76 @@
+.setupList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 14px;
+  list-style: none;
+}
+
+.setupList li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: var(--foundry-ink-soft, #5f6670);
+  line-height: 1.55;
+}
+
+.setupList svg {
+  margin-top: 3px;
+  color: var(--foundry-green, #2e8b57);
+}
+
+.tokenBox {
+  display: flex;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(28, 35, 45, 0.12);
+  border-radius: 18px;
+  background: rgba(247, 249, 252, 0.9);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tokenBox > div {
+  min-width: 0;
+}
+
+.tokenBox small {
+  display: block;
+  margin-bottom: 8px;
+  color: #737b86;
+}
+
+.tokenBox code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #181c23;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.error {
+  margin: 14px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.spin {
+  animation: orbitSpin 0.8s linear infinite;
+}
+
+@keyframes orbitSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .tokenBox {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

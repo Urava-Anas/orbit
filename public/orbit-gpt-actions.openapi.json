@@ -1,0 +1,436 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Orbit Operator Actions",
+    "description": "Private, audited founder operations for Urava Orbit and Urava Foundry.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://orbit-two-delta.vercel.app"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/actions/orbit/health": {
+      "get": {
+        "operationId": "checkOrbitHealth",
+        "summary": "Check Orbit action-service health",
+        "description": "Returns current action-service health, student count, and failed action count from the last 24 hours.",
+        "x-openai-isConsequential": false,
+        "responses": {
+          "200": {
+            "description": "Orbit health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/summary": {
+      "get": {
+        "operationId": "getFounderSummary",
+        "summary": "Get the live Urava Foundry founder summary",
+        "description": "Returns live metrics, students needing attention, pending reviews, open assignments, account connectivity, Studio readiness, and integration queue state.",
+        "x-openai-isConsequential": false,
+        "responses": {
+          "200": {
+            "description": "Live founder summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/students": {
+      "get": {
+        "operationId": "listFoundryStudents",
+        "summary": "List Foundry students",
+        "description": "Returns canonical student records. Use this before write actions so IDs are never guessed.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "health",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["green", "yellow", "red", "gold"]
+            }
+          },
+          {
+            "name": "lifecycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Foundry students",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/audit": {
+      "get": {
+        "operationId": "listOrbitActionAudit",
+        "summary": "List recent Orbit GPT action receipts",
+        "description": "Returns recent audited action requests, outcomes, timestamps, and error codes.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orbit GPT action audit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/assign-task": {
+      "post": {
+        "operationId": "assignFoundryTask",
+        "summary": "Create and assign a Foundry task",
+        "description": "Creates one published task and assigns it to one canonical student. Confirm the final task, student, and deadline before calling.",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task created and assigned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/update-student": {
+      "post": {
+        "operationId": "updateFoundryStudentSignal",
+        "summary": "Update a student's health signal and next action",
+        "description": "Updates only the canonical health status and next action. Confirm the student and final wording before calling.",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStudentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student signal updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/review-submission": {
+      "post": {
+        "operationId": "reviewFoundrySubmission",
+        "summary": "Review a Foundry submission",
+        "description": "Accepts a submission or requests revision with written feedback and a score. Confirm the decision before calling.",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewSubmissionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Submission reviewed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/orbit/queue-sync": {
+      "post": {
+        "operationId": "queueFoundryIntegrationSync",
+        "summary": "Queue a full Foundry Airtable and Notion sync",
+        "description": "Queues the current Foundry roster for the configured external synchronization worker. Confirm before calling.",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestIdOnly"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Synchronization queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Orbit Action Key"
+      }
+    },
+    "schemas": {
+      "RequestIdOnly": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "A fresh UUID used for idempotency and audit tracing."
+          }
+        }
+      },
+      "AssignTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requestId",
+          "studentId",
+          "title",
+          "instructions",
+          "department",
+          "difficulty",
+          "skillDimension",
+          "points",
+          "dueAt"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 180
+          },
+          "instructions": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 8000,
+            "description": "Clear student instructions, normally in simple Roman Urdu."
+          },
+          "department": {
+            "type": "string",
+            "enum": [
+              "unassigned",
+              "creative_ui",
+              "web_app",
+              "ai_automation",
+              "sales_calling",
+              "operations",
+              "content_media"
+            ]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": ["starter", "standard", "stretch", "recovery"]
+          },
+          "skillDimension": {
+            "type": "string",
+            "enum": [
+              "",
+              "quality",
+              "deadline",
+              "communication",
+              "revision",
+              "teamwork",
+              "reliability",
+              "client_readiness"
+            ]
+          },
+          "points": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset."
+          }
+        }
+      },
+      "UpdateStudentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "studentId", "healthStatus", "nextAction"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "healthStatus": {
+            "type": "string",
+            "enum": ["green", "yellow", "red", "gold"]
+          },
+          "nextAction": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "ReviewSubmissionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requestId",
+          "submissionId",
+          "decision",
+          "feedback",
+          "score"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["accepted", "revision_required"]
+          },
+          "feedback": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8000
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "GenericResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "callId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  }
+}
