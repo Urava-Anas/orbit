@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Gauge,
   House,
+  PlugZap,
   Workflow,
   Send,
   Sparkles,
@@ -22,6 +23,7 @@ const founderLinks = [
   { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
   { href: "/dashboard/foundry/progress?view=studio", label: "Studio", icon: Sparkles },
   { href: "/dashboard/foundry/operations", label: "Ops", icon: Workflow },
+  { href: "/dashboard/foundry/integrations", label: "Connect", icon: PlugZap },
 ] as const;
 
 const studentLinks = [
