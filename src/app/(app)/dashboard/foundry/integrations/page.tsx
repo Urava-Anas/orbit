@@ -12,6 +12,7 @@ import { OrbitActionKeyManager } from "@/components/foundry/OrbitActionKeyManage
 import { formatFoundryDate, requireFounderFoundry } from "@/lib/foundry";
 import { listOrbitActionKeys } from "@/lib/orbit-actions";
 import { revokeOrbitActionKeyAction } from "./actions";
+import styles from "./integrations.module.css";
 
 export const metadata: Metadata = {
   title: "Connect ChatGPT to Orbit",
@@ -109,7 +110,7 @@ export default async function FoundryIntegrationsPage() {
             </div>
             <Link2 aria-hidden="true" size={20} />
           </div>
-          <ol className="foundry-setup-list">
+          <ol className={styles.setupList}>
             <li>
               <CheckCircle2 aria-hidden="true" size={17} />
               Open ChatGPT → GPTs → Create.
@@ -131,7 +132,7 @@ export default async function FoundryIntegrationsPage() {
               Test “Check Orbit health” before enabling write commands.
             </li>
           </ol>
-          <div className="foundry-token-box">
+          <div className={styles.tokenBox}>
             <div>
               <small>OpenAPI schema URL</small>
               <code>{schemaUrl}</code>
@@ -151,7 +152,8 @@ export default async function FoundryIntegrationsPage() {
         {keys.length ? (
           <div className="foundry-attention-list">
             {keys.map((key) => {
-              const inactive = Boolean(key.revoked_at) ||
+              const inactive =
+                Boolean(key.revoked_at) ||
                 Boolean(
                   key.expires_at && new Date(key.expires_at).getTime() <= Date.now(),
                 );
