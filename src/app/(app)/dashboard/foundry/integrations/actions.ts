@@ -37,13 +37,13 @@ export async function createOrbitActionKeyAction(
   }
 
   try {
-    const { workspace, user } = await requireFounderFoundry();
+    const { supabase, workspace } = await requireFounderFoundry();
     const expiresAt = new Date(
       Date.now() + parsed.data.expiryDays * 24 * 60 * 60 * 1000,
     ).toISOString();
     const result = await createOrbitActionKey({
+      supabase,
       workspaceId: workspace.id,
-      actorId: user.id,
       name: parsed.data.name,
       expiresAt,
     });
@@ -58,7 +58,7 @@ export async function createOrbitActionKeyAction(
     return {
       token: null,
       prefix: null,
-      error: "Orbit Action key create nahi hui. Server configuration check karein.",
+      error: "Orbit Action key create nahi hui. Founder access dobara check karein.",
     };
   }
 }
@@ -67,8 +67,9 @@ export async function revokeOrbitActionKeyAction(formData: FormData) {
   const keyId = z.string().uuid().safeParse(String(formData.get("keyId") ?? ""));
   if (!keyId.success) return;
 
-  const { workspace } = await requireFounderFoundry();
+  const { supabase, workspace } = await requireFounderFoundry();
   await revokeOrbitActionKey({
+    supabase,
     workspaceId: workspace.id,
     keyId: keyId.data,
   });
