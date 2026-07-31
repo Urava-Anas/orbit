@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { runFoundryWorker } from "@/lib/foundry-integrations/worker";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createPublicClient } from "@/lib/supabase/public";
 
 export const runtime = "nodejs";
@@ -67,6 +69,7 @@ type OrbitRpcResponse = Record<string, unknown> & {
   httpStatus?: number;
   error?: string;
   message?: string;
+  callId?: string;
 };
 
 function bearerToken(request: Request) {
@@ -243,11 +246,73 @@ export async function POST(request: Request, context: RouteContext) {
 
     if (action === "queue-sync") {
       const parsed = queueSyncSchema.parse(payload);
+      const admin = createAdminClient();
+      if (!admin) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "sync_worker_not_configured",
+            message: "Orbit integration worker credentials are not configured.",
+          },
+          { status: 503 },
+        );
+      }
+
       const { data, error } = await supabase.rpc("orbit_gpt_queue_sync", {
         action_token: token,
         action_request_id: parsed.requestId,
       });
-      return error ? rpcFailure(error.code) : rpcResponse(data);
+      if (error) return rpcFailure(error.code);
+
+      const queued = (data ?? {}) as OrbitRpcResponse;
+      if (queued.ok === false) return rpcResponse(queued);
+
+      const worker = await runFoundryWorker({
+        outboxBatch: 100,
+        deliveryBatch: 100,
+      });
+      const syncComplete =
+        worker.configured &&
+        worker.deliveriesFailed === 0 &&
+        worker.errors.length === 0;
+      const combined = {
+        ...queued,
+        worker,
+        syncComplete,
+      };
+
+      if (!queued.callId) {
+        return NextResponse.json(
+          {
+            ...combined,
+            ok: false,
+            error: "sync_audit_call_missing",
+            message: "The sync ran, but Orbit did not return its audit call ID.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const auditResult = await admin.rpc("complete_orbit_sync_action", {
+        target_call_id: queued.callId,
+        worker_result: worker,
+      });
+      if (auditResult.error || auditResult.data !== true) {
+        console.error("Orbit sync audit completion failed", auditResult.error);
+        return NextResponse.json(
+          {
+            ...combined,
+            ok: false,
+            error: "sync_audit_persist_failed",
+            message: "The sync ran, but its final audit result was not persisted.",
+          },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json(combined, {
+        status: syncComplete ? 200 : 503,
+      });
     }
 
     return NextResponse.json(
