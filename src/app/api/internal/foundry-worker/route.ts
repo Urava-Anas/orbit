@@ -27,6 +27,7 @@ async function handle(request: Request) {
   }
   try {
     const result = await runFoundryWorker();
+    console.info("Foundry worker completed", result);
     return NextResponse.json(result, {
       status: result.configured ? 200 : 503,
       headers: { "Cache-Control": "no-store" },
