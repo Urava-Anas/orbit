@@ -24,6 +24,7 @@ export type OrbitActionKeyRecord = {
   expires_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  is_active: boolean;
 };
 
 export class OrbitActionError extends Error {
@@ -38,6 +39,18 @@ export class OrbitActionError extends Error {
 
 function hashToken(token: string) {
   return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function withActivity(
+  key: Omit<OrbitActionKeyRecord, "is_active">,
+  now: number,
+): OrbitActionKeyRecord {
+  return {
+    ...key,
+    is_active:
+      !key.revoked_at &&
+      (!key.expires_at || new Date(key.expires_at).getTime() > now),
+  };
 }
 
 export async function createOrbitActionKey(input: {
@@ -69,7 +82,10 @@ export async function createOrbitActionKey(input: {
 
   return {
     token,
-    key: key as OrbitActionKeyRecord,
+    key: withActivity(
+      key as Omit<OrbitActionKeyRecord, "is_active">,
+      Date.now(),
+    ),
   };
 }
 
@@ -88,7 +104,10 @@ export async function listOrbitActionKeys(
     );
   }
 
-  return (data ?? []) as OrbitActionKeyRecord[];
+  const now = Date.now();
+  return ((data ?? []) as Array<Omit<OrbitActionKeyRecord, "is_active">>).map(
+    (key) => withActivity(key, now),
+  );
 }
 
 export async function revokeOrbitActionKey(input: {
