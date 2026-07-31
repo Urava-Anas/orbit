@@ -247,12 +247,13 @@ async function processDelivery(
       delivery,
       "airtable",
       result.recordId,
-      null,
+      result.recordUrl,
       result.payloadHash,
     );
     return {
       providerMessageId: result.recordId,
       remoteRecordId: result.recordId,
+      remoteUrl: result.recordUrl,
       payloadHash: result.payloadHash,
     };
   }

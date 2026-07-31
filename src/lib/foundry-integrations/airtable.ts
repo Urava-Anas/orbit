@@ -78,6 +78,10 @@ function statusLabel(value: string) {
   );
 }
 
+function airtableRecordUrl(baseId: string, tableId: string, recordId: string) {
+  return `https://airtable.com/${baseId}/${tableId}/${recordId}`;
+}
+
 async function airtableRequest<T>(
   path: string,
   init: RequestInit = {},
@@ -169,7 +173,11 @@ export async function syncStudentToAirtable(
         body: JSON.stringify({ fields: payload, typecast: true }),
       },
     );
-    return { recordId: record.id, payloadHash };
+    return {
+      recordId: record.id,
+      recordUrl: airtableRecordUrl(config.baseId, config.tableId, record.id),
+      payloadHash,
+    };
   }
 
   const result = await airtableRequest<{
@@ -183,7 +191,11 @@ export async function syncStudentToAirtable(
   });
   const createdId = result.records[0]?.id;
   if (!createdId) throw new Error("Airtable did not return a record ID");
-  return { recordId: createdId, payloadHash };
+  return {
+    recordId: createdId,
+    recordUrl: airtableRecordUrl(config.baseId, config.tableId, createdId),
+    payloadHash,
+  };
 }
 
 export async function writeNotionUrlToAirtable(

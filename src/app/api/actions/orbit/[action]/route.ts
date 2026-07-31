@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createPublicClient } from "@/lib/supabase/public";
+import { runFoundryWorker } from "@/lib/foundry-integrations/worker";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,7 @@ type OrbitRpcResponse = Record<string, unknown> & {
   httpStatus?: number;
   error?: string;
   message?: string;
+  callId?: string;
 };
 
 function bearerToken(request: Request) {
@@ -90,6 +92,17 @@ function unauthorized() {
       message: "A valid Orbit bearer key is required.",
     },
     { status: 401 },
+  );
+}
+
+function gatewayUnavailable() {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "orbit_gateway_not_configured",
+      message: "Orbit's server action gateway is not configured.",
+    },
+    { status: 503 },
   );
 }
 
@@ -133,7 +146,9 @@ export async function GET(request: Request, context: RouteContext) {
   const token = bearerToken(request);
   if (!token) return unauthorized();
 
-  const supabase = createPublicClient();
+  const supabase = createAdminClient();
+  if (!supabase) return gatewayUnavailable();
+
   const requestId = randomUUID();
   const url = new URL(request.url);
 
@@ -196,7 +211,8 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const supabase = createPublicClient();
+  const supabase = createAdminClient();
+  if (!supabase) return gatewayUnavailable();
 
   try {
     if (action === "assign-task") {
@@ -247,7 +263,57 @@ export async function POST(request: Request, context: RouteContext) {
         action_token: token,
         action_request_id: parsed.requestId,
       });
-      return error ? rpcFailure(error.code) : rpcResponse(data);
+      if (error) return rpcFailure(error.code);
+
+      const queued = (data ?? {}) as OrbitRpcResponse;
+      if (queued.ok === false) return rpcResponse(queued);
+
+      const worker = await runFoundryWorker({
+        outboxBatch: 100,
+        deliveryBatch: 100,
+      });
+      const syncComplete =
+        worker.configured &&
+        worker.deliveriesFailed === 0 &&
+        worker.errors.length === 0;
+      const combined = {
+        ...queued,
+        worker,
+        syncComplete,
+      };
+
+      if (!queued.callId) {
+        return NextResponse.json(
+          {
+            ...combined,
+            ok: false,
+            error: "sync_audit_call_missing",
+            message: "The sync ran, but Orbit did not return its audit call ID.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const auditResult = await supabase.rpc("complete_orbit_sync_action", {
+        target_call_id: queued.callId,
+        worker_result: worker,
+      });
+      if (auditResult.error || auditResult.data !== true) {
+        console.error("Orbit sync audit completion failed", auditResult.error);
+        return NextResponse.json(
+          {
+            ...combined,
+            ok: false,
+            error: "sync_audit_persist_failed",
+            message: "The sync ran, but its final audit result was not persisted.",
+          },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json(combined, {
+        status: syncComplete ? 200 : 503,
+      });
     }
 
     return NextResponse.json(
