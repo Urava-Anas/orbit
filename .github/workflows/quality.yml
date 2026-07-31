@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   app-quality:
-    name: Lint and build
+    name: Lint, audit and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,6 +29,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify patched development dependencies
+        run: npm run audit:dev-patches
 
       - name: Lint
         run: npm run lint
