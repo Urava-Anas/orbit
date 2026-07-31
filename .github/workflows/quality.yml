@@ -30,7 +30,7 @@ jobs:
           cache: npm
 
       - name: Generate patched lockfile
-        run: npm install --package-lock-only --ignore-scripts
+        run: npm update minimatch brace-expansion --package-lock-only --ignore-scripts
 
       - name: Commit patched lockfile
         run: |
