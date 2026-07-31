@@ -3,7 +3,7 @@
   "info": {
     "title": "Orbit Operator Actions",
     "description": "Private, audited founder operations for Urava Orbit and Urava Foundry.",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "servers": [
     {
@@ -40,7 +40,7 @@
       "get": {
         "operationId": "getFounderSummary",
         "summary": "Get the live Urava Foundry founder summary",
-        "description": "Returns live metrics, students needing attention, pending reviews, open assignments, account connectivity, Studio readiness, and integration queue state.",
+        "description": "Returns live metrics, students needing attention, pending reviews, open assignments, account connectivity, Studio readiness, and integration delivery state.",
         "x-openai-isConsequential": false,
         "responses": {
           "200": {
@@ -232,8 +232,8 @@
     "/api/actions/orbit/queue-sync": {
       "post": {
         "operationId": "queueFoundryIntegrationSync",
-        "summary": "Queue a full Foundry Airtable and Notion sync",
-        "description": "Queues the current Foundry roster for the configured external synchronization worker. Confirm before calling.",
+        "summary": "Run and verify a full Foundry Airtable and Notion sync",
+        "description": "Queues the current Foundry roster, runs the configured synchronization worker immediately, verifies Airtable and Notion delivery results, and persists the final worker outcome in the Orbit audit receipt. Confirm before calling.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -247,7 +247,17 @@
         },
         "responses": {
           "200": {
-            "description": "Synchronization queued",
+            "description": "Synchronization completed and verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Synchronization ran but one or more configured deliveries failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -428,6 +438,9 @@
           "callId": {
             "type": "string",
             "format": "uuid"
+          },
+          "syncComplete": {
+            "type": "boolean"
           }
         }
       }
