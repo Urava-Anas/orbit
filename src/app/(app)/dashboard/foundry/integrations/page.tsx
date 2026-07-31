@@ -25,11 +25,7 @@ const schemaUrl =
 export default async function FoundryIntegrationsPage() {
   const { supabase, workspace } = await requireFounderFoundry();
   const keys = await listOrbitActionKeys(supabase, workspace.id);
-  const activeKeys = keys.filter(
-    (key) =>
-      !key.revoked_at &&
-      (!key.expires_at || new Date(key.expires_at).getTime() > Date.now()),
-  );
+  const activeKeys = keys.filter((key) => key.is_active);
 
   return (
     <div className="foundry-page">
@@ -152,11 +148,7 @@ export default async function FoundryIntegrationsPage() {
         {keys.length ? (
           <div className="foundry-attention-list">
             {keys.map((key) => {
-              const inactive =
-                Boolean(key.revoked_at) ||
-                Boolean(
-                  key.expires_at && new Date(key.expires_at).getTime() <= Date.now(),
-                );
+              const inactive = !key.is_active;
               return (
                 <article className="foundry-attention-row" key={key.id}>
                   <span
