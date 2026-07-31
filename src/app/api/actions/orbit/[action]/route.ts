@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runFoundryWorker } from "@/lib/foundry-integrations/worker";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createPublicClient } from "@/lib/supabase/public";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,6 +95,17 @@ function unauthorized() {
   );
 }
 
+function gatewayUnavailable() {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "orbit_gateway_not_configured",
+      message: "Orbit's server action gateway is not configured.",
+    },
+    { status: 503 },
+  );
+}
+
 function rpcResponse(data: unknown) {
   const payload = (data ?? {
     ok: false,
@@ -136,7 +146,9 @@ export async function GET(request: Request, context: RouteContext) {
   const token = bearerToken(request);
   if (!token) return unauthorized();
 
-  const supabase = createPublicClient();
+  const supabase = createAdminClient();
+  if (!supabase) return gatewayUnavailable();
+
   const requestId = randomUUID();
   const url = new URL(request.url);
 
@@ -199,7 +211,8 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const supabase = createPublicClient();
+  const supabase = createAdminClient();
+  if (!supabase) return gatewayUnavailable();
 
   try {
     if (action === "assign-task") {
@@ -246,18 +259,6 @@ export async function POST(request: Request, context: RouteContext) {
 
     if (action === "queue-sync") {
       const parsed = queueSyncSchema.parse(payload);
-      const admin = createAdminClient();
-      if (!admin) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: "sync_worker_not_configured",
-            message: "Orbit integration worker credentials are not configured.",
-          },
-          { status: 503 },
-        );
-      }
-
       const { data, error } = await supabase.rpc("orbit_gpt_queue_sync", {
         action_token: token,
         action_request_id: parsed.requestId,
@@ -293,7 +294,7 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
 
-      const auditResult = await admin.rpc("complete_orbit_sync_action", {
+      const auditResult = await supabase.rpc("complete_orbit_sync_action", {
         target_call_id: queued.callId,
         worker_result: worker,
       });
