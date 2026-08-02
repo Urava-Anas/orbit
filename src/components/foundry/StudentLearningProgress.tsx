@@ -49,7 +49,8 @@ function stateLabel(value: string) {
 }
 
 function noteHref(baseHref: string, noteId: string) {
-  return `${baseHref}#note-${noteId}`;
+  const separator = baseHref.includes("?") ? "&" : "?";
+  return `${baseHref}${separator}note=${noteId}#note-${noteId}`;
 }
 
 function evidenceFor(note: StudentLearningNote) {
@@ -196,7 +197,9 @@ export function StudentLearningProgress({
               <CalendarDays aria-hidden="true" size={16} />
               Current learning day
             </span>
-            <h2>Day {currentDay} · {current.class_title_snapshot}</h2>
+            <h2>
+              Day {currentDay} · {current.class_title_snapshot}
+            </h2>
             <p>{formatFoundryDate(current.class_date)}</p>
           </div>
           <span className={styles.currentBadge}>
