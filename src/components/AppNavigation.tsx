@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Menu,
   MessageSquareText,
+  Search,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
@@ -18,7 +19,8 @@ import {
 const links = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
   { href: "/dashboard/foundry", label: "Foundry OS", icon: GraduationCap },
-  { href: "/dashboard/leads", label: "Growth", icon: UsersRound },
+  { href: "/dashboard/leads", label: "Growth", icon: UsersRound, exact: true },
+  { href: "/dashboard/leads/finder", label: "Lead Finder", icon: Search },
   { href: "/dashboard/projects", label: "Delivery", icon: FolderKanban },
   { href: "/dashboard/cash", label: "Finance", icon: Banknote },
   { href: "/dashboard/proof", label: "Evidence", icon: FileCheck2 },
@@ -35,9 +37,11 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
   const pathname = usePathname();
   const list = (
     <nav className={mobile ? "mobile-nav-links" : "nav-list"} aria-label="Orbit operating domains">
-      {links.map(({ href, label, icon: Icon }) => {
+      {links.map(({ href, label, icon: Icon, ...options }) => {
         const active =
-          href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+          href === "/dashboard" || "exact" in options
+            ? pathname === href
+            : pathname.startsWith(href);
 
         return (
           <Link
