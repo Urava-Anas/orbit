@@ -32,6 +32,26 @@ const optionalScore = z.preprocess(
   (input) => (input === "" || input === null ? null : Number(input)),
   z.number().int().min(0).max(100).nullable(),
 );
+const leadSchema = z.object({
+  businessName: z.string().min(2).max(160),
+  ownerName: z.string().max(120),
+  email: z.string().email().max(254).or(z.literal("")),
+  phone: z.string().max(40),
+  whatsapp: z.string().max(40),
+  source: z.enum(leadSources),
+  stage: z.enum(leadStages),
+  niche: z.string().max(100),
+  leadScore: optionalScore,
+  estimatedValue: z.coerce.number().min(0).max(999999999999),
+  currency: z.enum(currencies),
+  painPoint: z.string().max(4000),
+  nextAction: z.string().max(240),
+  nextActionAt: z.string().max(40),
+  googleMapsUrl: z.string().url().max(500).or(z.literal("")),
+  notes: z.string().max(4000),
+});
+
+type LeadInput = z.infer<typeof leadSchema>;
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -52,53 +72,36 @@ function succeed(message: string): never {
 }
 
 function parseLead(formData: FormData) {
-  return z
-    .object({
-      businessName: z.string().min(2).max(160),
-      ownerName: z.string().max(120),
-      email: z.string().email().max(254).or(z.literal("")),
-      phone: z.string().max(40),
-      whatsapp: z.string().max(40),
-      source: z.enum(leadSources),
-      stage: z.enum(leadStages),
-      niche: z.string().max(100),
-      leadScore: optionalScore,
-      estimatedValue: z.coerce.number().min(0).max(999999999999),
-      currency: z.enum(currencies),
-      painPoint: z.string().max(4000),
-      nextAction: z.string().max(240),
-      nextActionAt: z.string().max(40),
-      googleMapsUrl: z.string().url().max(500).or(z.literal("")),
-      notes: z.string().max(4000),
-    })
-    .safeParse({
-      businessName: value(formData, "businessName"),
-      ownerName: value(formData, "ownerName"),
-      email: value(formData, "email"),
-      phone: value(formData, "phone"),
-      whatsapp: value(formData, "whatsapp"),
-      source: value(formData, "source"),
-      stage: value(formData, "stage"),
-      niche: value(formData, "niche"),
-      leadScore: value(formData, "leadScore"),
-      estimatedValue: value(formData, "estimatedValue") || "0",
-      currency: value(formData, "currency"),
-      painPoint: value(formData, "painPoint"),
-      nextAction: value(formData, "nextAction"),
-      nextActionAt: value(formData, "nextActionAt"),
-      googleMapsUrl: value(formData, "googleMapsUrl"),
-      notes: value(formData, "notes"),
-    });
+  return leadSchema.safeParse({
+    businessName: value(formData, "businessName"),
+    ownerName: value(formData, "ownerName"),
+    email: value(formData, "email"),
+    phone: value(formData, "phone"),
+    whatsapp: value(formData, "whatsapp"),
+    source: value(formData, "source"),
+    stage: value(formData, "stage"),
+    niche: value(formData, "niche"),
+    leadScore: value(formData, "leadScore"),
+    estimatedValue: value(formData, "estimatedValue") || "0",
+    currency: value(formData, "currency"),
+    painPoint: value(formData, "painPoint"),
+    nextAction: value(formData, "nextAction"),
+    nextActionAt: value(formData, "nextActionAt"),
+    googleMapsUrl: value(formData, "googleMapsUrl"),
+    notes: value(formData, "notes"),
+  });
 }
 
 function parseNextActionDate(valueToParse: string) {
   if (!valueToParse) return null;
-  const parsed = new Date(valueToParse);
+  const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(valueToParse);
+  const pakistanTime = hasTimeZone ? valueToParse : `${valueToParse}:00+05:00`;
+  const parsed = new Date(pakistanTime);
   if (Number.isNaN(parsed.getTime())) fail("The follow-up date is invalid.");
   return parsed.toISOString();
 }
 
-function leadPayload(data: z.infer<ReturnType<typeof parseLead>["data"]>) {
+function leadPayload(data: LeadInput) {
   return {
     name: data.ownerName || data.businessName,
     company: data.businessName,
