@@ -13,7 +13,6 @@ import { FoundryActionButton } from "@/components/foundry/FoundryActionButton";
 import {
   EmptyFoundryState,
   FoundryNotice,
-  FoundryProgressBar,
 } from "@/components/foundry/FoundryUI";
 import {
   formatFoundryDate,
@@ -39,7 +38,6 @@ type Student = {
   id: string;
   foundry_id: string;
   full_name: string;
-  progress_percent: number;
 };
 
 type FoundryClass = {
@@ -60,13 +58,18 @@ type LearningNote = {
   student_notes: string;
   learning_state: string;
   understanding_level: number | null;
-  student_progress_snapshot: number | null;
   progress_summary: string | null;
   support_note: string | null;
   next_step: string | null;
   resource_url: string | null;
   updated_at: string;
 };
+
+function stageLabel(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export default async function FoundryClassNotesPage({ searchParams }: Props) {
   const query = await searchParams;
@@ -75,7 +78,7 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
   const [studentsResult, classesResult, notesResult] = await Promise.all([
     supabase
       .from("foundry_students")
-      .select("id, foundry_id, full_name, progress_percent")
+      .select("id, foundry_id, full_name")
       .eq("workspace_id", workspace.id)
       .not("lifecycle_status", "in", '("inactive","graduated","rejected")')
       .order("foundry_id"),
@@ -88,7 +91,7 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
     supabase
       .from("foundry_class_learning_notes")
       .select(
-        "id, student_id, class_id, class_title_snapshot, class_date, lesson_summary, key_concepts, student_notes, learning_state, understanding_level, student_progress_snapshot, progress_summary, support_note, next_step, resource_url, updated_at",
+        "id, student_id, class_id, class_title_snapshot, class_date, lesson_summary, key_concepts, student_notes, learning_state, understanding_level, progress_summary, support_note, next_step, resource_url, updated_at",
       )
       .eq("workspace_id", workspace.id)
       .order("class_date", { ascending: false }),
@@ -115,11 +118,11 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
       <section className="foundry-page-head">
         <div>
           <span className="foundry-kicker">Learning memory</span>
-          <h1>Class notes & progress</h1>
+          <h1>Class notes & learning stages</h1>
           <p>
-            Har completed class ka permanent record: kya parhaya, student ne kya
-            samjha, kis support ki zarurat hai, resource kahan hai, aur agla step
-            kya hoga.
+            Har completed class ka permanent record: kya parhaya, student kis
+            stage par hai, kya evidence mila, kis support ki zarurat hai, aur
+            agla step kya hoga.
           </p>
         </div>
         <div className="foundry-page-head-icon">
@@ -211,12 +214,13 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
                     <option value="introduced">Introduced</option>
                     <option value="practising">Practising</option>
                     <option value="understood">Understood</option>
+                    <option value="applied">Applied</option>
                     <option value="mastered">Mastered</option>
                   </select>
                 </label>
 
                 <label>
-                  Understanding level
+                  Understanding check
                   <select
                     defaultValue={editingNote?.understanding_level ?? ""}
                     name="understandingLevel"
@@ -231,21 +235,6 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
                 </label>
 
                 <label>
-                  Learning progress %
-                  <input
-                    defaultValue={
-                      editingNote?.student_progress_snapshot ??
-                      selectedStudent?.progress_percent ??
-                      ""
-                    }
-                    max="100"
-                    min="0"
-                    name="progressPercent"
-                    type="number"
-                  />
-                </label>
-
-                <label>
                   Resource link
                   <input
                     defaultValue={editingNote?.resource_url ?? ""}
@@ -256,11 +245,11 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
                 </label>
 
                 <label className="is-wide">
-                  Progress summary
+                  Evidence / progress summary
                   <textarea
                     defaultValue={editingNote?.progress_summary ?? ""}
                     name="progressSummary"
-                    placeholder="What improved, what is still untested, and what evidence exists."
+                    placeholder="What the student explained, demonstrated or completed; what is still untested."
                     rows={3}
                   />
                 </label>
@@ -296,7 +285,7 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
           ) : (
             <EmptyFoundryState
               title="A completed class and active student are required"
-              detail="Class complete mark karne ke baad uski notes aur progress yahan save hogi."
+              detail="Class complete mark karne ke baad uski notes aur learning stage yahan save hogi."
               href="/dashboard/foundry/classes"
               action="Open classes"
             />
@@ -313,22 +302,22 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
               <div className="foundry-data-row is-compact">
                 <BookOpen aria-hidden="true" size={17} />
                 <div>
-                  <strong>After every class</strong>
-                  <p>Save the explanation, notes and resource before teaching the next topic.</p>
+                  <strong>Notes hold the detail</strong>
+                  <p>Save the explanation, teaching support and class resource here.</p>
                 </div>
               </div>
               <div className="foundry-data-row is-compact">
                 <Gauge aria-hidden="true" size={17} />
                 <div>
-                  <strong>Do not guess mastery</strong>
-                  <p>Leave understanding unassessed until the student explains or applies it.</p>
+                  <strong>Use honest stages</strong>
+                  <p>Introduced → Practising → Understood → Applied → Mastered.</p>
                 </div>
               </div>
               <div className="foundry-data-row is-compact">
                 <Sparkles aria-hidden="true" size={17} />
                 <div>
-                  <strong>One next step</strong>
-                  <p>Every record should end with one clear revision or practice action.</p>
+                  <strong>Record evidence</strong>
+                  <p>State what the student explained, demonstrated or completed.</p>
                 </div>
               </div>
             </div>
@@ -365,17 +354,17 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
                     </strong>
                     <p>
                       {formatFoundryDate(note.class_date)} ·{" "}
-                      {note.learning_state.replaceAll("_", " ")}
+                      {stageLabel(note.learning_state)}
                       {note.understanding_level
-                        ? ` · Understanding ${note.understanding_level}/5`
+                        ? ` · Check ${note.understanding_level}/5`
                         : " · Understanding not assessed"}
                     </p>
-                    <p>{note.lesson_summary}</p>
+                    {note.progress_summary ? (
+                      <p>Evidence: {note.progress_summary}</p>
+                    ) : (
+                      <p>Evidence not recorded yet.</p>
+                    )}
                     {note.next_step ? <p>Next: {note.next_step}</p> : null}
-                    <FoundryProgressBar
-                      compact
-                      value={note.student_progress_snapshot ?? 0}
-                    />
                   </div>
                   <div className="foundry-row-actions">
                     {note.resource_url ? (
@@ -397,7 +386,7 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
                     </Link>
                     <Link
                       className="foundry-button foundry-button-quiet"
-                      href={`/dashboard/foundry/students/${note.student_id}/notes`}
+                      href={`/dashboard/foundry/students/${note.student_id}/portal?tab=notes#note-${note.id}`}
                     >
                       Student preview
                     </Link>
@@ -409,7 +398,7 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
         ) : (
           <EmptyFoundryState
             title="No previous-class notes yet"
-            detail="Complete a class, then save its explanation, progress and next step here."
+            detail="Complete a class, then save its notes, stage, evidence and next step here."
           />
         )}
       </section>
