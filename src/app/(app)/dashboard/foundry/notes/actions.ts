@@ -10,6 +10,7 @@ const learningStates = [
   "introduced",
   "practising",
   "understood",
+  "applied",
   "mastered",
 ] as const;
 
@@ -39,6 +40,7 @@ function succeed(path: string, message: string): never {
   revalidatePath("/dashboard/foundry/notes");
   revalidatePath("/learn", "layout");
   revalidatePath("/learn/notes");
+  revalidatePath("/learn/progress");
   const separator = path.includes("?") ? "&" : "?";
   redirect(`${path}${separator}notice=${encodeURIComponent(message)}`);
 }
@@ -60,10 +62,6 @@ export async function saveClassLearningNote(formData: FormData) {
         (input) => (input === "" ? null : input),
         z.coerce.number().int().min(1).max(5).nullable(),
       ),
-      progressPercent: z.preprocess(
-        (input) => (input === "" ? null : input),
-        z.coerce.number().int().min(0).max(100).nullable(),
-      ),
       progressSummary: z.string().max(1200),
       supportNote: z.string().max(1200),
       nextStep: z.string().max(1200),
@@ -77,7 +75,6 @@ export async function saveClassLearningNote(formData: FormData) {
       studentNotes: value(formData, "studentNotes"),
       learningState: value(formData, "learningState"),
       understandingLevel: value(formData, "understandingLevel"),
-      progressPercent: value(formData, "progressPercent"),
       progressSummary: value(formData, "progressSummary"),
       supportNote: value(formData, "supportNote"),
       nextStep: value(formData, "nextStep"),
@@ -85,14 +82,14 @@ export async function saveClassLearningNote(formData: FormData) {
     });
 
   if (!parsed.success) {
-    fail(path, "Class note ke required fields aur progress values dobara check karein.");
+    fail(path, "Class note ke required fields aur learning stage dobara check karein.");
   }
 
   const { supabase, user, workspace } = await requireFounderFoundry();
   const [studentResult, classResult] = await Promise.all([
     supabase
       .from("foundry_students")
-      .select("id, progress_percent")
+      .select("id")
       .eq("workspace_id", workspace.id)
       .eq("id", parsed.data.studentId)
       .maybeSingle(),
@@ -126,8 +123,6 @@ export async function saveClassLearningNote(formData: FormData) {
       student_notes: parsed.data.studentNotes,
       learning_state: parsed.data.learningState,
       understanding_level: parsed.data.understandingLevel,
-      student_progress_snapshot:
-        parsed.data.progressPercent ?? studentResult.data.progress_percent,
       progress_summary: optional(parsed.data.progressSummary),
       support_note: optional(parsed.data.supportNote),
       next_step: optional(parsed.data.nextStep),
@@ -141,5 +136,5 @@ export async function saveClassLearningNote(formData: FormData) {
     fail(path, "Class notes save nahi huay. Dobara try karein.");
   }
 
-  succeed(path, "Previous class notes aur learning progress save ho gaya.");
+  succeed(path, "Previous class notes aur learning stage save ho gaya.");
 }
