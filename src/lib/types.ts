@@ -10,12 +10,20 @@ export type Lead = {
   company: string | null;
   email: string | null;
   phone: string | null;
+  whatsapp: string | null;
   source: string;
   stage: string;
+  niche: string | null;
+  lead_score: number | null;
   estimated_value: number;
   currency: string;
+  pain_point: string | null;
   next_action: string | null;
   next_action_at: string | null;
+  google_maps_url: string | null;
+  notes: string | null;
+  legacy_notion_url: string | null;
+  imported_at: string | null;
   created_at: string;
 };
 
@@ -80,4 +88,3 @@ export type AuditEvent = {
   entity_type: string;
   created_at: string;
 };
-
