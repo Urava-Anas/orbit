@@ -86,7 +86,7 @@ with check (
     (select private.has_capability(workspace_id, 'foundry.manage'))
     or (select private.has_capability(workspace_id, 'foundry.review'))
   )
-  and created_by = auth.uid()
+  and created_by = (select auth.uid())
 );
 
 drop policy if exists foundry_class_learning_notes_update_staff
