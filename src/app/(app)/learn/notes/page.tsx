@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ArrowRight,
   ArrowUpRight,
   BookOpen,
   Brain,
@@ -9,10 +10,7 @@ import {
   History,
   Lightbulb,
 } from "lucide-react";
-import {
-  EmptyFoundryState,
-  FoundryProgressBar,
-} from "@/components/foundry/FoundryUI";
+import { EmptyFoundryState } from "@/components/foundry/FoundryUI";
 import { requireStudentAccess } from "@/lib/access";
 import { formatFoundryDate } from "@/lib/foundry";
 import styles from "./notes.module.css";
@@ -39,13 +37,20 @@ type LearningNote = {
   updated_at: string;
 };
 
+function stageLabel(value: string | undefined) {
+  if (!value) return "Not recorded";
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default async function StudentClassNotesPage() {
   const { supabase, workspace, studentId, user } = await requireStudentAccess();
 
   const [studentResult, notesResult] = await Promise.all([
     supabase
       .from("foundry_students")
-      .select("id, full_name, progress_percent")
+      .select("id, full_name")
       .eq("workspace_id", workspace.id)
       .eq("id", studentId)
       .eq("auth_user_id", user.id)
@@ -62,6 +67,7 @@ export default async function StudentClassNotesPage() {
 
   const student = studentResult.data;
   const notes = (notesResult.data ?? []) as LearningNote[];
+  const currentStage = stageLabel(notes[0]?.learning_state);
 
   return (
     <div className="student-portal-page">
@@ -70,8 +76,8 @@ export default async function StudentClassNotesPage() {
           <span className="student-kicker">Your learning memory</span>
           <h1>Previous class notes</h1>
           <p>
-            Har class ki explanation, important concepts, learning progress,
-            resource aur next step yahan permanently save rahega.
+            Har class ki detailed explanation, important concepts, learning
+            evidence, resource aur next step yahan permanently save rahega.
           </p>
         </div>
         <span className="student-page-head-icon">
@@ -82,24 +88,28 @@ export default async function StudentClassNotesPage() {
       {student ? (
         <Link className="student-progress-summary" href="/learn/progress">
           <div>
-            <span>Current Foundry progress · View progress</span>
-            <strong>{student.progress_percent}%</strong>
+            <span>Current learning stage · View journey</span>
+            <strong>{currentStage}</strong>
           </div>
-          <FoundryProgressBar value={student.progress_percent} />
+          <ArrowRight aria-hidden="true" size={18} />
         </Link>
       ) : null}
 
       {notes.length ? (
         <div className={styles.list}>
           {notes.map((note) => (
-            <article className={styles.card} key={note.id}>
+            <article
+              className={styles.card}
+              id={`note-${note.id}`}
+              key={note.id}
+            >
               <div className={styles.header}>
                 <div>
                   <span>{formatFoundryDate(note.class_date)}</span>
                   <h2>{note.class_title_snapshot}</h2>
                 </div>
                 <span className={styles.state}>
-                  {note.learning_state.replaceAll("_", " ")}
+                  {stageLabel(note.learning_state)}
                 </span>
               </div>
 
@@ -134,7 +144,7 @@ export default async function StudentClassNotesPage() {
                   <section>
                     <div className={styles.label}>
                       <Gauge aria-hidden="true" size={17} />
-                      Learning progress
+                      Evidence and learning progress
                     </div>
                     <p>{note.progress_summary}</p>
                   </section>
@@ -153,26 +163,18 @@ export default async function StudentClassNotesPage() {
 
               <div className={styles.metrics}>
                 <div>
-                  <span>Understanding</span>
+                  <span>Learning stage</span>
+                  <strong>{stageLabel(note.learning_state)}</strong>
+                </div>
+                <div>
+                  <span>Understanding check</span>
                   <strong>
                     {note.understanding_level
                       ? `${note.understanding_level}/5`
                       : "Not assessed yet"}
                   </strong>
                 </div>
-                <div>
-                  <span>Progress snapshot</span>
-                  <strong>
-                    {note.student_progress_snapshot !== null
-                      ? `${note.student_progress_snapshot}%`
-                      : "Not recorded"}
-                  </strong>
-                </div>
               </div>
-
-              {note.student_progress_snapshot !== null ? (
-                <FoundryProgressBar value={note.student_progress_snapshot} />
-              ) : null}
 
               {note.next_step ? (
                 <div className={styles.nextStep}>
@@ -198,7 +200,7 @@ export default async function StudentClassNotesPage() {
       ) : (
         <EmptyFoundryState
           title="No class notes yet"
-          detail="Teacher class complete karne ke baad notes, resource aur next step yahan save karega."
+          detail="Teacher class complete karne ke baad notes, evidence aur next step yahan save karega."
         />
       )}
     </div>
