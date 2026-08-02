@@ -251,20 +251,28 @@ export default async function StudentPortalPreviewPage({
     : "today";
 
   return (
-    <StudentPortalView
-      assignments={data.assignments}
-      classes={data.classes}
-      error={query.error}
-      notice={query.notice}
-      notifications={data.notifications}
-      preview
-      progress={data.progress}
-      studioReviews={data.studioReviews}
-      certificates={data.certificates}
-      skills={data.skills}
-      student={data.student}
-      submissions={data.submissions}
-      tab={tab}
-    />
+    <div>
+      <div className="student-preview-banner">
+        <span>Student preview controls</span>
+        <nav aria-label="Additional student preview controls">
+          <Link href="?tab=notes">Open Notes preview</Link>
+        </nav>
+      </div>
+      <StudentPortalView
+        assignments={data.assignments}
+        classes={data.classes}
+        error={query.error}
+        notice={query.notice}
+        notifications={data.notifications}
+        preview
+        progress={data.progress}
+        studioReviews={data.studioReviews}
+        certificates={data.certificates}
+        skills={data.skills}
+        student={data.student}
+        submissions={data.submissions}
+        tab={tab}
+      />
+    </div>
   );
 }
