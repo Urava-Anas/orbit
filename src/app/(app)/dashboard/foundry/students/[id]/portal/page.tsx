@@ -2,14 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowUpRight,
-  BookOpen,
-  Brain,
-  FileText,
-  Gauge,
-  History,
-  Lightbulb,
-} from "lucide-react";
+  StudentClassNotes,
+  type StudentClassNote,
+} from "@/components/foundry/StudentClassNotes";
 import {
   StudentLearningProgress,
   type StudentLearningNote,
@@ -18,11 +13,7 @@ import {
   StudentPortalView,
   type StudentPortalTab,
 } from "@/components/foundry/StudentPortal";
-import { EmptyFoundryState } from "@/components/foundry/FoundryUI";
-import {
-  formatFoundryDate,
-  getFounderStudentPreview,
-} from "@/lib/foundry";
+import { getFounderStudentPreview } from "@/lib/foundry";
 
 export const metadata: Metadata = {
   title: "Student Portal Preview",
@@ -33,14 +24,13 @@ type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     tab?: string;
+    note?: string;
     notice?: string;
     error?: string;
   }>;
 };
 
-type LearningNote = StudentLearningNote & {
-  updated_at?: string;
-};
+type LearningNote = StudentLearningNote & StudentClassNote;
 
 const portalTabs: Array<{ tab: string; label: string }> = [
   { tab: "today", label: "Today" },
@@ -51,19 +41,7 @@ const portalTabs: Array<{ tab: string; label: string }> = [
   { tab: "notes", label: "Notes" },
 ];
 
-const standardTabs = new Set([
-  "today",
-  "learn",
-  "submit",
-  "profile",
-]);
-
-function stageLabel(value: string | undefined) {
-  if (!value) return "Not recorded";
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+const standardTabs = new Set(["today", "learn", "submit", "profile"]);
 
 function PreviewNavigation({
   active,
@@ -110,11 +88,13 @@ export default async function StudentPortalPreviewPage({
       .order("class_date", { ascending: false });
 
     const notes = (notesResult.data ?? []) as LearningNote[];
-    const currentStage = stageLabel(notes[0]?.learning_state);
 
     if (query.tab === "progress") {
       return (
-        <div className="student-portal-view is-preview">
+        <div
+          className="student-portal-view is-preview"
+          style={{ width: "min(100%, 1080px)" }}
+        >
           <PreviewNavigation
             active="progress"
             foundryId={data.student.foundry_id}
@@ -129,138 +109,18 @@ export default async function StudentPortalPreviewPage({
     }
 
     return (
-      <div className="student-portal-view is-preview">
+      <div
+        className="student-portal-view is-preview"
+        style={{ width: "min(100%, 1080px)" }}
+      >
         <PreviewNavigation active="notes" foundryId={data.student.foundry_id} />
-
-        <section className="student-page-head">
-          <div>
-            <span className="student-kicker">Student-facing preview</span>
-            <h1>Previous class notes</h1>
-            <p>
-              Detailed explanations, learning support, resources and next steps
-              stay here. Progress only shows the simple learning journey.
-            </p>
-          </div>
-          <span className="student-page-head-icon">
-            <History aria-hidden="true" size={28} />
-          </span>
-        </section>
-
-        <Link className="student-progress-summary" href="?tab=progress">
-          <div>
-            <span>Current learning stage · View journey</span>
-            <strong>{currentStage}</strong>
-          </div>
-        </Link>
-
-        {notes.length ? (
-          <div className="student-learning-list">
-            {notes.map((note) => (
-              <article
-                className="student-learning-card"
-                id={`note-${note.id}`}
-                key={note.id}
-              >
-                <div className="student-learning-card-head">
-                  <div>
-                    <span>{formatFoundryDate(note.class_date)}</span>
-                    <h2>{note.class_title_snapshot}</h2>
-                  </div>
-                  <span className="student-learning-state">
-                    {stageLabel(note.learning_state)}
-                  </span>
-                </div>
-
-                <div className="student-learning-grid">
-                  <section>
-                    <div className="student-learning-label">
-                      <BookOpen aria-hidden="true" size={17} />
-                      What this class covered
-                    </div>
-                    <p>{note.lesson_summary}</p>
-                  </section>
-
-                  <section>
-                    <div className="student-learning-label">
-                      <FileText aria-hidden="true" size={17} />
-                      Saved notes
-                    </div>
-                    <p>{note.student_notes}</p>
-                  </section>
-
-                  {note.key_concepts ? (
-                    <section>
-                      <div className="student-learning-label">
-                        <Lightbulb aria-hidden="true" size={17} />
-                        Key concepts
-                      </div>
-                      <p>{note.key_concepts}</p>
-                    </section>
-                  ) : null}
-
-                  {note.progress_summary ? (
-                    <section>
-                      <div className="student-learning-label">
-                        <Gauge aria-hidden="true" size={17} />
-                        Evidence and learning progress
-                      </div>
-                      <p>{note.progress_summary}</p>
-                    </section>
-                  ) : null}
-
-                  {note.support_note ? (
-                    <section>
-                      <div className="student-learning-label">
-                        <Brain aria-hidden="true" size={17} />
-                        Best learning support
-                      </div>
-                      <p>{note.support_note}</p>
-                    </section>
-                  ) : null}
-                </div>
-
-                <div className="student-learning-progress-row">
-                  <div>
-                    <span>Learning stage</span>
-                    <strong>{stageLabel(note.learning_state)}</strong>
-                  </div>
-                  <div>
-                    <span>Understanding check</span>
-                    <strong>
-                      {note.understanding_level
-                        ? `${note.understanding_level}/5`
-                        : "Not assessed yet"}
-                    </strong>
-                  </div>
-                </div>
-
-                {note.next_step ? (
-                  <div className="student-next-step">
-                    <strong>Next step</strong>
-                    <p>{note.next_step}</p>
-                  </div>
-                ) : null}
-
-                {note.resource_url ? (
-                  <a
-                    className="student-primary-action"
-                    href={note.resource_url}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Open class resource
-                    <ArrowUpRight aria-hidden="true" size={16} />
-                  </a>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <EmptyFoundryState
-            title="No class notes yet"
-            detail="Save a completed class record from Foundry Notes, then it will appear here."
-          />
-        )}
+        <StudentClassNotes
+          journeyHref="?tab=progress"
+          notes={notes}
+          preview
+          selectedNoteId={query.note}
+          studentName={data.student.full_name}
+        />
       </div>
     );
   }
@@ -279,15 +139,15 @@ export default async function StudentPortalPreviewPage({
       </div>
       <StudentPortalView
         assignments={data.assignments}
+        certificates={data.certificates}
         classes={data.classes}
         error={query.error}
         notice={query.notice}
         notifications={data.notifications}
         preview
         progress={data.progress}
-        studioReviews={data.studioReviews}
-        certificates={data.certificates}
         skills={data.skills}
+        studioReviews={data.studioReviews}
         student={data.student}
         submissions={data.submissions}
         tab={tab}
