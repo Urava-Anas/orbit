@@ -1,0 +1,669 @@
+.modeNav {
+  display: inline-flex;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.modeLink {
+  display: inline-flex;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  transition: 160ms ease;
+}
+
+.modeLink:hover {
+  color: var(--foreground);
+}
+
+.modeLinkActive {
+  background: var(--foreground);
+  color: #090b0f;
+}
+
+.controlBar {
+  display: grid;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  grid-template-columns: minmax(240px, 1fr) auto auto auto;
+  align-items: end;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.023);
+}
+
+.searchField {
+  position: relative;
+}
+
+.searchField svg {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.searchField input,
+.filterSelect {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--foreground);
+  outline: none;
+}
+
+.searchField input {
+  padding: 0 14px 0 42px;
+}
+
+.filterWrap {
+  display: grid;
+  min-width: 150px;
+  gap: 6px;
+}
+
+.filterWrap label {
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filterSelect {
+  padding: 0 12px;
+  font-size: 11px;
+}
+
+.controlActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focusGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+  gap: 14px;
+}
+
+.focusPanel,
+.healthPanel,
+.directoryPanel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.023);
+  overflow: hidden;
+}
+
+.sectionHead {
+  display: flex;
+  min-height: 66px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.sectionHead p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sectionHead span {
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.focusList {
+  display: grid;
+}
+
+.focusCard {
+  display: grid;
+  min-height: 126px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+}
+
+.focusCard:last-child {
+  border-bottom: 0;
+}
+
+.leadHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.leadHeading h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.score {
+  display: inline-flex;
+  min-height: 25px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  align-items: center;
+  color: var(--muted-strong);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+}
+
+.scoreHot {
+  border-color: rgba(255, 107, 107, 0.34);
+  background: rgba(255, 107, 107, 0.08);
+  color: #ff9a9a;
+}
+
+.scoreWarm {
+  border-color: rgba(255, 203, 102, 0.3);
+  background: rgba(255, 203, 102, 0.07);
+  color: var(--warning);
+}
+
+.leadMeta {
+  display: flex;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.leadMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.nextAction {
+  max-width: 720px;
+  margin: 14px 0 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.nextAction strong {
+  color: var(--foreground);
+  font-weight: 620;
+}
+
+.urgency {
+  display: inline-flex;
+  margin-top: 10px;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.urgencyCritical {
+  color: #ff9292;
+}
+
+.quickActions {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.quickAction {
+  display: inline-flex;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 10px;
+  transition: 160ms ease;
+}
+
+.quickAction:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--foreground);
+}
+
+.healthBody {
+  display: grid;
+  padding: 18px;
+  gap: 18px;
+}
+
+.healthCallout {
+  padding: 17px;
+  border: 1px solid rgba(200, 255, 77, 0.18);
+  border-radius: 14px;
+  background: rgba(200, 255, 77, 0.055);
+}
+
+.healthCallout strong {
+  display: block;
+  font-size: 25px;
+  font-weight: 580;
+  letter-spacing: -0.04em;
+}
+
+.healthCallout span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.stageStack {
+  display: grid;
+  gap: 11px;
+}
+
+.stageRow {
+  display: grid;
+  grid-template-columns: 92px 1fr 24px;
+  align-items: center;
+  gap: 10px;
+}
+
+.stageRow span,
+.stageRow strong {
+  font-size: 10px;
+}
+
+.stageRow span {
+  color: var(--muted);
+}
+
+.stageRow strong {
+  color: var(--muted-strong);
+  text-align: right;
+}
+
+.stageBar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.stageBar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.healthRules {
+  display: grid;
+  gap: 8px;
+}
+
+.healthRule {
+  display: flex;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.healthRule strong {
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.boardWrap {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.board {
+  display: grid;
+  min-width: 1240px;
+  grid-template-columns: repeat(7, minmax(176px, 1fr));
+  gap: 10px;
+}
+
+.boardColumn {
+  min-height: 460px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.018);
+  overflow: hidden;
+}
+
+.boardHead {
+  display: flex;
+  min-height: 54px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.boardHead strong {
+  font-size: 11px;
+}
+
+.boardHead span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  place-items: center;
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+}
+
+.boardCards {
+  display: grid;
+  padding: 9px;
+  gap: 9px;
+}
+
+.boardCard {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.boardCard h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.boardCard p {
+  display: -webkit-box;
+  margin: 9px 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.boardMeta {
+  display: flex;
+  margin-top: 9px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+}
+
+.boardForm {
+  display: grid;
+  margin-top: 10px;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.boardForm select {
+  min-width: 0;
+  min-height: 31px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--muted-strong);
+  font-size: 8px;
+}
+
+.boardForm button {
+  min-height: 31px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 8px;
+}
+
+.boardEmpty {
+  padding: 22px 12px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.directoryList {
+  display: grid;
+}
+
+.directoryCard {
+  display: grid;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1.25fr) minmax(220px, 0.95fr) auto;
+  align-items: start;
+  gap: 20px;
+}
+
+.directoryCard:last-child {
+  border-bottom: 0;
+}
+
+.directoryCell {
+  display: grid;
+  gap: 6px;
+}
+
+.directoryCell > span {
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.directoryCell strong {
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.4;
+}
+
+.directoryCell p {
+  display: -webkit-box;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.editPanel {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+  overflow: hidden;
+}
+
+.editPanel > summary {
+  display: flex;
+  min-height: 43px;
+  padding: 0 13px;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: var(--muted-strong);
+  font-size: 10px;
+  list-style: none;
+}
+
+.editPanel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.editPanel > summary::after {
+  color: var(--accent);
+  content: "+";
+  font-size: 16px;
+}
+
+.editPanel[open] > summary::after {
+  content: "–";
+}
+
+.editPanel form {
+  padding: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.emptyFiltered {
+  display: grid;
+  min-height: 260px;
+  padding: 40px;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyFiltered strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--foreground);
+  font-size: 15px;
+}
+
+:global(.status-raw) {
+  color: var(--muted-strong);
+}
+
+:global(.status-scored) {
+  border-color: rgba(119, 169, 255, 0.28);
+  background: rgba(119, 169, 255, 0.07);
+  color: #9cbeff;
+}
+
+:global(.status-contacted) {
+  border-color: rgba(255, 203, 102, 0.28);
+  background: rgba(255, 203, 102, 0.07);
+  color: var(--warning);
+}
+
+:global(.status-interested) {
+  border-color: rgba(200, 255, 77, 0.28);
+  background: rgba(200, 255, 77, 0.07);
+  color: var(--accent);
+}
+
+:global(.status-demo_booked) {
+  border-color: rgba(190, 126, 255, 0.3);
+  background: rgba(190, 126, 255, 0.08);
+  color: #cf9eff;
+}
+
+@media (max-width: 1180px) {
+  .controlBar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .focusGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .directoryCard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .modeNav {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, 1fr);
+    border-radius: 14px;
+  }
+
+  .modeLink {
+    justify-content: center;
+    padding: 0 10px;
+  }
+
+  .controlBar {
+    grid-template-columns: 1fr;
+  }
+
+  .filterWrap {
+    min-width: 0;
+  }
+
+  .controlActions {
+    justify-content: stretch;
+  }
+
+  .controlActions > * {
+    flex: 1;
+  }
+
+  .focusCard {
+    grid-template-columns: 1fr;
+  }
+
+  .quickActions {
+    justify-content: flex-start;
+  }
+
+  .directoryCard {
+    grid-template-columns: 1fr;
+  }
+}
