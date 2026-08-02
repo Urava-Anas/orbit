@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   ArrowUpRight,
   BookOpen,
@@ -79,13 +80,13 @@ export default async function StudentClassNotesPage() {
       </section>
 
       {student ? (
-        <section className="student-progress-summary">
+        <Link className="student-progress-summary" href="/learn/progress">
           <div>
-            <span>Current Foundry progress</span>
+            <span>Current Foundry progress · View progress</span>
             <strong>{student.progress_percent}%</strong>
           </div>
           <FoundryProgressBar value={student.progress_percent} />
-        </section>
+        </Link>
       ) : null}
 
       {notes.length ? (
