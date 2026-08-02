@@ -397,9 +397,9 @@ export default async function FoundryClassNotesPage({ searchParams }: Props) {
                     </Link>
                     <Link
                       className="foundry-button foundry-button-quiet"
-                      href={`/dashboard/foundry/students/${note.student_id}`}
+                      href={`/dashboard/foundry/students/${note.student_id}/notes`}
                     >
-                      Student
+                      Student preview
                     </Link>
                   </div>
                 </article>
