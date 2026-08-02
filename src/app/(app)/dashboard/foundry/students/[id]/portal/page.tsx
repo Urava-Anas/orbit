@@ -18,10 +18,7 @@ import {
   StudentPortalView,
   type StudentPortalTab,
 } from "@/components/foundry/StudentPortal";
-import {
-  EmptyFoundryState,
-  FoundryProgressBar,
-} from "@/components/foundry/FoundryUI";
+import { EmptyFoundryState } from "@/components/foundry/FoundryUI";
 import {
   formatFoundryDate,
   getFounderStudentPreview,
@@ -36,7 +33,6 @@ type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     tab?: string;
-    entry?: string;
     notice?: string;
     error?: string;
   }>;
@@ -59,9 +55,15 @@ const standardTabs = new Set([
   "today",
   "learn",
   "submit",
-  "progress",
   "profile",
 ]);
+
+function stageLabel(value: string | undefined) {
+  if (!value) return "Not recorded";
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 function PreviewNavigation({
   active,
@@ -108,6 +110,7 @@ export default async function StudentPortalPreviewPage({
       .order("class_date", { ascending: false });
 
     const notes = (notesResult.data ?? []) as LearningNote[];
+    const currentStage = stageLabel(notes[0]?.learning_state);
 
     if (query.tab === "progress") {
       return (
@@ -117,10 +120,8 @@ export default async function StudentPortalPreviewPage({
             foundryId={data.student.foundry_id}
           />
           <StudentLearningProgress
-            baseHref="?tab=progress"
-            currentProgress={data.student.progress_percent}
             notes={notes}
-            selectedEntryId={query.entry}
+            notesHref="?tab=notes"
             studentName={data.student.full_name}
           />
         </div>
@@ -136,8 +137,8 @@ export default async function StudentPortalPreviewPage({
             <span className="student-kicker">Student-facing preview</span>
             <h1>Previous class notes</h1>
             <p>
-              This is exactly what {data.student.full_name} can see in the Notes
-              section of the Orbit student account.
+              Detailed explanations, learning support, resources and next steps
+              stay here. Progress only shows the simple learning journey.
             </p>
           </div>
           <span className="student-page-head-icon">
@@ -147,23 +148,26 @@ export default async function StudentPortalPreviewPage({
 
         <Link className="student-progress-summary" href="?tab=progress">
           <div>
-            <span>Current Foundry progress · View progress</span>
-            <strong>{data.student.progress_percent}%</strong>
+            <span>Current learning stage · View journey</span>
+            <strong>{currentStage}</strong>
           </div>
-          <FoundryProgressBar value={data.student.progress_percent} />
         </Link>
 
         {notes.length ? (
           <div className="student-learning-list">
             {notes.map((note) => (
-              <article className="student-learning-card" key={note.id}>
+              <article
+                className="student-learning-card"
+                id={`note-${note.id}`}
+                key={note.id}
+              >
                 <div className="student-learning-card-head">
                   <div>
                     <span>{formatFoundryDate(note.class_date)}</span>
                     <h2>{note.class_title_snapshot}</h2>
                   </div>
                   <span className="student-learning-state">
-                    {note.learning_state.replaceAll("_", " ")}
+                    {stageLabel(note.learning_state)}
                   </span>
                 </div>
 
@@ -198,7 +202,7 @@ export default async function StudentPortalPreviewPage({
                     <section>
                       <div className="student-learning-label">
                         <Gauge aria-hidden="true" size={17} />
-                        Learning progress
+                        Evidence and learning progress
                       </div>
                       <p>{note.progress_summary}</p>
                     </section>
@@ -217,26 +221,18 @@ export default async function StudentPortalPreviewPage({
 
                 <div className="student-learning-progress-row">
                   <div>
-                    <span>Understanding</span>
+                    <span>Learning stage</span>
+                    <strong>{stageLabel(note.learning_state)}</strong>
+                  </div>
+                  <div>
+                    <span>Understanding check</span>
                     <strong>
                       {note.understanding_level
                         ? `${note.understanding_level}/5`
                         : "Not assessed yet"}
                     </strong>
                   </div>
-                  <div>
-                    <span>Progress snapshot</span>
-                    <strong>
-                      {note.student_progress_snapshot !== null
-                        ? `${note.student_progress_snapshot}%`
-                        : "Not recorded"}
-                    </strong>
-                  </div>
                 </div>
-
-                {note.student_progress_snapshot !== null ? (
-                  <FoundryProgressBar value={note.student_progress_snapshot} />
-                ) : null}
 
                 {note.next_step ? (
                   <div className="student-next-step">
