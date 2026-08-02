@@ -11,6 +11,10 @@ import {
   Lightbulb,
 } from "lucide-react";
 import {
+  StudentLearningProgress,
+  type StudentLearningNote,
+} from "@/components/foundry/StudentLearningProgress";
+import {
   StudentPortalView,
   type StudentPortalTab,
 } from "@/components/foundry/StudentPortal";
@@ -32,25 +36,14 @@ type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     tab?: string;
+    entry?: string;
     notice?: string;
     error?: string;
   }>;
 };
 
-type LearningNote = {
-  id: string;
-  class_title_snapshot: string;
-  class_date: string;
-  lesson_summary: string;
-  key_concepts: string | null;
-  student_notes: string;
-  learning_state: string;
-  understanding_level: number | null;
-  student_progress_snapshot: number | null;
-  progress_summary: string | null;
-  support_note: string | null;
-  next_step: string | null;
-  resource_url: string | null;
+type LearningNote = StudentLearningNote & {
+  updated_at?: string;
 };
 
 const portalTabs: Array<{ tab: string; label: string }> = [
@@ -70,6 +63,31 @@ const standardTabs = new Set([
   "profile",
 ]);
 
+function PreviewNavigation({
+  active,
+  foundryId,
+}: {
+  active: string;
+  foundryId: string;
+}) {
+  return (
+    <div className="student-preview-banner">
+      <span>Founder preview · {foundryId}</span>
+      <nav aria-label="Preview student tabs">
+        {portalTabs.map((item) => (
+          <Link
+            className={item.tab === active ? "is-active" : ""}
+            href={`?tab=${item.tab}`}
+            key={item.tab}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 export default async function StudentPortalPreviewPage({
   params,
   searchParams,
@@ -79,11 +97,11 @@ export default async function StudentPortalPreviewPage({
   const data = await getFounderStudentPreview(id);
   if (!data) notFound();
 
-  if (query.tab === "notes") {
+  if (query.tab === "progress" || query.tab === "notes") {
     const notesResult = await data.supabase
       .from("foundry_class_learning_notes")
       .select(
-        "id, class_title_snapshot, class_date, lesson_summary, key_concepts, student_notes, learning_state, understanding_level, student_progress_snapshot, progress_summary, support_note, next_step, resource_url",
+        "id, class_title_snapshot, class_date, lesson_summary, key_concepts, student_notes, learning_state, understanding_level, student_progress_snapshot, progress_summary, support_note, next_step, resource_url, updated_at",
       )
       .eq("workspace_id", data.workspace.id)
       .eq("student_id", data.student.id)
@@ -91,22 +109,27 @@ export default async function StudentPortalPreviewPage({
 
     const notes = (notesResult.data ?? []) as LearningNote[];
 
+    if (query.tab === "progress") {
+      return (
+        <div className="student-portal-view is-preview">
+          <PreviewNavigation
+            active="progress"
+            foundryId={data.student.foundry_id}
+          />
+          <StudentLearningProgress
+            baseHref="?tab=progress"
+            currentProgress={data.student.progress_percent}
+            notes={notes}
+            selectedEntryId={query.entry}
+            studentName={data.student.full_name}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="student-portal-view is-preview">
-        <div className="student-preview-banner">
-          <span>Founder preview · {data.student.foundry_id}</span>
-          <nav aria-label="Preview student tabs">
-            {portalTabs.map((item) => (
-              <Link
-                className={item.tab === "notes" ? "is-active" : ""}
-                href={`?tab=${item.tab}`}
-                key={item.tab}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+        <PreviewNavigation active="notes" foundryId={data.student.foundry_id} />
 
         <section className="student-page-head">
           <div>
@@ -122,13 +145,13 @@ export default async function StudentPortalPreviewPage({
           </span>
         </section>
 
-        <section className="student-progress-summary">
+        <Link className="student-progress-summary" href="?tab=progress">
           <div>
-            <span>Current Foundry progress</span>
+            <span>Current Foundry progress · View progress</span>
             <strong>{data.student.progress_percent}%</strong>
           </div>
           <FoundryProgressBar value={data.student.progress_percent} />
-        </section>
+        </Link>
 
         {notes.length ? (
           <div className="student-learning-list">
