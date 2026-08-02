@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   CalendarDays,
+  FileText,
   Gauge,
   House,
   PlugZap,
@@ -20,6 +21,7 @@ const founderLinks = [
   { href: "/dashboard/foundry", label: "Command", icon: House },
   { href: "/dashboard/foundry/students", label: "Students", icon: UsersRound },
   { href: "/dashboard/foundry/classes", label: "Classes", icon: CalendarDays },
+  { href: "/dashboard/foundry/notes", label: "Notes", icon: FileText },
   { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
   { href: "/dashboard/foundry/progress?view=studio", label: "Studio", icon: Sparkles },
   { href: "/dashboard/foundry/operations", label: "Ops", icon: Workflow },
@@ -29,6 +31,7 @@ const founderLinks = [
 const studentLinks = [
   { href: "/learn", label: "Today", icon: House },
   { href: "/learn/learn", label: "Learn", icon: BookOpen },
+  { href: "/learn/notes", label: "Notes", icon: FileText },
   { href: "/learn/submit", label: "Submit", icon: Send },
   { href: "/learn/progress", label: "Progress", icon: Trophy },
   { href: "/learn/profile", label: "Profile", icon: UserRound },
