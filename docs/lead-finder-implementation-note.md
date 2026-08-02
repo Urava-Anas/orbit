@@ -1,0 +1,1 @@
+Implementation continues on a feature branch. This note exists only to preserve the production migration sequence: database first, authenticated UI second.
