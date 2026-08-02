@@ -10,18 +10,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-type Props = {
-  searchParams: Promise<{ entry?: string }>;
-};
-
-export default async function StudentProgressPage({ searchParams }: Props) {
-  const query = await searchParams;
+export default async function StudentProgressPage() {
   const { supabase, workspace, studentId, user } = await requireStudentAccess();
 
   const [studentResult, notesResult] = await Promise.all([
     supabase
       .from("foundry_students")
-      .select("id, full_name, progress_percent")
+      .select("id, full_name")
       .eq("workspace_id", workspace.id)
       .eq("id", studentId)
       .eq("auth_user_id", user.id)
@@ -42,10 +37,8 @@ export default async function StudentProgressPage({ searchParams }: Props) {
   return (
     <div className="student-portal-page">
       <StudentLearningProgress
-        baseHref="/learn/progress"
-        currentProgress={student?.progress_percent ?? 0}
         notes={notes}
-        selectedEntryId={query.entry}
+        notesHref="/learn/notes"
         studentName={student?.full_name ?? "Student"}
       />
     </div>
