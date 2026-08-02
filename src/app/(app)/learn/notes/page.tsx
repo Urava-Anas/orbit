@@ -14,6 +14,7 @@ import {
 } from "@/components/foundry/FoundryUI";
 import { requireStudentAccess } from "@/lib/access";
 import { formatFoundryDate } from "@/lib/foundry";
+import styles from "./notes.module.css";
 
 export const metadata: Metadata = {
   title: "My Class Notes",
@@ -88,22 +89,22 @@ export default async function StudentClassNotesPage() {
       ) : null}
 
       {notes.length ? (
-        <div className="student-learning-list">
+        <div className={styles.list}>
           {notes.map((note) => (
-            <article className="student-learning-card" key={note.id}>
-              <div className="student-learning-card-head">
+            <article className={styles.card} key={note.id}>
+              <div className={styles.header}>
                 <div>
                   <span>{formatFoundryDate(note.class_date)}</span>
                   <h2>{note.class_title_snapshot}</h2>
                 </div>
-                <span className="student-learning-state">
+                <span className={styles.state}>
                   {note.learning_state.replaceAll("_", " ")}
                 </span>
               </div>
 
-              <div className="student-learning-grid">
+              <div className={styles.grid}>
                 <section>
-                  <div className="student-learning-label">
+                  <div className={styles.label}>
                     <BookOpen aria-hidden="true" size={17} />
                     What this class covered
                   </div>
@@ -111,7 +112,7 @@ export default async function StudentClassNotesPage() {
                 </section>
 
                 <section>
-                  <div className="student-learning-label">
+                  <div className={styles.label}>
                     <FileText aria-hidden="true" size={17} />
                     Your saved notes
                   </div>
@@ -120,7 +121,7 @@ export default async function StudentClassNotesPage() {
 
                 {note.key_concepts ? (
                   <section>
-                    <div className="student-learning-label">
+                    <div className={styles.label}>
                       <Lightbulb aria-hidden="true" size={17} />
                       Key concepts
                     </div>
@@ -130,7 +131,7 @@ export default async function StudentClassNotesPage() {
 
                 {note.progress_summary ? (
                   <section>
-                    <div className="student-learning-label">
+                    <div className={styles.label}>
                       <Gauge aria-hidden="true" size={17} />
                       Learning progress
                     </div>
@@ -140,7 +141,7 @@ export default async function StudentClassNotesPage() {
 
                 {note.support_note ? (
                   <section>
-                    <div className="student-learning-label">
+                    <div className={styles.label}>
                       <Brain aria-hidden="true" size={17} />
                       Best way to learn this
                     </div>
@@ -149,7 +150,7 @@ export default async function StudentClassNotesPage() {
                 ) : null}
               </div>
 
-              <div className="student-learning-progress-row">
+              <div className={styles.metrics}>
                 <div>
                   <span>Understanding</span>
                   <strong>
@@ -173,7 +174,7 @@ export default async function StudentClassNotesPage() {
               ) : null}
 
               {note.next_step ? (
-                <div className="student-next-step">
+                <div className={styles.nextStep}>
                   <strong>Next step</strong>
                   <p>{note.next_step}</p>
                 </div>
@@ -181,7 +182,7 @@ export default async function StudentClassNotesPage() {
 
               {note.resource_url ? (
                 <a
-                  className="student-primary-action"
+                  className={styles.action}
                   href={note.resource_url}
                   rel="noreferrer"
                   target="_blank"
