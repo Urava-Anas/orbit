@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Banknote,
   Building2,
+  Crosshair,
   FileCheck2,
   FolderKanban,
   GraduationCap,
@@ -20,6 +21,7 @@ const links = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
   { href: "/dashboard/foundry", label: "Foundry OS", icon: GraduationCap },
   { href: "/dashboard/leads", label: "Growth", icon: UsersRound, exact: true },
+  { href: "/dashboard/sales", label: "Sales Desk", icon: Crosshair },
   { href: "/dashboard/leads/finder", label: "Lead Finder", icon: Search },
   { href: "/dashboard/projects", label: "Delivery", icon: FolderKanban },
   { href: "/dashboard/cash", label: "Finance", icon: Banknote },
