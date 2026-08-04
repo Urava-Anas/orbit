@@ -1,0 +1,465 @@
+.discovery {
+  display: grid;
+  gap: 18px;
+  margin: 26px 0 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(200, 255, 77, 0.065), transparent 28%),
+    var(--surface);
+}
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.hero h2 {
+  margin: 5px 0;
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: -0.05em;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.heroMetrics {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.heroMetrics div {
+  display: grid;
+  min-width: 96px;
+  gap: 2px;
+  padding: 12px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.heroMetrics div:last-child {
+  border-right: 0;
+}
+
+.heroMetrics strong {
+  font-size: 19px;
+}
+
+.heroMetrics span {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.setupBanner {
+  display: flex;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid rgba(255, 203, 102, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(255, 203, 102, 0.055);
+}
+
+.setupBanner svg {
+  color: var(--warning);
+}
+
+.setupBanner strong,
+.setupBanner p {
+  margin: 0;
+}
+
+.setupBanner p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.discoveryGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.34fr);
+  gap: 12px;
+}
+
+.searchPanel,
+.historyPanel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.panelHead {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panelHead span,
+.resultsHead > div > span,
+.findingBlock > span {
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panelHead h3,
+.resultsHead h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.035em;
+}
+
+.panelHead svg {
+  color: var(--accent);
+}
+
+.searchForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.searchForm button {
+  align-self: end;
+}
+
+.historyList {
+  display: grid;
+  padding: 5px 14px 12px;
+}
+
+.historyRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.historyRow:last-child {
+  border-bottom: 0;
+}
+
+.historyRow div {
+  display: grid;
+  gap: 3px;
+}
+
+.historyRow strong {
+  font-size: 11px;
+}
+
+.historyRow small,
+.historyRow > span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.emptyCopy {
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.resultsHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.googleAttribution {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.resultList {
+  display: grid;
+  gap: 10px;
+}
+
+.resultCard {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(260px, 1fr) auto 150px;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.resultIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  display: inline-grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.resultIdentity > div {
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.titleRow h4 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: -0.025em;
+}
+
+.resultIdentity p,
+.findingBlock p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.signalRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.signalRow span {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  font-size: 8px;
+}
+
+.findingBlock {
+  min-width: 0;
+}
+
+.findingBlock strong {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted-strong);
+  font-size: 10px;
+}
+
+.sourceActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sourceActions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-strong);
+  font-size: 10px;
+}
+
+.sourceActions a:hover {
+  color: var(--accent);
+}
+
+.scorePanel {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+
+.totalScore {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scorePending,
+.scoreCool {
+  color: var(--muted-strong);
+}
+
+.scoreWarm {
+  border-color: rgba(255, 203, 102, 0.35);
+  color: var(--warning);
+}
+
+.scoreHot {
+  border-color: rgba(255, 107, 107, 0.35);
+  color: #ff9a9a;
+}
+
+.scorePanel small {
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.decisionActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.decisionActions .button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
+.decisionNote {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.emptyState {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyState strong,
+.emptyState p {
+  margin: 0;
+}
+
+.emptyState p {
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .resultCard {
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) 150px;
+  }
+
+  .sourceActions {
+    grid-column: 1 / 3;
+  }
+
+  .scorePanel {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@media (max-width: 860px) {
+  .discoveryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .heroMetrics {
+    align-self: flex-start;
+  }
+
+  .resultCard {
+    grid-template-columns: 1fr auto;
+  }
+
+  .findingBlock,
+  .sourceActions {
+    grid-column: 1;
+  }
+
+  .scorePanel {
+    grid-column: 2;
+    grid-row: 1 / 4;
+  }
+}
+
+@media (max-width: 620px) {
+  .discovery {
+    padding: 16px;
+  }
+
+  .heroMetrics {
+    width: 100%;
+  }
+
+  .heroMetrics div {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .searchForm,
+  .resultCard {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldWide,
+  .findingBlock,
+  .sourceActions,
+  .scorePanel {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .scorePanel {
+    justify-items: start;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .decisionActions {
+    justify-content: flex-start;
+  }
+}
