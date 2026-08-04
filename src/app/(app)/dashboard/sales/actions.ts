@@ -29,8 +29,10 @@ const outcomes = [
 ] as const;
 
 const leadStages = [
+  "new",
   "raw",
   "scored",
+  "qualified",
   "contacted",
   "interested",
   "demo_booked",
@@ -80,10 +82,16 @@ function inferredStage(
   if (outcome === "lost") return "lost";
   if (outcome === "proposal_sent") return "proposal";
   if (outcome === "booked") return "demo_booked";
-  if (outcome === "replied" && ["raw", "scored", "contacted"].includes(currentStage)) {
+  if (
+    outcome === "replied" &&
+    ["new", "raw", "scored", "qualified", "contacted"].includes(currentStage)
+  ) {
     return "interested";
   }
-  if (["sent", "no_answer"].includes(outcome) && ["raw", "scored"].includes(currentStage)) {
+  if (
+    ["sent", "no_answer"].includes(outcome) &&
+    ["new", "raw", "scored", "qualified"].includes(currentStage)
+  ) {
     return "contacted";
   }
   return selectedStage;
