@@ -14,6 +14,7 @@ import {
   Send,
   ShieldCheck,
   Target,
+  UserRound,
 } from "lucide-react";
 import { Notice } from "@/components/Notice";
 import { PageHeader } from "@/components/PageHeader";
@@ -91,6 +92,8 @@ type PageProps = {
   searchParams: Promise<{
     error?: string;
     notice?: string;
+    lead?: string;
+    q?: string;
   }>;
 };
 
@@ -122,15 +125,27 @@ function isOverdue(lead: Lead, now: number) {
 
 function attentionRank(lead: Lead, activities: LeadActivity[], now: number) {
   if (isOverdue(lead, now)) return 0;
-  if (!activities.length) return 1;
-  if ((lead.lead_score ?? 0) >= 90) return 2;
+  if (!activities.length && isActive(lead)) return 1;
+  if ((lead.lead_score ?? 0) >= 90 && isActive(lead)) return 2;
   if (!lead.next_action || !lead.next_action_at) return 3;
+  if (lead.stage === "won") return 5;
+  if (lead.stage === "lost") return 6;
   return 4;
 }
 
 function ownerName(lead: Lead) {
   if (!lead.name || lead.name === lead.company) return "team";
   return lead.name;
+}
+
+function leadInitials(lead: Lead) {
+  const label = lead.company ?? lead.name;
+  return label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "L";
 }
 
 function cleanSentence(value: string) {
@@ -177,6 +192,12 @@ function scoreClass(lead: Lead) {
   return styles.score;
 }
 
+function salesHref(leadId: string, query: string) {
+  const search = new URLSearchParams({ lead: leadId });
+  if (query) search.set("q", query);
+  return `/dashboard/sales?${search.toString()}`;
+}
+
 export default async function SalesDeskPage({ searchParams }: PageProps) {
   const { supabase, workspace } = await requireWorkspace();
   const params = await searchParams;
@@ -211,14 +232,28 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
   }
 
   const now = Date.now();
-  const activeLeads = leads
-    .filter(isActive)
-    .sort(
-      (a, b) =>
-        attentionRank(a, activitiesByLead.get(a.id) ?? [], now) -
-          attentionRank(b, activitiesByLead.get(b.id) ?? [], now) ||
-        (b.lead_score ?? 0) - (a.lead_score ?? 0),
-    );
+  const sortedLeads = [...leads].sort(
+    (a, b) =>
+      attentionRank(a, activitiesByLead.get(a.id) ?? [], now) -
+        attentionRank(b, activitiesByLead.get(b.id) ?? [], now) ||
+      (b.lead_score ?? 0) - (a.lead_score ?? 0),
+  );
+  const query = params.q?.trim().toLowerCase() ?? "";
+  const visibleLeads = query
+    ? sortedLeads.filter((lead) =>
+        [lead.company, lead.name, lead.niche, lead.stage]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(query)),
+      )
+    : sortedLeads;
+  const selectedLead =
+    visibleLeads.find((lead) => lead.id === params.lead) ??
+    sortedLeads.find((lead) => lead.id === params.lead) ??
+    visibleLeads[0] ??
+    sortedLeads[0] ??
+    null;
+
+  const activeLeads = leads.filter(isActive);
   const overdue = activeLeads.filter((lead) => isOverdue(lead, now));
   const untouched = activeLeads.filter(
     (lead) => !(activitiesByLead.get(lead.id) ?? []).length,
@@ -229,16 +264,24 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
     0,
   );
   const primaryCurrency = activeLeads[0]?.currency ?? "PKR";
+  const selectedActivities = selectedLead
+    ? activitiesByLead.get(selectedLead.id) ?? []
+    : [];
+  const selectedMessage = selectedLead ? outreachMessage(selectedLead) : "";
+  const selectedWhatsapp = selectedLead
+    ? whatsappHref(selectedLead.whatsapp ?? selectedLead.phone, selectedMessage)
+    : null;
+  const selectedOverdue = selectedLead ? isOverdue(selectedLead, now) : false;
 
   return (
     <div className="page-stack">
       <PageHeader
         kicker="Revenue execution"
         title="Sales Desk"
-        description="Turn qualified opportunities into disciplined outreach, follow-ups, proposals and closed clients."
+        description="Select an opportunity, open its complete sales profile, and control every interaction from one focused workspace."
         action={
           <div className={styles.headerActions}>
-            <Link className="button button-quiet" href="/dashboard/leads/finder">
+            <Link className="button button-quiet" href="/dashboard/leads#lead-finder">
               <Search size={15} aria-hidden="true" /> Find leads
             </Link>
             <Link className="button button-primary" href="/dashboard/leads">
@@ -252,223 +295,271 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
 
       <section className={styles.metrics} aria-label="Sales performance controls">
         <article className={styles.metric}>
-          <Crosshair size={18} aria-hidden="true" />
-          <div><strong>{activeLeads.length}</strong><span>active opportunities</span></div>
+          <Crosshair size={17} aria-hidden="true" />
+          <div><strong>{activeLeads.length}</strong><span>active</span></div>
         </article>
         <article className={`${styles.metric} ${overdue.length ? styles.metricDanger : ""}`}>
-          <Clock3 size={18} aria-hidden="true" />
-          <div><strong>{overdue.length}</strong><span>overdue follow-ups</span></div>
+          <Clock3 size={17} aria-hidden="true" />
+          <div><strong>{overdue.length}</strong><span>overdue</span></div>
         </article>
         <article className={`${styles.metric} ${untouched.length ? styles.metricWarning : ""}`}>
-          <Send size={18} aria-hidden="true" />
-          <div><strong>{untouched.length}</strong><span>not contacted in Orbit</span></div>
+          <Send size={17} aria-hidden="true" />
+          <div><strong>{untouched.length}</strong><span>untouched</span></div>
         </article>
         <article className={styles.metric}>
-          <Banknote size={18} aria-hidden="true" />
-          <div><strong>{formatMoney(pipelineValue, primaryCurrency)}</strong><span>visible pipeline value</span></div>
+          <Banknote size={17} aria-hidden="true" />
+          <div><strong>{formatMoney(pipelineValue, primaryCurrency)}</strong><span>pipeline</span></div>
         </article>
         <article className={styles.metric}>
-          <CheckCircle2 size={18} aria-hidden="true" />
-          <div><strong>{won.length}</strong><span>won records</span></div>
+          <CheckCircle2 size={17} aria-hidden="true" />
+          <div><strong>{won.length}</strong><span>won</span></div>
         </article>
       </section>
 
       <section className={styles.rules}>
-        <div>
-          <ShieldCheck size={18} aria-hidden="true" />
-          <div>
-            <strong>Urava conversion standard</strong>
-            <p>Every outreach must show the biggest benefit, a specific observed problem, truthful proof, low risk and one easy next action.</p>
-          </div>
-        </div>
-        <span>Cashvertising rules active</span>
+        <ShieldCheck size={17} aria-hidden="true" />
+        <p><strong>Urava conversion standard:</strong> biggest benefit, specific problem, truthful proof, low risk and one easy next action.</p>
+        <span>Cashvertising active</span>
       </section>
 
-      <section className={styles.queue}>
-        <div className={styles.sectionHead}>
-          <div>
-            <span className="section-kicker">Today&apos;s queue</span>
-            <h2>Founder-controlled opportunities</h2>
-            <p>Overdue leads appear first. Log every real interaction before moving on.</p>
+      <section className={styles.workspace}>
+        <aside className={styles.directory} aria-label="Sales opportunities">
+          <div className={styles.directoryHead}>
+            <div>
+              <span className="section-kicker">Opportunity directory</span>
+              <h2>Leads</h2>
+            </div>
+            <span>{visibleLeads.length}</span>
           </div>
-          <span>{activeLeads.length} active</span>
-        </div>
 
-        {activeLeads.length ? (
-          <div className={styles.leadList}>
-            {activeLeads.map((lead) => {
+          <form className={styles.searchBox} method="get" action="/dashboard/sales">
+            <Search size={15} aria-hidden="true" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search leads" aria-label="Search sales leads" />
+            {selectedLead ? <input type="hidden" name="lead" value={selectedLead.id} /> : null}
+          </form>
+
+          <nav className={styles.profileList} aria-label="Choose a lead profile">
+            {visibleLeads.map((lead) => {
               const leadActivities = activitiesByLead.get(lead.id) ?? [];
-              const message = outreachMessage(lead);
-              const whatsapp = whatsappHref(lead.whatsapp ?? lead.phone, message);
               const overdueLead = isOverdue(lead, now);
-
+              const selected = selectedLead?.id === lead.id;
               return (
-                <article className={styles.leadCard} key={lead.id}>
-                  <div className={styles.leadTop}>
-                    <div>
-                      <div className={styles.leadTitle}>
-                        <h3>{lead.company ?? lead.name}</h3>
-                        <StatusPill value={lead.stage} />
-                        <span className={scoreClass(lead)}>{lead.lead_score ?? "—"}/100</span>
-                      </div>
-                      <p className={styles.leadMeta}>
-                        {lead.name !== lead.company ? lead.name : "Owner not recorded"}
-                        <span>•</span>
-                        {lead.niche ?? "Niche not set"}
-                        <span>•</span>
-                        {formatMoney(Number(lead.estimated_value), lead.currency)}
-                      </p>
-                    </div>
-                    <div className={styles.contactActions}>
-                      {whatsapp ? (
-                        <a className="button button-primary" href={whatsapp} target="_blank" rel="noreferrer">
-                          <MessageCircle size={14} aria-hidden="true" /> Send WhatsApp
-                        </a>
-                      ) : null}
-                      {lead.phone ? (
-                        <a className="button button-quiet" href={phoneHref(lead.phone)}>
-                          <Phone size={14} aria-hidden="true" /> Call
-                        </a>
-                      ) : null}
-                      {lead.google_maps_url ? (
-                        <a className="button button-quiet" href={lead.google_maps_url} target="_blank" rel="noreferrer">
-                          <MapPin size={14} aria-hidden="true" /> Research
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className={styles.controlGrid}>
-                    <div className={styles.brief}>
-                      <span>Observed problem</span>
-                      <p>{lead.pain_point ?? "No verified pain point has been recorded yet. Research before contacting."}</p>
-                    </div>
-                    <div className={`${styles.brief} ${overdueLead ? styles.briefDanger : ""}`}>
-                      <span>Next controlled action</span>
-                      <strong>{lead.next_action ?? "No next action assigned"}</strong>
-                      <p>{lead.next_action_at ? formatRelativeDate(lead.next_action_at) : "No follow-up time assigned"}</p>
-                    </div>
-                    <div className={styles.brief}>
-                      <span>Orbit activity</span>
-                      <strong>{leadActivities.length} logged interactions</strong>
-                      <p>{leadActivities[0] ? `Last: ${humanize(leadActivities[0].outcome)}` : "No interaction logged"}</p>
-                    </div>
-                  </div>
-
-                  <details className={styles.outreachPanel}>
-                    <summary>Open Cashvertising outreach message</summary>
-                    <div className={styles.outreachBody}>
-                      <textarea aria-label={`Outreach message for ${lead.company ?? lead.name}`} readOnly defaultValue={message} />
-                      <div>
-                        <p>Before sending, manually confirm the visible problem. Never invent results, urgency or proof.</p>
-                        {whatsapp ? (
-                          <a className="button button-primary" href={whatsapp} target="_blank" rel="noreferrer">
-                            Open prepared message <ArrowUpRight size={13} aria-hidden="true" />
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  </details>
-
-                  <details className={styles.activityPanel} open={overdueLead || !leadActivities.length}>
-                    <summary>Log activity and set the next move</summary>
-                    <form action={logSalesActivity} className={styles.activityForm}>
-                      <input type="hidden" name="leadId" value={lead.id} />
-                      <input type="hidden" name="currentStage" value={lead.stage} />
-
-                      <div className="field">
-                        <label htmlFor={`kind-${lead.id}`}>Activity</label>
-                        <select id={`kind-${lead.id}`} name="kind" defaultValue="whatsapp">
-                          {activityKinds.map((kind) => <option value={kind} key={kind}>{humanize(kind)}</option>)}
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor={`direction-${lead.id}`}>Direction</label>
-                        <select id={`direction-${lead.id}`} name="direction" defaultValue="outbound">
-                          <option value="outbound">Outbound</option>
-                          <option value="inbound">Inbound</option>
-                          <option value="internal">Internal note</option>
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor={`outcome-${lead.id}`}>Outcome</label>
-                        <select id={`outcome-${lead.id}`} name="outcome" defaultValue="sent">
-                          {outcomes.map((outcome) => <option value={outcome} key={outcome}>{humanize(outcome)}</option>)}
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor={`stage-${lead.id}`}>Pipeline stage</label>
-                        <select id={`stage-${lead.id}`} name="nextStage" defaultValue={lead.stage}>
-                          {leadStages.map((stage) => <option value={stage} key={stage}>{humanize(stage)}</option>)}
-                        </select>
-                      </div>
-                      <div className={`field ${styles.formWide}`}>
-                        <label htmlFor={`summary-${lead.id}`}>What happened?</label>
-                        <textarea
-                          id={`summary-${lead.id}`}
-                          name="summary"
-                          minLength={2}
-                          maxLength={4000}
-                          placeholder="Example: Sent the 3-point audit. Client asked about price and delivery time."
-                          required
-                        />
-                      </div>
-                      <div className={`field ${styles.formWide}`}>
-                        <label htmlFor={`next-action-${lead.id}`}>Exact next action</label>
-                        <input
-                          id={`next-action-${lead.id}`}
-                          name="nextAction"
-                          maxLength={240}
-                          defaultValue={lead.next_action ?? ""}
-                          placeholder="Follow up with proof, schedule discovery call, send proposal…"
-                        />
-                      </div>
-                      <div className="field">
-                        <label htmlFor={`next-at-${lead.id}`}>When?</label>
-                        <input
-                          id={`next-at-${lead.id}`}
-                          name="nextActionAt"
-                          type="datetime-local"
-                          defaultValue={toKarachiDateTimeLocal(lead.next_action_at)}
-                        />
-                      </div>
-                      <div className={styles.submitWrap}>
-                        <button className="button button-primary" type="submit">
-                          Save activity and control lead
-                        </button>
-                      </div>
-                    </form>
-                  </details>
-
-                  {leadActivities.length ? (
-                    <details className={styles.timelinePanel}>
-                      <summary><History size={14} aria-hidden="true" /> Recent sales timeline</summary>
-                      <div className={styles.timeline}>
-                        {leadActivities.slice(0, 5).map((activity) => (
-                          <article key={activity.id}>
-                            <div>
-                              <strong>{humanize(activity.kind)} · {humanize(activity.outcome)}</strong>
-                              <span>{activityFormatter.format(new Date(activity.occurred_at))}</span>
-                            </div>
-                            <p>{activity.summary}</p>
-                            {activity.next_action ? <small>Next: {activity.next_action}</small> : null}
-                          </article>
-                        ))}
-                      </div>
-                    </details>
-                  ) : null}
-                </article>
+                <Link
+                  className={`${styles.profileRow} ${selected ? styles.profileRowActive : ""}`}
+                  href={salesHref(lead.id, params.q ?? "")}
+                  key={lead.id}
+                  aria-current={selected ? "page" : undefined}
+                >
+                  <span className={styles.avatar}>{leadInitials(lead)}</span>
+                  <span className={styles.profileCopy}>
+                    <strong>{lead.company ?? lead.name}</strong>
+                    <small>{lead.niche ?? "Niche not set"} · {humanize(lead.stage)}</small>
+                    <em className={overdueLead ? styles.overdueText : ""}>
+                      {overdueLead
+                        ? "Follow-up overdue"
+                        : leadActivities[0]
+                          ? `Last: ${humanize(leadActivities[0].outcome)}`
+                          : "No interaction logged"}
+                    </em>
+                  </span>
+                  <span className={scoreClass(lead)}>{lead.lead_score ?? "—"}</span>
+                </Link>
               );
             })}
-          </div>
-        ) : (
-          <div className={styles.emptyState}>
-            <Crosshair size={26} aria-hidden="true" />
-            <h3>No active sales opportunities</h3>
-            <p>Find a real business, verify a real problem, then approve it into the Growth pipeline.</p>
-            <Link className="button button-primary" href="/dashboard/leads/finder">Open Lead Finder</Link>
-          </div>
-        )}
+          </nav>
+
+          {!visibleLeads.length ? (
+            <div className={styles.listEmpty}>
+              <UserRound size={22} aria-hidden="true" />
+              <strong>No matching lead</strong>
+              <p>Clear the search or find a new opportunity.</p>
+            </div>
+          ) : null}
+        </aside>
+
+        <main className={styles.profilePane}>
+          {selectedLead ? (
+            <article className={styles.leadProfile}>
+              <header className={styles.profileHeader}>
+                <div className={styles.identity}>
+                  <span className={styles.avatarLarge}>{leadInitials(selectedLead)}</span>
+                  <div>
+                    <div className={styles.leadTitle}>
+                      <h2>{selectedLead.company ?? selectedLead.name}</h2>
+                      <StatusPill value={selectedLead.stage} />
+                      <span className={scoreClass(selectedLead)}>{selectedLead.lead_score ?? "—"}/100</span>
+                    </div>
+                    <p>
+                      {selectedLead.name !== selectedLead.company ? selectedLead.name : "Owner not recorded"}
+                      <span>•</span>
+                      {selectedLead.niche ?? "Niche not set"}
+                      <span>•</span>
+                      {formatMoney(Number(selectedLead.estimated_value), selectedLead.currency)}
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.contactActions}>
+                  {selectedWhatsapp ? (
+                    <a className="button button-primary" href={selectedWhatsapp} target="_blank" rel="noreferrer">
+                      <MessageCircle size={14} aria-hidden="true" /> WhatsApp
+                    </a>
+                  ) : null}
+                  {selectedLead.phone ? (
+                    <a className="button button-quiet" href={phoneHref(selectedLead.phone)}>
+                      <Phone size={14} aria-hidden="true" /> Call
+                    </a>
+                  ) : null}
+                  {selectedLead.google_maps_url ? (
+                    <a className="button button-quiet" href={selectedLead.google_maps_url} target="_blank" rel="noreferrer">
+                      <MapPin size={14} aria-hidden="true" /> Research
+                    </a>
+                  ) : null}
+                </div>
+              </header>
+
+              <div className={styles.profileStats}>
+                <div><span>Stage</span><strong>{humanize(selectedLead.stage)}</strong></div>
+                <div><span>Score</span><strong>{selectedLead.lead_score ?? "—"}/100</strong></div>
+                <div><span>Interactions</span><strong>{selectedActivities.length}</strong></div>
+                <div><span>Source</span><strong>{humanize(selectedLead.source)}</strong></div>
+              </div>
+
+              <div className={styles.controlGrid}>
+                <div className={styles.brief}>
+                  <span>Observed problem</span>
+                  <p>{selectedLead.pain_point ?? "No verified pain point has been recorded yet. Research before contacting."}</p>
+                </div>
+                <div className={`${styles.brief} ${selectedOverdue ? styles.briefDanger : ""}`}>
+                  <span>Next controlled action</span>
+                  <strong>{selectedLead.next_action ?? "No next action assigned"}</strong>
+                  <p>{selectedLead.next_action_at ? formatRelativeDate(selectedLead.next_action_at) : "No follow-up time assigned"}</p>
+                </div>
+                <div className={styles.brief}>
+                  <span>Latest activity</span>
+                  <strong>{selectedActivities[0] ? humanize(selectedActivities[0].outcome) : "No interaction"}</strong>
+                  <p>{selectedActivities[0]?.summary ?? "Nothing has been logged in Orbit yet."}</p>
+                </div>
+              </div>
+
+              <details className={styles.outreachPanel}>
+                <summary>Open Cashvertising outreach message</summary>
+                <div className={styles.outreachBody}>
+                  <textarea aria-label={`Outreach message for ${selectedLead.company ?? selectedLead.name}`} readOnly defaultValue={selectedMessage} />
+                  <div>
+                    <p>Confirm the visible problem before sending. Never invent results, urgency or proof.</p>
+                    {selectedWhatsapp ? (
+                      <a className="button button-primary" href={selectedWhatsapp} target="_blank" rel="noreferrer">
+                        Open prepared message <ArrowUpRight size={13} aria-hidden="true" />
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </details>
+
+              <details className={styles.activityPanel} open={selectedOverdue || !selectedActivities.length}>
+                <summary>Log activity and set the next move</summary>
+                <form action={logSalesActivity} className={styles.activityForm}>
+                  <input type="hidden" name="leadId" value={selectedLead.id} />
+                  <input type="hidden" name="currentStage" value={selectedLead.stage} />
+                  <input type="hidden" name="returnLeadId" value={selectedLead.id} />
+
+                  <div className="field">
+                    <label htmlFor={`kind-${selectedLead.id}`}>Activity</label>
+                    <select id={`kind-${selectedLead.id}`} name="kind" defaultValue="whatsapp">
+                      {activityKinds.map((kind) => <option value={kind} key={kind}>{humanize(kind)}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`direction-${selectedLead.id}`}>Direction</label>
+                    <select id={`direction-${selectedLead.id}`} name="direction" defaultValue="outbound">
+                      <option value="outbound">Outbound</option>
+                      <option value="inbound">Inbound</option>
+                      <option value="internal">Internal note</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`outcome-${selectedLead.id}`}>Outcome</label>
+                    <select id={`outcome-${selectedLead.id}`} name="outcome" defaultValue="sent">
+                      {outcomes.map((outcome) => <option value={outcome} key={outcome}>{humanize(outcome)}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`stage-${selectedLead.id}`}>Pipeline stage</label>
+                    <select id={`stage-${selectedLead.id}`} name="nextStage" defaultValue={selectedLead.stage}>
+                      {leadStages.map((stage) => <option value={stage} key={stage}>{humanize(stage)}</option>)}
+                    </select>
+                  </div>
+                  <div className={`field ${styles.formWide}`}>
+                    <label htmlFor={`summary-${selectedLead.id}`}>What happened?</label>
+                    <textarea
+                      id={`summary-${selectedLead.id}`}
+                      name="summary"
+                      minLength={2}
+                      maxLength={4000}
+                      placeholder="Example: Sent the 3-point audit. Client asked about price and delivery time."
+                      required
+                    />
+                  </div>
+                  <div className={`field ${styles.formWide}`}>
+                    <label htmlFor={`next-action-${selectedLead.id}`}>Exact next action</label>
+                    <input
+                      id={`next-action-${selectedLead.id}`}
+                      name="nextAction"
+                      maxLength={240}
+                      defaultValue={selectedLead.next_action ?? ""}
+                      placeholder="Follow up with proof, schedule discovery call, send proposal…"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`next-at-${selectedLead.id}`}>When?</label>
+                    <input
+                      id={`next-at-${selectedLead.id}`}
+                      name="nextActionAt"
+                      type="datetime-local"
+                      defaultValue={toKarachiDateTimeLocal(selectedLead.next_action_at)}
+                    />
+                  </div>
+                  <div className={styles.submitWrap}>
+                    <button className="button button-primary" type="submit">
+                      Save activity and control lead
+                    </button>
+                  </div>
+                </form>
+              </details>
+
+              <section className={styles.timelinePanel}>
+                <div className={styles.timelineHead}>
+                  <History size={14} aria-hidden="true" />
+                  <strong>Sales timeline</strong>
+                  <span>{selectedActivities.length} records</span>
+                </div>
+                {selectedActivities.length ? (
+                  <div className={styles.timeline}>
+                    {selectedActivities.slice(0, 12).map((activity) => (
+                      <article key={activity.id}>
+                        <div>
+                          <strong>{humanize(activity.kind)} · {humanize(activity.outcome)}</strong>
+                          <span>{activityFormatter.format(new Date(activity.occurred_at))}</span>
+                        </div>
+                        <p>{activity.summary}</p>
+                        {activity.next_action ? <small>Next: {activity.next_action}</small> : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={styles.timelineEmpty}>No sales activity has been logged for this lead.</div>
+                )}
+              </section>
+            </article>
+          ) : (
+            <div className={styles.emptyState}>
+              <Crosshair size={28} aria-hidden="true" />
+              <h3>No sales opportunities</h3>
+              <p>Find a real business, verify a real problem, and approve it into Growth.</p>
+              <Link className="button button-primary" href="/dashboard/leads#lead-finder">Open Lead Finder</Link>
+            </div>
+          )}
+        </main>
       </section>
     </div>
   );
