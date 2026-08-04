@@ -57,8 +57,14 @@ function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-function salesRedirect(kind: "error" | "notice", message: string): never {
-  redirect(`/dashboard/sales?${kind}=${encodeURIComponent(message)}`);
+function salesRedirect(
+  kind: "error" | "notice",
+  message: string,
+  leadId?: string,
+): never {
+  const params = new URLSearchParams({ [kind]: message });
+  if (leadId) params.set("lead", leadId);
+  redirect(`/dashboard/sales?${params.toString()}`);
 }
 
 function parsePakistanDate(valueToParse: string) {
@@ -148,7 +154,7 @@ export async function logSalesActivity(formData: FormData) {
     });
 
   if (activityError) {
-    salesRedirect("error", "Orbit could not save this sales activity.");
+    salesRedirect("error", "Orbit could not save this sales activity.", lead.id);
   }
 
   const { error: updateError } = await supabase
@@ -165,11 +171,16 @@ export async function logSalesActivity(formData: FormData) {
     salesRedirect(
       "error",
       "The activity was logged, but Orbit could not update the next action.",
+      lead.id,
     );
   }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/leads");
   revalidatePath("/dashboard/sales");
-  salesRedirect("notice", "Sales activity logged and the opportunity is controlled.");
+  salesRedirect(
+    "notice",
+    "Sales activity logged and the opportunity is controlled.",
+    lead.id,
+  );
 }
