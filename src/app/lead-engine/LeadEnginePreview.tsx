@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import {
   SiFacebook,
   SiGoogle,
@@ -22,17 +22,18 @@ import {
   TbInbox,
   TbLayoutDashboard,
   TbMail,
-  TbPlayerPause,
-  TbPlayerPlay,
   TbReceiptDollar,
+  TbSearch,
   TbShieldCheck,
   TbStack2,
   TbTargetArrow,
   TbTools,
   TbUsers,
   TbWorld,
+  TbX,
 } from "react-icons/tb";
 import { LuOrbit } from "react-icons/lu";
+import { AutopilotKernel } from "./AutopilotKernel";
 import styles from "./lead-engine.module.css";
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
@@ -217,11 +218,19 @@ const activity = [
 ];
 
 export function LeadEnginePreview() {
-  const [autopilotActive, setAutopilotActive] = useState(true);
   const [handled, setHandled] = useState<string[]>([]);
+  const [sourceQuery, setSourceQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
-  const exceptionCount = useMemo(() => Math.max(0, 2 - handled.length), [handled]);
+  const exceptionCount = Math.max(0, 2 - handled.length);
+  const normalizedSourceQuery = sourceQuery.trim().toLowerCase();
+  const filteredSources = normalizedSourceQuery
+    ? sources.filter((source) =>
+        [source.label, source.unit, source.detail, source.status].some((field) =>
+          field.toLowerCase().includes(normalizedSourceQuery),
+        ),
+      )
+    : sources;
 
   useEffect(() => {
     if (!toast) return;
@@ -229,9 +238,9 @@ export function LeadEnginePreview() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  function showToast(message: string) {
+  const showToast = useCallback((message: string) => {
     setToast(message);
-  }
+  }, []);
 
   function handleException(id: string, label: string) {
     setHandled((current) => (current.includes(id) ? current : [...current, id]));
@@ -321,35 +330,14 @@ export function LeadEnginePreview() {
           </div>
 
           <div className={styles.systemControls}>
-            <button
-              className={styles.controlButton}
-              type="button"
-              aria-pressed={autopilotActive}
-              onClick={() => {
-                setAutopilotActive((current) => !current);
-                showToast(autopilotActive ? "Autopilot paused safely." : "Autopilot resumed.");
-              }}
-            >
-              <i className={autopilotActive ? styles.greenDot : styles.mutedDot} aria-hidden />
-              Autopilot {autopilotActive ? "active" : "paused"}
-            </button>
             <button className={styles.controlButton} type="button" onClick={jumpToExceptions}>
               <i className={styles.redDot} aria-hidden />
               {exceptionCount} {exceptionCount === 1 ? "exception" : "exceptions"}
             </button>
-            <button
-              className={styles.controlButton}
-              type="button"
-              onClick={() => {
-                setAutopilotActive((current) => !current);
-                showToast(autopilotActive ? "Autopilot paused safely." : "Autopilot resumed.");
-              }}
-            >
-              {autopilotActive ? <TbPlayerPause aria-hidden /> : <TbPlayerPlay aria-hidden />}
-              {autopilotActive ? "Pause" : "Resume"}
-            </button>
           </div>
         </header>
+
+        <AutopilotKernel onToast={showToast} />
 
         <section className={styles.section} aria-labelledby="lead-sources-heading">
           <div className={styles.sectionHeading}>
@@ -357,28 +345,77 @@ export function LeadEnginePreview() {
             <p>Open and manage every place Urava attracts leads.</p>
           </div>
 
-          <div className={styles.sourceGrid}>
-            {sources.map(({ label, value, unit, detail, status, href, icon: SourceIcon, tone }) => (
-              <Link
-                className={`${styles.sourceCard} ${label === "Unified Inbox" ? styles.sourceCardFeatured : ""}`}
-                href={href}
-                key={label}
-                aria-label={`Open ${label}`}
+          <form
+            className={styles.sourceSearch}
+            role="search"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <TbSearch className={styles.sourceSearchIcon} aria-hidden />
+            <label className={styles.visuallyHidden} htmlFor="lead-source-search">
+              Search lead sources
+            </label>
+            <input
+              id="lead-source-search"
+              type="search"
+              value={sourceQuery}
+              onChange={(event) => setSourceQuery(event.target.value)}
+              placeholder="Search sources, websites, accounts or connected channels…"
+              autoComplete="off"
+              spellCheck={false}
+              aria-controls="lead-source-results"
+            />
+            <span className={styles.sourceSearchCount} aria-live="polite">
+              {filteredSources.length} {filteredSources.length === 1 ? "source" : "sources"}
+            </span>
+            {sourceQuery ? (
+              <button
+                className={styles.sourceSearchClear}
+                type="button"
+                onClick={() => setSourceQuery("")}
+                aria-label="Clear source search"
               >
-                <span className={`${styles.sourceIcon} ${styles[tone]}`}>
-                  <SourceIcon aria-hidden />
-                </span>
-                <TbArrowRight className={styles.externalIcon} aria-hidden />
-                <strong>{label}</strong>
-                <b>{value}</b>
-                <span className={styles.sourceUnit}>{unit}</span>
-                <small>
-                  <i aria-hidden />
-                  {detail} · {status}
-                </small>
-              </Link>
-            ))}
-          </div>
+                <TbX aria-hidden />
+              </button>
+            ) : null}
+          </form>
+
+          {filteredSources.length > 0 ? (
+            <div className={styles.sourceGrid} id="lead-source-results">
+              {filteredSources.map(
+                ({ label, value, unit, detail, status, href, icon: SourceIcon, tone }) => (
+                  <Link
+                    className={`${styles.sourceCard} ${label === "Unified Inbox" ? styles.sourceCardFeatured : ""}`}
+                    href={href}
+                    key={label}
+                    aria-label={`Open ${label}`}
+                  >
+                    <span className={`${styles.sourceIcon} ${styles[tone]}`}>
+                      <SourceIcon aria-hidden />
+                    </span>
+                    <TbArrowRight className={styles.externalIcon} aria-hidden />
+                    <strong>{label}</strong>
+                    <b>{value}</b>
+                    <span className={styles.sourceUnit}>{unit}</span>
+                    <small>
+                      <i aria-hidden />
+                      {detail} · {status}
+                    </small>
+                  </Link>
+                ),
+              )}
+            </div>
+          ) : (
+            <div className={styles.sourceEmptyState} id="lead-source-results" role="status">
+              <TbSearch aria-hidden />
+              <div>
+                <strong>No source found</strong>
+                <p>Try Website, Instagram, Google, inbox or connected.</p>
+              </div>
+              <button type="button" onClick={() => setSourceQuery("")}>
+                Show all sources
+              </button>
+            </div>
+          )}
         </section>
 
         <section className={styles.section} aria-labelledby="pipeline-heading">
