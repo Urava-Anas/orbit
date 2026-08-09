@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   StudentClassNotes,
   type StudentClassNote,
 } from "@/components/foundry/StudentClassNotes";
-import { StudentLearningMap } from "@/components/foundry/StudentLearningMap";
 import {
   StudentPortalView,
   type StudentPortalTab,
 } from "@/components/foundry/StudentPortal";
 import { getFounderStudentPreview } from "@/lib/foundry";
-import { loadFoundryJourney } from "@/lib/foundry-journey";
 
 export const metadata: Metadata = {
   title: "Student View · Urava Foundry",
@@ -43,12 +41,10 @@ const standardTabs = new Set(["today", "learn", "submit", "profile"]);
 function PreviewNavigation({
   active,
   foundryId,
-  studentId,
   studentView = false,
 }: {
   active: string;
   foundryId: string;
-  studentId: string;
   studentView?: boolean;
 }) {
   return (
@@ -64,17 +60,6 @@ function PreviewNavigation({
             {item.label}
           </Link>
         ))}
-        {active === "progress" ? (
-          <Link
-            href={
-              studentView
-                ? `/dashboard/foundry/students/${studentId}/portal?tab=progress`
-                : `/dashboard/foundry/students/${studentId}/portal?tab=progress&view=student`
-            }
-          >
-            {studentView ? "Manage map" : "View as student"}
-          </Link>
-        ) : null}
       </nav>
     </div>
   );
@@ -89,34 +74,12 @@ export default async function StudentPortalPreviewPage({
   const data = await getFounderStudentPreview(id);
   if (!data) notFound();
 
+  // One map only. Legacy/record-level map links resolve to the canonical map.
   if (query.tab === "progress") {
-    const studentView = query.view === "student";
-    const journey = await loadFoundryJourney(
-      data.supabase,
-      data.workspace.id,
-      data.student.id,
-      data.student.department,
-    );
-
-    return (
-      <div
-        className="student-portal-view is-preview"
-        style={{ width: "min(100%, 1180px)" }}
-      >
-        {!studentView ? (
-          <PreviewNavigation
-            active="progress"
-            foundryId={data.student.foundry_id}
-            studentId={data.student.id}
-          />
-        ) : null}
-        <StudentLearningMap
-          journey={journey}
-          mode={studentView ? "student" : "admin"}
-          student={data.student}
-          studentViewHref={`/dashboard/foundry/students/${data.student.id}/portal?tab=progress&view=student`}
-        />
-      </div>
+    redirect(
+      `/dashboard/foundry/map?studentId=${data.student.id}${
+        query.view === "student" ? "&view=student" : ""
+      }`,
     );
   }
 
@@ -141,7 +104,6 @@ export default async function StudentPortalPreviewPage({
         <PreviewNavigation
           active="notes"
           foundryId={data.student.foundry_id}
-          studentId={data.student.id}
           studentView={studentView}
         />
         <StudentClassNotes
@@ -159,16 +121,26 @@ export default async function StudentPortalPreviewPage({
     ? (query.tab as StudentPortalTab)
     : "today";
 
+  const availability = await data.supabase
+    .from("foundry_task_assignments")
+    .select("id")
+    .eq("workspace_id", data.workspace.id)
+    .eq("student_id", data.student.id)
+    .lte("starts_at", new Date().toISOString());
+  const availableIds = new Set((availability.data ?? []).map((item) => item.id));
+  const availableAssignments = data.assignments.filter((item) =>
+    availableIds.has(item.id),
+  );
+
   return (
     <div>
       <PreviewNavigation
         active={tab}
         foundryId={data.student.foundry_id}
-        studentId={data.student.id}
         studentView={query.view === "student"}
       />
       <StudentPortalView
-        assignments={data.assignments}
+        assignments={availableAssignments}
         certificates={data.certificates}
         classes={data.classes}
         error={query.error}
