@@ -48,7 +48,7 @@ export async function createOrbitActionKeyAction(
       expiresAt,
     });
 
-    revalidatePath("/dashboard/foundry/integrations");
+    revalidatePath("/dashboard/connect");
     return {
       token: result.token,
       prefix: result.key.token_prefix,
@@ -73,5 +73,5 @@ export async function revokeOrbitActionKeyAction(formData: FormData) {
     workspaceId: workspace.id,
     keyId: keyId.data,
   });
-  revalidatePath("/dashboard/foundry/integrations");
+  revalidatePath("/dashboard/connect");
 }
