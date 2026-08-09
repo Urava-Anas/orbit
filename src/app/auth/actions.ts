@@ -8,6 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 
 const emailSchema = z.string().trim().email().max(254);
 const passwordSchema = z.string().min(12).max(128);
+const productionOrbitOrigin =
+  process.env.NEXT_PUBLIC_ORBIT_URL?.replace(/\/$/, "") ??
+  "https://orbit-two-delta.vercel.app";
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -19,6 +22,8 @@ function messagePath(path: string, type: "error" | "notice", message: string) {
 }
 
 async function requestOrigin() {
+  if (process.env.NODE_ENV === "production") return productionOrbitOrigin;
+
   const requestHeaders = await headers();
   const origin = requestHeaders.get("origin");
   if (origin) return origin;
@@ -40,7 +45,13 @@ export async function login(formData: FormData) {
     });
 
   if (!parsed.success) {
-    redirect(messagePath("/login", "error", "Use a valid email and 12+ character password."));
+    redirect(
+      messagePath(
+        "/login",
+        "error",
+        "Use a valid email and 12+ character password.",
+      ),
+    );
   }
 
   const supabase = await createClient();
@@ -52,7 +63,13 @@ export async function login(formData: FormData) {
 
   const context = await getOrbitAccess();
   if (!context) {
-    redirect(messagePath("/login", "error", "Sign-in session could not be verified."));
+    redirect(
+      messagePath(
+        "/login",
+        "error",
+        "Sign-in session could not be verified.",
+      ),
+    );
   }
   redirect(orbitHomePath(context.access));
 }
@@ -92,7 +109,9 @@ export async function requestPasswordReset(formData: FormData) {
   const email = emailSchema.safeParse(value(formData, "email"));
 
   if (!email.success) {
-    redirect(messagePath("/forgot-password", "error", "Enter a valid email."));
+    redirect(
+      messagePath("/forgot-password", "error", "Enter a valid email."),
+    );
   }
 
   const origin = await requestOrigin();
@@ -139,7 +158,9 @@ export async function updatePassword(formData: FormData) {
   }
 
   await supabase.auth.signOut({ scope: "others" });
-  redirect(messagePath("/dashboard/settings", "notice", "Password updated."));
+  redirect(
+    messagePath("/dashboard/settings", "notice", "Password updated."),
+  );
 }
 
 export async function signOut() {
