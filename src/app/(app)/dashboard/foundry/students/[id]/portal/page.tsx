@@ -103,6 +103,9 @@ export default async function StudentPortalPreviewPage({
 
     const notes = (notesResult.data ?? []) as StudentLearningMapNote[];
     const studentView = query.view === "student";
+    const portalBase = `/dashboard/foundry/students/${data.student.id}/portal${
+      studentView ? "?view=student" : ""
+    }`;
 
     return (
       <div
@@ -120,7 +123,7 @@ export default async function StudentPortalPreviewPage({
           notes={notes}
           progress={data.progress}
           student={data.student}
-          studentBaseHref={`/dashboard/foundry/students/${data.student.id}/portal`}
+          studentBaseHref={portalBase}
         />
       </div>
     );
@@ -137,6 +140,7 @@ export default async function StudentPortalPreviewPage({
       .order("class_date", { ascending: false });
 
     const notes = (notesResult.data ?? []) as StudentClassNote[];
+    const studentView = query.view === "student";
 
     return (
       <div
@@ -147,10 +151,10 @@ export default async function StudentPortalPreviewPage({
           active="notes"
           foundryId={data.student.foundry_id}
           studentId={data.student.id}
-          studentView={query.view === "student"}
+          studentView={studentView}
         />
         <StudentClassNotes
-          journeyHref="?tab=progress"
+          journeyHref={studentView ? "?tab=progress&view=student" : "?tab=progress"}
           notes={notes}
           preview
           selectedNoteId={query.note}
