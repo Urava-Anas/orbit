@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Menu,
   MessageSquareText,
+  PlugZap,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const links = [
   { href: "/dashboard/cash", label: "Finance", icon: Banknote },
   { href: "/dashboard/proof", label: "Evidence", icon: FileCheck2 },
   { href: "/dashboard/content", label: "Publishing", icon: MessageSquareText },
+  { href: "/dashboard/connect", label: "Connect", icon: PlugZap },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
   { href: "/dashboard/settings", label: "Security", icon: ShieldCheck },
 ] as const;
@@ -36,9 +38,13 @@ type AppNavigationProps = {
 export function AppNavigation({ mobile = false }: AppNavigationProps) {
   const pathname = usePathname();
   const list = (
-    <nav className={mobile ? "mobile-nav-links" : "nav-list"} aria-label="Orbit operating domains">
+    <nav
+      className={mobile ? "mobile-nav-links" : "nav-list"}
+      aria-label="Orbit operating domains"
+    >
       {links.map(({ href, label, icon: Icon }) => {
-        const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+        const active =
+          href === "/dashboard" ? pathname === href : pathname.startsWith(href);
 
         return (
           <Link
