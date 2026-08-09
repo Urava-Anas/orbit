@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Map, UsersRound } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Map as MapIcon, UsersRound } from "lucide-react";
 import { EmptyFoundryState } from "@/components/foundry/FoundryUI";
 import { StudentLearningMap } from "@/components/foundry/StudentLearningMap";
 import {
@@ -144,7 +144,7 @@ export default async function FoundryMapPage({ searchParams }: Props) {
             <span className="foundry-card-eyebrow">Member map directory</span>
             <h2>{selectedEntry ? "Switch member" : "Choose a student to inspect"}</h2>
           </div>
-          <Map aria-hidden="true" size={20} />
+          <MapIcon aria-hidden="true" size={20} />
         </div>
 
         <div className="foundry-data-list">
