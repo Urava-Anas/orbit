@@ -1,8 +1,37 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowUpRight, LockKeyhole, Radar, ShieldCheck } from "lucide-react";
 import { OrbitMark } from "@/components/OrbitMark";
+import { getOrbitAccess, orbitHomePath } from "@/lib/access";
 
-export default function HomePage() {
+type Props = {
+  searchParams: Promise<{
+    code?: string;
+    error?: string;
+    error_description?: string;
+  }>;
+};
+
+export default async function HomePage({ searchParams }: Props) {
+  const query = await searchParams;
+
+  // Some OAuth providers may fall back to the configured Site URL. Never leave
+  // the auth code on the public landing page: finish the callback immediately.
+  if (query.code) {
+    redirect(`/auth/callback?code=${encodeURIComponent(query.code)}`);
+  }
+
+  if (query.error || query.error_description) {
+    redirect(
+      `/login?error=${encodeURIComponent(
+        query.error_description ?? query.error ?? "Authentication could not be completed.",
+      )}`,
+    );
+  }
+
+  const context = await getOrbitAccess();
+  if (context) redirect(orbitHomePath(context.access));
+
   return (
     <main className="landing">
       <nav className="landing-nav" aria-label="Primary navigation">
@@ -33,9 +62,6 @@ export default function HomePage() {
             <Link className="button button-primary" href="/login">
               Enter your workspace
               <ArrowUpRight size={15} aria-hidden="true" />
-            </Link>
-            <Link className="button" href="/login">
-              Open Orbit
             </Link>
           </div>
           <div className="hero-proof" aria-label="Product foundations">
