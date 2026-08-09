@@ -89,9 +89,22 @@ export async function CurrentStudentPage({
     );
   }
 
+  // Future assignments belong on the Journey Map, but they must not become the
+  // member's immediate "Today / Learn / Submit" action before their start time.
+  const availability = await data.supabase
+    .from("foundry_task_assignments")
+    .select("id")
+    .eq("workspace_id", data.workspace.id)
+    .eq("student_id", data.student.id)
+    .lte("starts_at", new Date().toISOString());
+  const availableIds = new Set((availability.data ?? []).map((item) => item.id));
+  const availableAssignments = data.assignments.filter((item) =>
+    availableIds.has(item.id),
+  );
+
   return (
     <StudentPortalView
-      assignments={data.assignments}
+      assignments={availableAssignments}
       classes={data.classes}
       error={error}
       notice={notice}
