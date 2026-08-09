@@ -15,12 +15,21 @@ const departments = [
   "content_media",
 ] as const;
 
+const resourceKinds = ["pdf", "link", "video", "file", "tool", "note"] as const;
+
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
 function fail(message: string): never {
   redirect(`/dashboard/foundry/notes?error=${encodeURIComponent(message)}`);
+}
+
+function revalidateNoteSurfaces() {
+  revalidatePath("/dashboard/foundry/notes");
+  revalidatePath("/dashboard/foundry/map");
+  revalidatePath("/learn/notes");
+  revalidatePath("/learn/progress");
 }
 
 export async function addLevelResource(formData: FormData) {
@@ -31,8 +40,26 @@ export async function addLevelResource(formData: FormData) {
       department: z.enum(departments).or(z.literal("")),
       levelNumber: z.coerce.number().int().min(1).max(100),
       title: z.string().min(2).max(180),
-      resourceUrl: z.string().url().max(500),
-      resourceKind: z.enum(["pdf", "link", "video", "file"]),
+      resourceUrl: z.string().url().max(500).or(z.literal("")),
+      resourceContent: z.string().max(8000),
+      resourceKind: z.enum(resourceKinds),
+    })
+    .superRefine((data, ctx) => {
+      if (data.resourceKind === "note") {
+        if (data.resourceContent.trim().length < 2) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["resourceContent"],
+            message: "A note needs written content.",
+          });
+        }
+      } else if (!data.resourceUrl) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["resourceUrl"],
+          message: "This resource type needs a URL.",
+        });
+      }
     })
     .safeParse({
       requestId: value(formData, "requestId"),
@@ -41,17 +68,20 @@ export async function addLevelResource(formData: FormData) {
       levelNumber: value(formData, "levelNumber") || "1",
       title: value(formData, "title"),
       resourceUrl: value(formData, "resourceUrl"),
+      resourceContent: value(formData, "resourceContent"),
       resourceKind: value(formData, "resourceKind") || "pdf",
     });
 
-  if (!parsed.success) fail("PDF/resource details aur level dobara check karein.");
+  if (!parsed.success) {
+    fail("Resource details dobara check karein. Notes need text; tools/videos/PDFs need a valid URL.");
+  }
 
   const { supabase, user, workspace } = await requireFounderFoundry();
 
   if (parsed.data.studentId) {
     const { data: student, error: studentError } = await supabase
       .from("foundry_students")
-      .select("id, department")
+      .select("id")
       .eq("workspace_id", workspace.id)
       .eq("id", parsed.data.studentId)
       .maybeSingle();
@@ -65,21 +95,21 @@ export async function addLevelResource(formData: FormData) {
     department: parsed.data.department || null,
     level_number: parsed.data.levelNumber,
     title: parsed.data.title,
-    resource_url: parsed.data.resourceUrl,
+    resource_url: parsed.data.resourceUrl || null,
+    content: parsed.data.resourceContent || null,
     resource_kind: parsed.data.resourceKind,
     status: "published",
     created_by: user.id,
   });
 
-  if (error) fail("Level resource add nahi hua. Duplicate submit ya access dobara check karein.");
+  if (error) {
+    fail("Resource add nahi hua. Duplicate submit ya access dobara check karein.");
+  }
 
-  revalidatePath("/dashboard/foundry/notes");
-  revalidatePath("/dashboard/foundry/map");
-  revalidatePath("/learn/notes");
-  revalidatePath("/learn/progress");
+  revalidateNoteSurfaces();
   redirect(
     `/dashboard/foundry/notes?notice=${encodeURIComponent(
-      `Level ${parsed.data.levelNumber} resource map se link ho gaya.`,
+      `Level ${parsed.data.levelNumber} ${parsed.data.resourceKind} Journey Map se link ho gaya.`,
     )}`,
   );
 }
@@ -98,8 +128,6 @@ export async function archiveLevelResource(formData: FormData) {
     .maybeSingle();
 
   if (error || !data) fail("Resource archive nahi hua.");
-  revalidatePath("/dashboard/foundry/notes");
-  revalidatePath("/dashboard/foundry/map");
-  revalidatePath("/learn/progress");
-  redirect(`/dashboard/foundry/notes?notice=${encodeURIComponent("Resource archived.")}`);
+  revalidateNoteSurfaces();
+  redirect(`/dashboard/foundry/notes?notice=${encodeURIComponent("Resource archived. Student map updated.")}`);
 }
