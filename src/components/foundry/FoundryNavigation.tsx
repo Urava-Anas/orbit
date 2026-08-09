@@ -8,24 +8,24 @@ import {
   FileText,
   Gauge,
   House,
-  PlugZap,
-  Workflow,
+  Map,
   Send,
   Sparkles,
   Trophy,
   UserRound,
   UsersRound,
+  Workflow,
 } from "lucide-react";
 
 const founderLinks = [
   { href: "/dashboard/foundry", label: "Command", icon: House },
-  { href: "/dashboard/foundry/students", label: "Students", icon: UsersRound },
+  { href: "/dashboard/foundry/students", label: "Members", icon: UsersRound },
+  { href: "/dashboard/foundry/map", label: "Map", icon: Map },
   { href: "/dashboard/foundry/classes", label: "Classes", icon: CalendarDays },
   { href: "/dashboard/foundry/notes", label: "Notes", icon: FileText },
   { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
-  { href: "/dashboard/foundry/progress?view=studio", label: "Studio", icon: Sparkles },
-  { href: "/dashboard/foundry/operations", label: "Ops", icon: Workflow },
-  { href: "/dashboard/foundry/integrations", label: "Connect", icon: PlugZap },
+  { href: "/dashboard/foundry/studio", label: "Studio", icon: Sparkles },
+  { href: "/dashboard/foundry/operations", label: "Activity", icon: Workflow },
 ] as const;
 
 const studentLinks = [
@@ -43,11 +43,10 @@ export function FounderFoundryNavigation() {
   return (
     <nav className="foundry-nav" aria-label="Foundry founder navigation">
       {founderLinks.map(({ href, label, icon: Icon }) => {
-        const path = href.split("?")[0];
         const active =
-          path === "/dashboard/foundry"
-            ? pathname === path
-            : pathname.startsWith(path);
+          href === "/dashboard/foundry"
+            ? pathname === href
+            : pathname.startsWith(href);
         return (
           <Link
             className={`foundry-nav-link ${active ? "is-active" : ""}`}

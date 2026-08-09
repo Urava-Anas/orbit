@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   StudentClassNotes,
   type StudentClassNote,
 } from "@/components/foundry/StudentClassNotes";
-import {
-  StudentLearningMap,
-  type StudentLearningMapNote,
-} from "@/components/foundry/StudentLearningMap";
 import {
   StudentPortalView,
   type StudentPortalTab,
@@ -45,12 +41,10 @@ const standardTabs = new Set(["today", "learn", "submit", "profile"]);
 function PreviewNavigation({
   active,
   foundryId,
-  studentId,
   studentView = false,
 }: {
   active: string;
   foundryId: string;
-  studentId: string;
   studentView?: boolean;
 }) {
   return (
@@ -66,17 +60,6 @@ function PreviewNavigation({
             {item.label}
           </Link>
         ))}
-        {active === "progress" ? (
-          <Link
-            href={
-              studentView
-                ? `/dashboard/foundry/students/${studentId}/portal?tab=progress`
-                : `/dashboard/foundry/students/${studentId}/portal?tab=progress&view=student`
-            }
-          >
-            {studentView ? "Manage map" : "View as student"}
-          </Link>
-        ) : null}
       </nav>
     </div>
   );
@@ -91,41 +74,12 @@ export default async function StudentPortalPreviewPage({
   const data = await getFounderStudentPreview(id);
   if (!data) notFound();
 
+  // One map only. Legacy/record-level map links resolve to the canonical map.
   if (query.tab === "progress") {
-    const notesResult = await data.supabase
-      .from("foundry_class_learning_notes")
-      .select(
-        "id, class_id, class_title_snapshot, class_date, learning_state, progress_summary, next_step, resource_url, impact_title, impact_statement, achievement_title, achievement_description, evidence_requirement, xp_reward",
-      )
-      .eq("workspace_id", data.workspace.id)
-      .eq("student_id", data.student.id)
-      .order("class_date");
-
-    const notes = (notesResult.data ?? []) as StudentLearningMapNote[];
-    const studentView = query.view === "student";
-    const portalBase = `/dashboard/foundry/students/${data.student.id}/portal${
-      studentView ? "?view=student" : ""
-    }`;
-
-    return (
-      <div
-        className="student-portal-view is-preview"
-        style={{ width: "min(100%, 1120px)" }}
-      >
-        <PreviewNavigation
-          active="progress"
-          foundryId={data.student.foundry_id}
-          studentId={data.student.id}
-          studentView={studentView}
-        />
-        <StudentLearningMap
-          mode={studentView ? "student" : "admin"}
-          notes={notes}
-          progress={data.progress}
-          student={data.student}
-          studentBaseHref={portalBase}
-        />
-      </div>
+    redirect(
+      `/dashboard/foundry/map?studentId=${data.student.id}${
+        query.view === "student" ? "&view=student" : ""
+      }`,
     );
   }
 
@@ -150,7 +104,6 @@ export default async function StudentPortalPreviewPage({
         <PreviewNavigation
           active="notes"
           foundryId={data.student.foundry_id}
-          studentId={data.student.id}
           studentView={studentView}
         />
         <StudentClassNotes
@@ -168,16 +121,26 @@ export default async function StudentPortalPreviewPage({
     ? (query.tab as StudentPortalTab)
     : "today";
 
+  const availability = await data.supabase
+    .from("foundry_task_assignments")
+    .select("id")
+    .eq("workspace_id", data.workspace.id)
+    .eq("student_id", data.student.id)
+    .lte("starts_at", new Date().toISOString());
+  const availableIds = new Set((availability.data ?? []).map((item) => item.id));
+  const availableAssignments = data.assignments.filter((item) =>
+    availableIds.has(item.id),
+  );
+
   return (
     <div>
       <PreviewNavigation
         active={tab}
         foundryId={data.student.foundry_id}
-        studentId={data.student.id}
         studentView={query.view === "student"}
       />
       <StudentPortalView
-        assignments={data.assignments}
+        assignments={availableAssignments}
         certificates={data.certificates}
         classes={data.classes}
         error={query.error}

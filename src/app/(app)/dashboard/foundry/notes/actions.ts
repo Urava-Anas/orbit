@@ -38,6 +38,7 @@ function fail(path: string, message: string): never {
 function succeed(path: string, message: string): never {
   revalidatePath("/dashboard/foundry", "layout");
   revalidatePath("/dashboard/foundry/notes");
+  revalidatePath("/dashboard/foundry/map");
   revalidatePath("/learn", "layout");
   revalidatePath("/learn/notes");
   revalidatePath("/learn/progress");
@@ -66,6 +67,12 @@ export async function saveClassLearningNote(formData: FormData) {
       supportNote: z.string().max(1200),
       nextStep: z.string().max(1200),
       resourceUrl: z.string().url().max(500).or(z.literal("")),
+      impactTitle: z.string().max(180),
+      impactStatement: z.string().max(1200),
+      achievementTitle: z.string().max(180),
+      achievementDescription: z.string().max(1200),
+      evidenceRequirement: z.string().max(1600),
+      xpReward: z.coerce.number().int().min(0).max(1000),
     })
     .safeParse({
       studentId,
@@ -79,10 +86,16 @@ export async function saveClassLearningNote(formData: FormData) {
       supportNote: value(formData, "supportNote"),
       nextStep: value(formData, "nextStep"),
       resourceUrl: value(formData, "resourceUrl"),
+      impactTitle: value(formData, "impactTitle"),
+      impactStatement: value(formData, "impactStatement"),
+      achievementTitle: value(formData, "achievementTitle"),
+      achievementDescription: value(formData, "achievementDescription"),
+      evidenceRequirement: value(formData, "evidenceRequirement"),
+      xpReward: value(formData, "xpReward") || "0",
     });
 
   if (!parsed.success) {
-    fail(path, "Class note ke required fields aur learning stage dobara check karein.");
+    fail(path, "Class note, impact, achievement aur learning stage dobara check karein.");
   }
 
   const { supabase, user, workspace } = await requireFounderFoundry();
@@ -101,12 +114,8 @@ export async function saveClassLearningNote(formData: FormData) {
       .maybeSingle(),
   ]);
 
-  if (studentResult.error || !studentResult.data) {
-    fail(path, "Student record nahi mila.");
-  }
-  if (classResult.error || !classResult.data) {
-    fail(path, "Class record nahi mila.");
-  }
+  if (studentResult.error || !studentResult.data) fail(path, "Student record nahi mila.");
+  if (classResult.error || !classResult.data) fail(path, "Class record nahi mila.");
   if (classResult.data.status !== "completed") {
     fail(path, "Learning history sirf completed class ke baad save hoti hai.");
   }
@@ -127,14 +136,18 @@ export async function saveClassLearningNote(formData: FormData) {
       support_note: optional(parsed.data.supportNote),
       next_step: optional(parsed.data.nextStep),
       resource_url: optional(parsed.data.resourceUrl),
+      impact_title: optional(parsed.data.impactTitle),
+      impact_statement: optional(parsed.data.impactStatement),
+      achievement_title: optional(parsed.data.achievementTitle),
+      achievement_description: optional(parsed.data.achievementDescription),
+      evidence_requirement: optional(parsed.data.evidenceRequirement),
+      xp_reward: parsed.data.xpReward,
       created_by: user.id,
     },
     { onConflict: "workspace_id,student_id,class_id" },
   );
 
-  if (error) {
-    fail(path, "Class notes save nahi huay. Dobara try karein.");
-  }
+  if (error) fail(path, "Class notes save nahi huay. Dobara try karein.");
 
-  succeed(path, "Previous class notes aur learning stage save ho gaya.");
+  succeed(path, "Class record, impact aur achievement map update ho gaya.");
 }

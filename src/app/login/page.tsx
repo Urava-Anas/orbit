@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Crown, GraduationCap } from "lucide-react";
+import { LockKeyhole, Sparkles } from "lucide-react";
 import { OrbitMark } from "@/components/OrbitMark";
 import { Notice } from "@/components/Notice";
 import { PasswordField } from "@/components/PasswordField";
@@ -34,30 +34,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <Link href="/" aria-label="Orbit home">
           <OrbitMark />
         </Link>
-        <div className="auth-form">
-          <span className="eyebrow">One secure entrance</span>
-          <h1>Welcome to Orbit.</h1>
-          <p>
-            Sign in once. Orbit securely opens your Founder Command or private
-            Student space automatically.
-          </p>
 
-          <div className="auth-role-row" aria-label="Orbit workspaces">
-            <span>
-              <Crown aria-hidden="true" size={16} />
-              Founder command
-            </span>
-            <span>
-              <GraduationCap aria-hidden="true" size={17} />
-              Student space
-            </span>
-          </div>
+        <div className="auth-form">
+          <span className="eyebrow">Your Orbit workspace</span>
+          <h1>Welcome back.</h1>
+          <p>Continue once. Orbit will identify your organisation and role automatically.</p>
 
           <Notice error={params.error} notice={params.notice} />
 
           <form className="oauth-form" action={signInWithGoogle}>
             <GoogleSignInButton />
           </form>
+
           <div className="auth-divider">
             <span>or use email</span>
           </div>
@@ -69,11 +57,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 id="email"
                 name="email"
                 type="email"
-                  autoComplete="email"
-                  maxLength={254}
-                  required
-                  placeholder="you@example.com"
-                />
+                autoComplete="email"
+                maxLength={254}
+                required
+                placeholder="you@example.com"
+              />
             </div>
             <div className="field">
               <label htmlFor="password">Password</label>
@@ -84,17 +72,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 minLength={12}
                 maxLength={128}
                 required
-                placeholder="Minimum 12 characters"
+                placeholder="Your password"
               />
             </div>
             <SubmitButton
-              idleLabel="Sign in to Orbit"
+              idleLabel="Continue to Orbit"
               pendingLabel="Opening your workspace…"
             />
           </form>
 
           <div className="form-foot" style={{ marginTop: 20 }}>
-            <span className="auth-invite-note">Access is managed by Urava.</span>
+            <span className="auth-invite-note">
+              <LockKeyhole aria-hidden="true" size={13} /> Access follows your verified role.
+            </span>
             <Link className="text-link" href="/forgot-password">
               Forgot password?
             </Link>
@@ -104,11 +94,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
-          <span className="eyebrow">One door, correct workspace</span>
-          <p>
-            One secure entrance. Founder command and Student learning stay
-            clearly separated.
-          </p>
+          <span className="eyebrow">Sign in → role → workspace</span>
+          <p>One entrance. No second open button. No detour through the marketing site.</p>
+          <span className="system-state">
+            <Sparkles size={13} /> Orbit routes you automatically
+          </span>
         </div>
       </aside>
     </main>
