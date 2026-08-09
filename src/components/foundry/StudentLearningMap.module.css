@@ -1,0 +1,463 @@
+.shell {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+}
+
+.hero,
+.loopStrip,
+.card,
+.empty,
+.nextMove {
+  border: 1px solid color-mix(in srgb, var(--border, #d8dce7) 72%, transparent);
+  background: color-mix(in srgb, var(--surface, #ffffff) 76%, transparent);
+  box-shadow: 0 22px 60px rgba(18, 25, 45, 0.07);
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+}
+
+.hero {
+  border-radius: 28px;
+  padding: 28px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted, #6e7688);
+  font-size: 0.73rem;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  max-width: 720px;
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.hero p {
+  margin: 12px 0 0;
+  max-width: 680px;
+  color: var(--muted, #6e7688);
+  line-height: 1.65;
+}
+
+.heroStats {
+  display: grid;
+  gap: 8px;
+  min-width: 170px;
+}
+
+.heroStats span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--muted, #667085);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.loopStrip {
+  border-radius: 18px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--muted, #667085);
+  font-size: 0.78rem;
+  font-weight: 730;
+}
+
+.loopStrip b {
+  opacity: 0.42;
+  font-weight: 500;
+}
+
+.timeline {
+  display: grid;
+}
+
+.node {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.rail {
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  justify-items: center;
+}
+
+.dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(120, 130, 150, 0.22);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--muted, #667085);
+  font-size: 0.76rem;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(18, 25, 45, 0.08);
+}
+
+.rail i {
+  width: 1px;
+  height: 100%;
+  min-height: 24px;
+  background: linear-gradient(to bottom, rgba(130, 140, 160, 0.38), rgba(130, 140, 160, 0.08));
+}
+
+.card {
+  margin-bottom: 14px;
+  border-radius: 24px;
+  padding: 22px;
+  min-width: 0;
+}
+
+.currentNode .card {
+  box-shadow: 0 24px 70px rgba(78, 93, 157, 0.12);
+  border-color: rgba(113, 126, 196, 0.28);
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.cardTop small,
+.achievement small,
+.nextMove span {
+  color: var(--muted, #6e7688);
+  font-size: 0.7rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cardTop h2 {
+  margin: 4px 0 0;
+  font-size: clamp(1.15rem, 2.5vw, 1.55rem);
+  letter-spacing: -0.025em;
+}
+
+.state {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  font-weight: 760;
+  background: rgba(112, 122, 145, 0.09);
+  color: var(--muted, #667085);
+}
+
+.state.active,
+.dot.active {
+  background: rgba(72, 112, 215, 0.11);
+  color: #3b63c2;
+}
+
+.state.ready,
+.dot.ready {
+  background: rgba(214, 158, 54, 0.13);
+  color: #9c6914;
+}
+
+.state.earned,
+.dot.earned {
+  background: rgba(43, 155, 104, 0.12);
+  color: #247b56;
+}
+
+.impact {
+  margin: 12px 0 18px;
+  max-width: 820px;
+  color: var(--muted, #626b7e);
+  line-height: 1.62;
+}
+
+.achievement {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(125, 135, 155, 0.15);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.achievementIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(112, 122, 145, 0.09);
+}
+
+.achievement strong {
+  display: block;
+  margin-top: 2px;
+}
+
+.achievement p {
+  margin: 4px 0 0;
+  color: var(--muted, #667085);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.achievement > b {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: rgba(120, 130, 160, 0.09);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.proof {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(19, 28, 48, 0.035);
+}
+
+.proof span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  font-weight: 780;
+}
+
+.proof p {
+  margin: 7px 0 0;
+  color: var(--muted, #667085);
+  line-height: 1.5;
+}
+
+.cardFooter {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardFooter > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted, #667085);
+  font-size: 0.76rem;
+}
+
+.actions,
+.adminControls nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.primaryAction,
+.secondaryAction,
+.nextButton,
+.adminControls a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border-radius: 13px;
+  padding: 0 13px;
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.primaryAction,
+.nextButton {
+  background: var(--foreground, #171a21);
+  color: var(--background, #ffffff);
+}
+
+.secondaryAction,
+.adminControls a {
+  border: 1px solid rgba(120, 130, 150, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  color: inherit;
+}
+
+.adminControls {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(120, 130, 150, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adminControls > div span {
+  display: block;
+  color: var(--muted, #667085);
+  font-size: 0.66rem;
+  font-weight: 780;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.adminControls > div strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.8rem;
+}
+
+.empty {
+  border-radius: 22px;
+  padding: 22px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.empty > span {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  background: rgba(120, 130, 160, 0.09);
+}
+
+.empty p {
+  margin: 3px 0 0;
+  color: var(--muted, #667085);
+}
+
+.nextMove {
+  border-radius: 24px;
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.nextMove strong {
+  display: block;
+  margin-top: 4px;
+  max-width: 760px;
+  line-height: 1.45;
+}
+
+.nextMove small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted, #667085);
+}
+
+.nextButton {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .shell {
+    gap: 12px;
+  }
+
+  .hero {
+    padding: 21px;
+    border-radius: 22px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .heroStats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .heroStats span {
+    justify-content: center;
+    text-align: center;
+    padding: 8px;
+  }
+
+  .loopStrip {
+    justify-content: flex-start;
+  }
+
+  .node {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .dot {
+    width: 30px;
+    height: 30px;
+  }
+
+  .rail {
+    grid-template-rows: 36px 1fr;
+  }
+
+  .card {
+    padding: 17px;
+    border-radius: 20px;
+  }
+
+  .cardTop,
+  .cardFooter,
+  .adminControls,
+  .nextMove {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .achievement {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .achievement > b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .actions,
+  .adminControls nav {
+    width: 100%;
+  }
+
+  .primaryAction,
+  .secondaryAction,
+  .adminControls a,
+  .nextButton {
+    flex: 1 1 auto;
+  }
+
+  .nextButton {
+    width: 100%;
+  }
+}
