@@ -56,9 +56,11 @@ function studentRoute(base: string, tab: "learn" | "notes", noteId?: string) {
     return noteId ? `/learn/notes?note=${noteId}` : "/learn/notes";
   }
 
-  const params = new URLSearchParams({ tab });
+  const [pathname, existingQuery = ""] = base.split("?");
+  const params = new URLSearchParams(existingQuery);
+  params.set("tab", tab);
   if (noteId) params.set("note", noteId);
-  return `${base}?${params.toString()}`;
+  return `${pathname}?${params.toString()}`;
 }
 
 export function StudentLearningMap({
