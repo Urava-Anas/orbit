@@ -1,45 +1,37 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import {
-  StudentLearningProgress,
-  type StudentLearningNote,
-} from "@/components/foundry/StudentLearningProgress";
-import { requireStudentAccess } from "@/lib/access";
+  StudentLearningMap,
+  type StudentLearningMapNote,
+} from "@/components/foundry/StudentLearningMap";
+import { getCurrentStudentPortal } from "@/lib/foundry";
 
 export const metadata: Metadata = {
-  title: "Progress · Urava Foundry",
+  title: "Learning Map · Urava Foundry",
   robots: { index: false, follow: false },
 };
 
 export default async function StudentProgressPage() {
-  const { supabase, workspace, studentId, user } = await requireStudentAccess();
+  const data = await getCurrentStudentPortal();
+  if (!data.student) redirect("/learn");
 
-  const [studentResult, notesResult] = await Promise.all([
-    supabase
-      .from("foundry_students")
-      .select("id, full_name")
-      .eq("workspace_id", workspace.id)
-      .eq("id", studentId)
-      .eq("auth_user_id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("foundry_class_learning_notes")
-      .select(
-        "id, class_title_snapshot, class_date, lesson_summary, key_concepts, student_notes, learning_state, understanding_level, student_progress_snapshot, progress_summary, support_note, next_step, resource_url",
-      )
-      .eq("workspace_id", workspace.id)
-      .eq("student_id", studentId)
-      .order("class_date", { ascending: false }),
-  ]);
+  const notesResult = await data.supabase
+    .from("foundry_class_learning_notes")
+    .select(
+      "id, class_id, class_title_snapshot, class_date, learning_state, progress_summary, next_step, resource_url, impact_title, impact_statement, achievement_title, achievement_description, evidence_requirement, xp_reward",
+    )
+    .eq("workspace_id", data.workspace.id)
+    .eq("student_id", data.student.id)
+    .order("class_date");
 
-  const student = studentResult.data;
-  const notes = (notesResult.data ?? []) as StudentLearningNote[];
+  const notes = (notesResult.data ?? []) as StudentLearningMapNote[];
 
   return (
     <div className="student-portal-page">
-      <StudentLearningProgress
+      <StudentLearningMap
         notes={notes}
-        notesHref="/learn/notes"
-        studentName={student?.full_name ?? "Student"}
+        progress={data.progress}
+        student={data.student}
       />
     </div>
   );
