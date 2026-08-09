@@ -6,9 +6,9 @@ import {
   type StudentClassNote,
 } from "@/components/foundry/StudentClassNotes";
 import {
-  StudentLearningProgress,
-  type StudentLearningNote,
-} from "@/components/foundry/StudentLearningProgress";
+  StudentLearningMap,
+  type StudentLearningMapNote,
+} from "@/components/foundry/StudentLearningMap";
 import {
   StudentPortalView,
   type StudentPortalTab,
@@ -16,7 +16,7 @@ import {
 import { getFounderStudentPreview } from "@/lib/foundry";
 
 export const metadata: Metadata = {
-  title: "Student Portal Preview",
+  title: "Student View · Urava Foundry",
   robots: { index: false, follow: false },
 };
 
@@ -27,16 +27,15 @@ type Props = {
     note?: string;
     notice?: string;
     error?: string;
+    view?: string;
   }>;
 };
-
-type LearningNote = StudentLearningNote & StudentClassNote;
 
 const portalTabs: Array<{ tab: string; label: string }> = [
   { tab: "today", label: "Today" },
   { tab: "learn", label: "Learn" },
   { tab: "submit", label: "Submit" },
-  { tab: "progress", label: "Progress" },
+  { tab: "progress", label: "Map" },
   { tab: "profile", label: "Profile" },
   { tab: "notes", label: "Notes" },
 ];
@@ -46,23 +45,38 @@ const standardTabs = new Set(["today", "learn", "submit", "profile"]);
 function PreviewNavigation({
   active,
   foundryId,
+  studentId,
+  studentView = false,
 }: {
   active: string;
   foundryId: string;
+  studentId: string;
+  studentView?: boolean;
 }) {
   return (
     <div className="student-preview-banner">
-      <span>Founder preview · {foundryId}</span>
-      <nav aria-label="Preview student tabs">
+      <span>{studentView ? "View as student" : "Admin controls"} · {foundryId}</span>
+      <nav aria-label="Student view navigation">
         {portalTabs.map((item) => (
           <Link
             className={item.tab === active ? "is-active" : ""}
-            href={`?tab=${item.tab}`}
+            href={`?tab=${item.tab}${studentView ? "&view=student" : ""}`}
             key={item.tab}
           >
             {item.label}
           </Link>
         ))}
+        {active === "progress" ? (
+          <Link
+            href={
+              studentView
+                ? `/dashboard/foundry/students/${studentId}/portal?tab=progress`
+                : `/dashboard/foundry/students/${studentId}/portal?tab=progress&view=student`
+            }
+          >
+            {studentView ? "Manage map" : "View as student"}
+          </Link>
+        ) : null}
       </nav>
     </div>
   );
@@ -77,7 +91,45 @@ export default async function StudentPortalPreviewPage({
   const data = await getFounderStudentPreview(id);
   if (!data) notFound();
 
-  if (query.tab === "progress" || query.tab === "notes") {
+  if (query.tab === "progress") {
+    const notesResult = await data.supabase
+      .from("foundry_class_learning_notes")
+      .select(
+        "id, class_id, class_title_snapshot, class_date, learning_state, progress_summary, next_step, resource_url, impact_title, impact_statement, achievement_title, achievement_description, evidence_requirement, xp_reward",
+      )
+      .eq("workspace_id", data.workspace.id)
+      .eq("student_id", data.student.id)
+      .order("class_date");
+
+    const notes = (notesResult.data ?? []) as StudentLearningMapNote[];
+    const studentView = query.view === "student";
+    const portalBase = `/dashboard/foundry/students/${data.student.id}/portal${
+      studentView ? "?view=student" : ""
+    }`;
+
+    return (
+      <div
+        className="student-portal-view is-preview"
+        style={{ width: "min(100%, 1120px)" }}
+      >
+        <PreviewNavigation
+          active="progress"
+          foundryId={data.student.foundry_id}
+          studentId={data.student.id}
+          studentView={studentView}
+        />
+        <StudentLearningMap
+          mode={studentView ? "student" : "admin"}
+          notes={notes}
+          progress={data.progress}
+          student={data.student}
+          studentBaseHref={portalBase}
+        />
+      </div>
+    );
+  }
+
+  if (query.tab === "notes") {
     const notesResult = await data.supabase
       .from("foundry_class_learning_notes")
       .select(
@@ -87,35 +139,22 @@ export default async function StudentPortalPreviewPage({
       .eq("student_id", data.student.id)
       .order("class_date", { ascending: false });
 
-    const notes = (notesResult.data ?? []) as LearningNote[];
-
-    if (query.tab === "progress") {
-      return (
-        <div
-          className="student-portal-view is-preview"
-          style={{ width: "min(100%, 1080px)" }}
-        >
-          <PreviewNavigation
-            active="progress"
-            foundryId={data.student.foundry_id}
-          />
-          <StudentLearningProgress
-            notes={notes}
-            notesHref="?tab=notes"
-            studentName={data.student.full_name}
-          />
-        </div>
-      );
-    }
+    const notes = (notesResult.data ?? []) as StudentClassNote[];
+    const studentView = query.view === "student";
 
     return (
       <div
         className="student-portal-view is-preview"
         style={{ width: "min(100%, 1080px)" }}
       >
-        <PreviewNavigation active="notes" foundryId={data.student.foundry_id} />
+        <PreviewNavigation
+          active="notes"
+          foundryId={data.student.foundry_id}
+          studentId={data.student.id}
+          studentView={studentView}
+        />
         <StudentClassNotes
-          journeyHref="?tab=progress"
+          journeyHref={studentView ? "?tab=progress&view=student" : "?tab=progress"}
           notes={notes}
           preview
           selectedNoteId={query.note}
@@ -131,12 +170,12 @@ export default async function StudentPortalPreviewPage({
 
   return (
     <div>
-      <div className="student-preview-banner">
-        <span>Student preview controls</span>
-        <nav aria-label="Additional student preview controls">
-          <Link href="?tab=notes">Open Notes preview</Link>
-        </nav>
-      </div>
+      <PreviewNavigation
+        active={tab}
+        foundryId={data.student.foundry_id}
+        studentId={data.student.id}
+        studentView={query.view === "student"}
+      />
       <StudentPortalView
         assignments={data.assignments}
         certificates={data.certificates}

@@ -33,7 +33,7 @@ const studentLinks = [
   { href: "/learn/learn", label: "Learn", icon: BookOpen },
   { href: "/learn/notes", label: "Notes", icon: FileText },
   { href: "/learn/submit", label: "Submit", icon: Send },
-  { href: "/learn/progress", label: "Progress", icon: Trophy },
+  { href: "/learn/progress", label: "Map", icon: Trophy },
   { href: "/learn/profile", label: "Profile", icon: UserRound },
 ] as const;
 
