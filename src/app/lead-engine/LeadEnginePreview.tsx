@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   SiFacebook,
@@ -10,7 +11,6 @@ import {
 import {
   TbActivity,
   TbArrowRight,
-  TbArrowUpRight,
   TbBriefcase2,
   TbBuildingBank,
   TbCash,
@@ -40,78 +40,90 @@ type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 type Source = {
   label: string;
   value: number;
+  unit: string;
+  detail: string;
   status: string;
   href: string;
   icon: Icon;
   tone: string;
-  external?: boolean;
 };
 
 const sources: Source[] = [
   {
     label: "Website",
-    value: 12,
+    value: 3,
+    unit: "websites",
+    detail: "12 leads · 30 days",
     status: "Connected",
-    href: "https://urava-main-site.vercel.app",
+    href: "/lead-engine/sources/website",
     icon: TbWorld,
     tone: "blue",
-    external: true,
   },
   {
     label: "Instagram",
-    value: 8,
+    value: 2,
+    unit: "accounts",
+    detail: "8 leads · 30 days",
     status: "Connected",
-    href: "https://www.instagram.com/urava.online/",
+    href: "/lead-engine/sources/instagram",
     icon: SiInstagram,
     tone: "pink",
-    external: true,
   },
   {
     label: "Facebook",
-    value: 5,
+    value: 2,
+    unit: "pages",
+    detail: "5 leads · 30 days",
     status: "Connected",
-    href: "https://www.facebook.com/61591507679936/",
+    href: "/lead-engine/sources/facebook",
     icon: SiFacebook,
     tone: "facebook",
-    external: true,
   },
   {
     label: "Google",
-    value: 9,
+    value: 3,
+    unit: "channels",
+    detail: "9 leads · 30 days",
     status: "Connected",
-    href: "https://share.google/ACV2Ar0l1gER5fReL",
+    href: "/lead-engine/sources/google",
     icon: SiGoogle,
     tone: "google",
-    external: true,
   },
   {
     label: "WhatsApp",
-    value: 7,
+    value: 2,
+    unit: "inboxes",
+    detail: "7 leads · 30 days",
     status: "Connected",
-    href: "https://web.whatsapp.com/",
+    href: "/lead-engine/sources/whatsapp",
     icon: SiWhatsapp,
     tone: "whatsapp",
-    external: true,
   },
   {
     label: "Referrals",
-    value: 3,
+    value: 2,
+    unit: "programs",
+    detail: "3 leads · 30 days",
     status: "Connected",
-    href: "#attention",
+    href: "/lead-engine/sources/referrals",
     icon: TbUsers,
     tone: "blue",
   },
   {
     label: "Lead Finder",
-    value: 14,
+    value: 2,
+    unit: "campaigns",
+    detail: "14 leads · 30 days",
     status: "Connected",
-    href: "/dashboard/leads/finder",
+    href: "/lead-engine/sources/lead-finder",
     icon: TbTargetArrow,
     tone: "coral",
   },
   {
     label: "Unified Inbox",
     value: 58,
+    unit: "total leads",
+    detail: "All sources together",
     status: "Healthy",
     href: "/dashboard/leads",
     icon: TbInbox,
@@ -346,26 +358,25 @@ export function LeadEnginePreview() {
           </div>
 
           <div className={styles.sourceGrid}>
-            {sources.map(({ label, value, status, href, icon: SourceIcon, tone, external }) => (
-              <a
+            {sources.map(({ label, value, unit, detail, status, href, icon: SourceIcon, tone }) => (
+              <Link
                 className={`${styles.sourceCard} ${label === "Unified Inbox" ? styles.sourceCardFeatured : ""}`}
                 href={href}
                 key={label}
-                target={external ? "_blank" : undefined}
-                rel={external ? "noreferrer" : undefined}
                 aria-label={`Open ${label}`}
               >
                 <span className={`${styles.sourceIcon} ${styles[tone]}`}>
                   <SourceIcon aria-hidden />
                 </span>
-                <TbArrowUpRight className={styles.externalIcon} aria-hidden />
+                <TbArrowRight className={styles.externalIcon} aria-hidden />
                 <strong>{label}</strong>
                 <b>{value}</b>
+                <span className={styles.sourceUnit}>{unit}</span>
                 <small>
                   <i aria-hidden />
-                  {status}
+                  {detail} · {status}
                 </small>
-              </a>
+              </Link>
             ))}
           </div>
         </section>
