@@ -5,15 +5,13 @@ import {
   StudentClassNotes,
   type StudentClassNote,
 } from "@/components/foundry/StudentClassNotes";
-import {
-  StudentLearningMap,
-  type StudentLearningMapNote,
-} from "@/components/foundry/StudentLearningMap";
+import { StudentLearningMap } from "@/components/foundry/StudentLearningMap";
 import {
   StudentPortalView,
   type StudentPortalTab,
 } from "@/components/foundry/StudentPortal";
 import { getFounderStudentPreview } from "@/lib/foundry";
+import { loadFoundryJourney } from "@/lib/foundry-journey";
 
 export const metadata: Metadata = {
   title: "Student View · Urava Foundry",
@@ -92,38 +90,31 @@ export default async function StudentPortalPreviewPage({
   if (!data) notFound();
 
   if (query.tab === "progress") {
-    const notesResult = await data.supabase
-      .from("foundry_class_learning_notes")
-      .select(
-        "id, class_id, class_title_snapshot, class_date, learning_state, progress_summary, next_step, resource_url, impact_title, impact_statement, achievement_title, achievement_description, evidence_requirement, xp_reward",
-      )
-      .eq("workspace_id", data.workspace.id)
-      .eq("student_id", data.student.id)
-      .order("class_date");
-
-    const notes = (notesResult.data ?? []) as StudentLearningMapNote[];
     const studentView = query.view === "student";
-    const portalBase = `/dashboard/foundry/students/${data.student.id}/portal${
-      studentView ? "?view=student" : ""
-    }`;
+    const journey = await loadFoundryJourney(
+      data.supabase,
+      data.workspace.id,
+      data.student.id,
+      data.student.department,
+    );
 
     return (
       <div
         className="student-portal-view is-preview"
-        style={{ width: "min(100%, 1120px)" }}
+        style={{ width: "min(100%, 1180px)" }}
       >
-        <PreviewNavigation
-          active="progress"
-          foundryId={data.student.foundry_id}
-          studentId={data.student.id}
-          studentView={studentView}
-        />
+        {!studentView ? (
+          <PreviewNavigation
+            active="progress"
+            foundryId={data.student.foundry_id}
+            studentId={data.student.id}
+          />
+        ) : null}
         <StudentLearningMap
+          journey={journey}
           mode={studentView ? "student" : "admin"}
-          notes={notes}
-          progress={data.progress}
           student={data.student}
-          studentBaseHref={portalBase}
+          studentViewHref={`/dashboard/foundry/students/${data.student.id}/portal?tab=progress&view=student`}
         />
       </div>
     );
