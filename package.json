@@ -7,9 +7,10 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/verify-internal-routes.mjs && next build",
     "start": "next start",
     "lint": "eslint",
+    "audit:routes": "node scripts/verify-internal-routes.mjs",
     "audit:dev-patches": "node scripts/verify-dev-dependency-security.mjs"
   },
   "dependencies": {
