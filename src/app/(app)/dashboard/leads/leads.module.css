@@ -273,9 +273,9 @@
 
 .healthCallout {
   padding: 17px;
-  border: 1px solid rgba(200, 255, 77, 0.18);
+  border: 1px solid rgba(255, 107, 97, 0.18);
   border-radius: 14px;
-  background: rgba(200, 255, 77, 0.055);
+  background: rgba(255, 107, 97, 0.055);
 }
 
 .healthCallout strong {
@@ -601,8 +601,8 @@
 }
 
 :global(.status-interested) {
-  border-color: rgba(200, 255, 77, 0.28);
-  background: rgba(200, 255, 77, 0.07);
+  border-color: rgba(255, 107, 97, 0.28);
+  background: rgba(255, 107, 97, 0.07);
   color: var(--accent);
 }
 

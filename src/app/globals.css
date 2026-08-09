@@ -10,7 +10,7 @@
   --muted-strong: #b8c0cc;
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.16);
-  --accent: #c8ff4d;
+  --accent: #ff6b61;
   --accent-ink: #111704;
   --danger: #ff6b6b;
   --warning: #ffcb66;
@@ -104,7 +104,7 @@ a {
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 24px rgba(200, 255, 77, 0.65);
+  box-shadow: 0 0 24px rgba(255, 107, 97, 0.65);
   content: "";
 }
 
@@ -112,7 +112,7 @@ a {
   position: absolute;
   width: 34px;
   height: 12px;
-  border: 1px solid rgba(200, 255, 77, 0.55);
+  border: 1px solid rgba(255, 107, 97, 0.55);
   border-radius: 50%;
   transform: rotate(-24deg);
   content: "";
@@ -123,7 +123,7 @@ a {
   overflow: hidden;
   background:
     radial-gradient(circle at 82% 16%, rgba(91, 121, 255, 0.18), transparent 29%),
-    radial-gradient(circle at 50% 110%, rgba(200, 255, 77, 0.11), transparent 38%),
+    radial-gradient(circle at 50% 110%, rgba(255, 107, 97, 0.11), transparent 38%),
     var(--background);
 }
 
@@ -183,8 +183,8 @@ a {
 }
 
 .button-primary:hover {
-  border-color: #dcff8a;
-  background: #dcff8a;
+  border-color: #ff8a82;
+  background: #ff8a82;
 }
 
 .button-danger {
@@ -297,11 +297,11 @@ a {
   inset: -42% auto auto -25%;
   width: 420px;
   height: 420px;
-  border: 1px solid rgba(200, 255, 77, 0.16);
+  border: 1px solid rgba(255, 107, 97, 0.16);
   border-radius: 50%;
   box-shadow:
-    0 0 0 58px rgba(200, 255, 77, 0.025),
-    0 0 0 118px rgba(200, 255, 77, 0.018);
+    0 0 0 58px rgba(255, 107, 97, 0.025),
+    0 0 0 118px rgba(255, 107, 97, 0.018);
   content: "";
 }
 
@@ -467,7 +467,7 @@ a {
   align-items: flex-end;
   background:
     radial-gradient(circle at 68% 26%, rgba(103, 134, 255, 0.28), transparent 26%),
-    radial-gradient(circle at 30% 78%, rgba(200, 255, 77, 0.15), transparent 30%),
+    radial-gradient(circle at 30% 78%, rgba(255, 107, 97, 0.15), transparent 30%),
     var(--surface);
   overflow: hidden;
 }
@@ -490,7 +490,7 @@ a {
   width: 440px;
   height: 180px;
   inset: 32% auto auto 18%;
-  border-color: rgba(200, 255, 77, 0.24);
+  border-color: rgba(255, 107, 97, 0.24);
   transform: rotate(-17deg);
 }
 
@@ -592,7 +592,7 @@ a {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: rgba(200, 255, 77, 0.68);
+  border-color: rgba(255, 107, 97, 0.68);
   background: rgba(255, 255, 255, 0.04);
 }
 

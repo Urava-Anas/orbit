@@ -74,3 +74,19 @@
     flex-direction: column;
   }
 }
+
+.tokenBox {
+  border-color: var(--foundry-line);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent),
+    var(--foundry-control-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.tokenBox small {
+  color: var(--foundry-muted);
+}
+
+.tokenBox code {
+  color: var(--foundry-charcoal);
+}

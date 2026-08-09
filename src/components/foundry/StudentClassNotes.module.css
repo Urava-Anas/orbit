@@ -644,3 +644,101 @@
     white-space: normal;
   }
 }
+
+/* Shared Orbit Liquid Glass material */
+.page {
+  color: var(--foundry-charcoal, #172033);
+}
+
+.hero,
+.recordsSection,
+.encouragement,
+.empty {
+  border-color: var(--foundry-line, rgba(36, 53, 78, 0.13));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.28)),
+    rgba(255, 255, 255, 0.5);
+  box-shadow: var(--foundry-shadow, 0 18px 48px rgba(55, 72, 99, 0.13));
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+}
+
+.hero {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(255, 107, 97, 0.16), transparent 34%),
+    radial-gradient(circle at 0% 100%, rgba(76, 132, 255, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.34));
+}
+
+.hero h1,
+.recordsHead h2,
+.recordSummary h3,
+.cardTitle h4,
+.empty h1 {
+  color: var(--foundry-charcoal, #172033);
+  font-family: var(--font-orbit-rounded);
+}
+
+.heroCopy p,
+.recordsHead p,
+.recordSummary small,
+.contentCard > p,
+.empty p {
+  color: var(--foundry-muted, rgba(45, 57, 76, 0.66));
+}
+
+.eyebrow,
+.stageHeader strong {
+  color: #d8453c;
+}
+
+.journeyButton,
+.resourceButton {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 58%),
+    #ff6b61;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 12px 28px rgba(255, 107, 97, 0.22);
+}
+
+.stageStep,
+.record,
+.contentCard,
+.chips span,
+.metricRow > div {
+  border-color: var(--foundry-line, rgba(36, 53, 78, 0.13));
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.stageStep {
+  border-radius: 16px;
+}
+
+.stageStep.active {
+  border-color: rgba(255, 107, 97, 0.34);
+  background: rgba(255, 107, 97, 0.11);
+  color: #c7372f;
+}
+
+.stageStep.active > span {
+  background: #ff6b61;
+}
+
+.record {
+  border-radius: 20px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .hero,
+  .recordsSection,
+  .encouragement,
+  .empty {
+    background: #f6f9fd;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

@@ -1425,3 +1425,235 @@
     transition: none;
   }
 }
+
+/* Orbit Liquid Glass source workspaces */
+.workspace {
+  color: var(--preview-text);
+}
+
+.breadcrumbs a {
+  color: rgba(232, 238, 247, 0.7);
+}
+
+.sourceMark,
+.assetMark {
+  border-color: color-mix(in srgb, var(--source-accent) 44%, rgba(255, 255, 255, 0.14));
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.15), transparent 48%),
+    color-mix(in srgb, var(--source-accent) 11%, rgba(18, 27, 43, 0.8));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    0 14px 36px color-mix(in srgb, var(--source-accent) 13%, transparent);
+}
+
+.sourceIdentity h1 {
+  font-family: var(--font-orbit-rounded);
+  letter-spacing: -0.055em;
+}
+
+.sourceIdentity p {
+  color: rgba(224, 232, 244, 0.65);
+}
+
+.titleEyebrow {
+  color: color-mix(in srgb, var(--source-accent) 82%, white);
+}
+
+.primaryButton,
+.secondaryButton,
+.pauseButton,
+.detailHeading > button,
+.manageRow > button,
+.nextActionCard button {
+  min-height: 42px;
+  border-radius: 999px;
+}
+
+.secondaryButton,
+.pauseButton,
+.detailHeading > button,
+.manageRow > button,
+.nextActionCard button {
+  border-color: rgba(255, 255, 255, 0.13);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent),
+    rgba(255, 255, 255, 0.065);
+  color: rgba(245, 248, 252, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.primaryButton {
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 58%),
+    var(--source-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 10px 28px color-mix(in srgb, var(--source-accent) 24%, transparent);
+}
+
+.summaryCard,
+.assetSummaryGrid article,
+.controlStrip,
+.assetPanel,
+.sidePanel,
+.detailPanel,
+.journeyPanel,
+.controlMap,
+.guardrailCard,
+.contextCard,
+.nextActionCard,
+.tabs,
+.toast {
+  border-color: var(--preview-border);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.085), transparent 40%),
+    var(--preview-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 16px 44px rgba(0, 0, 0, 0.2);
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+}
+
+.summaryCard,
+.assetSummaryGrid article,
+.controlStrip,
+.assetPanel,
+.sidePanel,
+.detailPanel,
+.journeyPanel,
+.controlMap,
+.guardrailCard,
+.contextCard,
+.nextActionCard {
+  border-radius: 22px;
+}
+
+.summaryCard,
+.assetSummaryGrid article {
+  min-height: 132px;
+}
+
+.controlItem,
+.searchField,
+.filters button:hover,
+.filters .filterActive,
+.detailHeading > button,
+.manageRow > button,
+.controlMapGrid button {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.075);
+}
+
+.controlItem {
+  min-height: 80px;
+  border-radius: 16px;
+}
+
+.controlItem:hover,
+.controlMapGrid button:hover {
+  border-color: color-mix(in srgb, var(--source-accent) 38%, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.095);
+}
+
+.searchField {
+  border-radius: 999px;
+}
+
+.assetTools,
+.assetRow,
+.noticeRow,
+.activityRow,
+.manageRow,
+.controlRows,
+.healthList,
+.contextCard dl div {
+  border-color: var(--preview-border-soft);
+}
+
+.assetRow:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.assetAvatar {
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent),
+    color-mix(in srgb, var(--source-accent) 10%, transparent);
+}
+
+.tabs {
+  min-height: 58px;
+  padding: 5px;
+  border-radius: 22px;
+  gap: 4px;
+}
+
+.tabs button {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 16px;
+}
+
+.tabs .tabActive {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.11), transparent),
+    color-mix(in srgb, var(--source-accent) 14%, transparent);
+  color: var(--preview-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11);
+}
+
+.tabs .tabActive::after {
+  display: none;
+}
+
+.healthPill,
+.statusGood,
+.statusWarning,
+.manageStatus,
+.monitoringActive,
+.monitoringPaused,
+.assetStatusLine > span:not(.statusGood):not(.statusWarning),
+.panelHeader > span {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.toast {
+  border-radius: 18px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .summaryCard,
+  .assetSummaryGrid article,
+  .controlStrip,
+  .assetPanel,
+  .sidePanel,
+  .detailPanel,
+  .journeyPanel,
+  .controlMap,
+  .guardrailCard,
+  .contextCard,
+  .nextActionCard,
+  .tabs,
+  .toast {
+    background: #152033;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .sourceMark,
+  .assetMark {
+    border-radius: 14px;
+  }
+
+  .summaryCard,
+  .assetSummaryGrid article {
+    min-height: 108px;
+  }
+}

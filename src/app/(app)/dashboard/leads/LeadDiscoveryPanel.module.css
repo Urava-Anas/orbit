@@ -6,7 +6,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at 100% 0%, rgba(200, 255, 77, 0.065), transparent 28%),
+    radial-gradient(circle at 100% 0%, rgba(255, 107, 97, 0.065), transparent 28%),
     var(--surface);
 }
 

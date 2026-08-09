@@ -441,3 +441,93 @@
     width: 100%;
   }
 }
+
+/* Shared Orbit Liquid Glass material */
+.header,
+.currentCard,
+.historySection,
+.stagePath,
+.empty {
+  border-color: var(--foundry-line, rgba(36, 53, 78, 0.13));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.28)),
+    rgba(255, 255, 255, 0.5);
+  box-shadow: var(--foundry-shadow, 0 18px 48px rgba(55, 72, 99, 0.13));
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+}
+
+.header {
+  background:
+    radial-gradient(circle at 92% 8%, rgba(255, 107, 97, 0.17), transparent 32%),
+    radial-gradient(circle at 4% 100%, rgba(76, 132, 255, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.34));
+}
+
+.header h1,
+.currentHead h2,
+.historyHead h2,
+.empty h1 {
+  color: var(--foundry-charcoal, #172033);
+  font-family: var(--font-orbit-rounded);
+}
+
+.header p,
+.currentHead p,
+.historyHead p,
+.details span,
+.empty p {
+  color: var(--foundry-muted, rgba(45, 57, 76, 0.66));
+}
+
+.eyebrow {
+  color: #d8453c;
+}
+
+.headerIcon,
+.currentBadge,
+.notesButton {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 58%),
+    #ff6b61;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 12px 28px rgba(255, 107, 97, 0.22);
+}
+
+.notesButton,
+.historyLink {
+  border-radius: 999px;
+}
+
+.stageStep,
+.historyCard,
+.details > div {
+  border-color: var(--foundry-line, rgba(36, 53, 78, 0.13));
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.stageStep.active {
+  border: 1px solid rgba(255, 107, 97, 0.32);
+  background: rgba(255, 107, 97, 0.11);
+  color: #c7372f;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.stageStep.active > span {
+  background: #ff6b61;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .header,
+  .currentCard,
+  .historySection,
+  .stagePath,
+  .empty {
+    background: #f6f9fd;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

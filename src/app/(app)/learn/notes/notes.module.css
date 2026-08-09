@@ -39,9 +39,9 @@
 .state {
   flex: 0 0 auto;
   padding: 7px 10px;
-  border: 1px solid rgba(200, 255, 77, 0.28);
+  border: 1px solid rgba(255, 107, 97, 0.28);
   border-radius: 999px;
-  background: rgba(200, 255, 77, 0.08);
+  background: rgba(255, 107, 97, 0.08);
   color: var(--accent) !important;
   font-size: 12px !important;
   font-weight: 700;
@@ -107,7 +107,7 @@
   padding: 16px;
   border-left: 3px solid var(--accent);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  background: rgba(200, 255, 77, 0.06);
+  background: rgba(255, 107, 97, 0.06);
 }
 
 .nextStep strong {

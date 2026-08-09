@@ -1036,3 +1036,303 @@
     transition: none;
   }
 }
+
+/* Orbit Liquid Glass theme */
+.shell {
+  --preview-bg: #07101d;
+  --preview-panel: rgba(17, 25, 40, 0.7);
+  --preview-panel-soft: rgba(28, 39, 58, 0.78);
+  --preview-border: rgba(255, 255, 255, 0.12);
+  --preview-border-soft: rgba(255, 255, 255, 0.075);
+  --preview-text: rgba(250, 252, 255, 0.96);
+  --preview-muted: rgba(224, 232, 244, 0.6);
+  --preview-coral: #ff6b61;
+  --preview-green: #73dca4;
+  --preview-yellow: #ffd06a;
+  background:
+    radial-gradient(circle at 11% -6%, rgba(76, 132, 255, 0.21), transparent 31rem),
+    radial-gradient(circle at 94% 3%, rgba(255, 107, 97, 0.14), transparent 28rem),
+    radial-gradient(circle at 58% 108%, rgba(126, 92, 255, 0.12), transparent 34rem),
+    var(--preview-bg);
+  font-family: var(--font-orbit-sans);
+}
+
+.sidebar {
+  padding: 24px 14px 22px;
+  border-right-color: var(--preview-border);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), transparent 38%),
+    rgba(11, 18, 30, 0.63);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: saturate(155%) blur(26px);
+  backdrop-filter: saturate(155%) blur(26px);
+}
+
+.brand {
+  font-family: var(--font-orbit-rounded);
+  font-size: 25px;
+  font-weight: 620;
+}
+
+.brandIcon {
+  color: var(--preview-coral);
+  filter: drop-shadow(0 0 12px rgba(255, 107, 97, 0.28));
+}
+
+.navigation {
+  margin: 34px 0 0;
+  gap: 5px;
+}
+
+.navItem {
+  min-height: 48px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  gap: 12px;
+  color: rgba(229, 235, 244, 0.7);
+  font-size: 13px;
+}
+
+.navItem:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.navItemActive {
+  border-color: rgba(255, 255, 255, 0.13);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.11), transparent),
+    rgba(255, 107, 97, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.navItemActive::after {
+  display: none;
+}
+
+.navIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.navItemActive .navIcon {
+  color: var(--preview-coral);
+}
+
+.organisation,
+.controlButton,
+.sourceCard,
+.pipeline,
+.capacityPanel,
+.panel,
+.toast {
+  border-color: var(--preview-border);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.085), transparent 40%),
+    var(--preview-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 16px 44px rgba(0, 0, 0, 0.2);
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+}
+
+.organisation {
+  border-radius: 18px;
+}
+
+.main {
+  padding: 32px clamp(24px, 3vw, 46px) 56px;
+}
+
+.titleLine h1,
+.sectionHeading h2,
+.panelHeading h2 {
+  font-family: var(--font-orbit-rounded);
+}
+
+.titleLine h1 {
+  font-size: clamp(36px, 3vw, 48px);
+  letter-spacing: -0.055em;
+}
+
+.titleLine span,
+.soonBadge {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.systemControls {
+  padding: 5px;
+  border: 1px solid var(--preview-border);
+  border-radius: 999px;
+  gap: 2px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.095), transparent 46%),
+    rgba(16, 24, 39, 0.64);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 14px 38px rgba(0, 0, 0, 0.2);
+  -webkit-backdrop-filter: saturate(150%) blur(20px);
+  backdrop-filter: saturate(150%) blur(20px);
+}
+
+.controlButton {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: rgba(245, 248, 252, 0.88);
+  font-size: 12px;
+}
+
+.controlButton:hover {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.section {
+  margin-top: 32px;
+}
+
+.sourceGrid {
+  gap: 13px;
+}
+
+.sourceCard {
+  min-height: 188px;
+  padding: 18px;
+  border-radius: 22px;
+}
+
+.sourceCard:hover {
+  border-color: color-mix(in srgb, currentColor 14%, var(--preview-coral));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), transparent 44%),
+    var(--preview-panel-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    0 20px 54px rgba(0, 0, 0, 0.28);
+  transform: translateY(-3px) scale(1.008);
+}
+
+.sourceCardFeatured {
+  border-color: rgba(255, 107, 97, 0.58);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.11), transparent 40%),
+    rgba(255, 107, 97, 0.1);
+}
+
+.sourceIcon {
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.sourceIcon svg {
+  width: 25px;
+  height: 25px;
+}
+
+.pipeline,
+.capacityPanel,
+.panel {
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.pipelineStage,
+.capacityRow,
+.attentionRow,
+.activityRow,
+.panelHeading {
+  border-color: var(--preview-border-soft);
+}
+
+.pipelineStage progress::-webkit-progress-bar {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pipelineStage progress::-webkit-progress-value,
+.pipelineStage progress::-moz-progress-bar {
+  background: linear-gradient(90deg, var(--preview-coral), #ff958f);
+}
+
+.capacityRow > button,
+.panelHeading button,
+.attentionRow > button,
+.sourcePill,
+.successPill,
+.failedPill {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.capacityRow > button,
+.panelHeading button,
+.attentionRow > button {
+  border-radius: 999px;
+}
+
+.toast {
+  border-radius: 18px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar,
+  .organisation,
+  .systemControls,
+  .sourceCard,
+  .pipeline,
+  .capacityPanel,
+  .panel,
+  .toast {
+    background: #152033;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .systemControls {
+    border-radius: 20px;
+  }
+
+  .main {
+    padding: 24px 20px 40px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .sidebar {
+    padding: 18px 20px 0;
+  }
+
+  .navigation {
+    margin: 16px -20px 0;
+    padding: 0 20px;
+  }
+}
+
+@media (max-width: 620px) {
+  .main {
+    padding: 22px 16px 34px;
+  }
+
+  .sourceCard {
+    min-height: 164px;
+    padding: 16px;
+    border-radius: 19px;
+  }
+
+  .systemControls {
+    padding: 4px;
+  }
+}

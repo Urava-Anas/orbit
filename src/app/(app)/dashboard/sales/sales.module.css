@@ -67,9 +67,9 @@
   align-items: center;
   gap: 12px;
   padding: 13px 16px;
-  border: 1px solid rgba(200, 255, 77, 0.18);
+  border: 1px solid rgba(255, 107, 97, 0.18);
   border-radius: var(--radius-md);
-  background: rgba(200, 255, 77, 0.04);
+  background: rgba(255, 107, 97, 0.04);
 }
 
 .rules svg {
@@ -151,7 +151,7 @@
 }
 
 .searchBox:focus-within {
-  border-color: rgba(200, 255, 77, 0.48);
+  border-color: rgba(255, 107, 97, 0.48);
 }
 
 .searchBox input {
@@ -186,8 +186,8 @@
 }
 
 .profileRowActive {
-  border-color: rgba(200, 255, 77, 0.2);
-  background: rgba(200, 255, 77, 0.055);
+  border-color: rgba(255, 107, 97, 0.2);
+  background: rgba(255, 107, 97, 0.055);
 }
 
 .avatar,
@@ -197,7 +197,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 28%, rgba(200, 255, 77, 0.28), transparent 34%),
+    radial-gradient(circle at 35% 28%, rgba(255, 107, 97, 0.28), transparent 34%),
     var(--surface-raised);
   color: var(--foreground);
   font-weight: 720;
@@ -478,7 +478,7 @@
   gap: 18px;
   padding: 15px;
   border-radius: var(--radius-sm);
-  background: rgba(200, 255, 77, 0.05);
+  background: rgba(255, 107, 97, 0.05);
 }
 
 .outreachBody p {
