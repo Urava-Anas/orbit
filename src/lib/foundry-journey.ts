@@ -21,7 +21,8 @@ export type JourneyResource = {
   department: string | null;
   level_number: number;
   title: string;
-  resource_url: string;
+  resource_url: string | null;
+  content: string | null;
   resource_kind: string;
   status: string;
 };
@@ -121,7 +122,7 @@ export async function loadFoundryJourney(
     supabase
       .from("foundry_level_resources")
       .select(
-        "id, student_id, department, level_number, title, resource_url, resource_kind, status",
+        "id, student_id, department, level_number, title, resource_url, content, resource_kind, status",
       )
       .eq("workspace_id", workspaceId)
       .eq("status", "published")
