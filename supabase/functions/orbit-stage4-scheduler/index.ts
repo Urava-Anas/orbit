@@ -1,5 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+declare const Deno: {
+  env: { get(name: string): string | undefined };
+  serve(handler: (request: Request) => Response | Promise<Response>): void;
+};
+
 const DEFAULT_WORKER_URL =
   "https://orbit-git-agent-stage4-controlled-autopilot-urava-pros.vercel.app/api/internal/autopilot-worker";
 
