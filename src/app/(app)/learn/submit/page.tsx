@@ -1,16 +1,13 @@
-import type { Metadata } from "next";
-import { CurrentStudentPage } from "@/components/foundry/CurrentStudentPage";
-
-export const metadata: Metadata = {
-  title: "Submit · Urava Foundry",
-  robots: { index: false, follow: false },
-};
+import { redirect } from "next/navigation";
 
 type Props = {
   searchParams: Promise<{ notice?: string; error?: string }>;
 };
 
-export default async function StudentSubmitPage({ searchParams }: Props) {
+export default async function LegacyStudentSubmitPage({ searchParams }: Props) {
   const query = await searchParams;
-  return <CurrentStudentPage error={query.error} notice={query.notice} tab="submit" />;
+  const params = new URLSearchParams();
+  if (query.notice) params.set("notice", query.notice);
+  if (query.error) params.set("error", query.error);
+  redirect(`/learn/tasks${params.size ? `?${params.toString()}` : ""}`);
 }
