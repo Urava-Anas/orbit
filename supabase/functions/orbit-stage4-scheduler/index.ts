@@ -6,7 +6,7 @@ declare const Deno: {
 };
 
 const DEFAULT_WORKER_URL =
-  "https://orbit-git-agent-stage4-controlled-autopilot-urava-pros.vercel.app/api/internal/autopilot-worker";
+  "https://orbit-two-delta.vercel.app/api/internal/autopilot-worker";
 
 function toHex(buffer: ArrayBuffer) {
   return Array.from(new Uint8Array(buffer))
