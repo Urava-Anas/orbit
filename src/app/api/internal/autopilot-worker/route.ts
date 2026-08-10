@@ -9,7 +9,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runStageFourCompletionPlanner } from "@/lib/agents/stage4-completion-planner";
 import { runWithStageFourExecutionClient } from "@/lib/agents/stage4-execution-context";
 import { isStageFourGatewayConfigured } from "@/lib/agents/stage4-gateway";
-import { stageFourProviderReadiness } from "@/lib/agents/stage4-providers";
+import { stageFourProviderReadinessForWorkspace } from "@/lib/agents/stage4-providers";
 import { runStageFourAutopilotWorker } from "@/lib/agents/stage4-worker";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/config";
@@ -140,12 +140,29 @@ async function handle(request: Request) {
     try {
       const completionPlanner = await runStageFourCompletionPlanner(context.admin ?? undefined);
       const result = await runStageFourAutopilotWorker(8, context.admin ?? undefined);
-      const readiness = {
-        gatewayConfigured: isStageFourGatewayConfigured(),
-        providers: stageFourProviderReadiness(),
-        paymentInstructionsConfigured: Boolean(process.env.ORBIT_PAYMENT_INSTRUCTIONS?.trim()),
-        legacyExternalRuntimeEnabled: process.env.ORBIT_EXTERNAL_ACTIONS_ENABLED === "true",
-      };
+      let workspaceReadiness: Array<Record<string, unknown>> = [];
+      if (context.admin) {
+        const configs = await context.admin
+          .from("orbit_autopilot_configs")
+          .select("workspace_id,state,mode,external_actions_enabled,kill_switch_engaged,payment_instructions")
+          .order("created_at", { ascending: true });
+        if (!configs.error) {
+          workspaceReadiness = await Promise.all(
+            (configs.data ?? []).map(async (config) => ({
+              workspaceId: config.workspace_id,
+              state: config.state,
+              mode: config.mode,
+              externalActionsEnabled: config.external_actions_enabled,
+              killSwitchEngaged: config.kill_switch_engaged,
+              gatewayConfigured: isStageFourGatewayConfigured(),
+              providers: await stageFourProviderReadinessForWorkspace(config.workspace_id),
+              paymentInstructionsConfigured: Boolean(
+                typeof config.payment_instructions === "string" && config.payment_instructions.trim(),
+              ),
+            })),
+          );
+        }
+      }
       console.info("Stage 4 Autopilot worker completed", {
         completionPlanned: completionPlanner.planned,
         completionErrors: completionPlanner.errors,
@@ -154,14 +171,10 @@ async function handle(request: Request) {
         succeeded: result.succeeded,
         failed: result.failed,
         blocked: result.blocked,
-        gatewayConfigured: readiness.gatewayConfigured,
-        emailConfigured: readiness.providers.email.configured,
-        whatsappConfigured: readiness.providers.whatsapp.configured,
-        paymentInstructionsConfigured: readiness.paymentInstructionsConfigured,
-        legacyExternalRuntimeEnabled: readiness.legacyExternalRuntimeEnabled,
+        workspaceReadiness,
       });
       return NextResponse.json(
-        { ...result, completionPlanner, readiness },
+        { ...result, completionPlanner, workspaceReadiness },
         {
           status: result.configured && completionPlanner.configured ? 200 : 503,
           headers: { "Cache-Control": "no-store" },
