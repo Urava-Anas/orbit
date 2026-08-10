@@ -14,6 +14,12 @@ function toHex(buffer: ArrayBuffer) {
     .join("");
 }
 
+function toBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 function randomToken() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -50,6 +56,31 @@ async function mintInvocation(supabaseUrl: string, serviceRole: string) {
   return { id, token };
 }
 
+async function encryptServiceRole(serviceRole: string, token: string) {
+  const keyBytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(token),
+  );
+  const key = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"],
+  );
+  const iv = new Uint8Array(12);
+  crypto.getRandomValues(iv);
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(serviceRole),
+  );
+  return {
+    iv: toBase64(iv),
+    ciphertext: toBase64(new Uint8Array(encrypted)),
+  };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -77,15 +108,18 @@ Deno.serve(async (request: Request) => {
 
   try {
     const invocation = await mintInvocation(supabaseUrl, serviceRole);
+    const encryptedIdentity = await encryptServiceRole(serviceRole, invocation.token);
     const response = await fetch(workerUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Orbit-Scheduler-Invocation": invocation.id,
         "X-Orbit-Scheduler-Token": invocation.token,
+        "X-Orbit-Supabase-Iv": encryptedIdentity.iv,
+        "X-Orbit-Supabase-Ciphertext": encryptedIdentity.ciphertext,
         "User-Agent": "Orbit-Supabase-Stage4-Scheduler/1.0",
       },
-      body: JSON.stringify({ source: "supabase_scheduler", version: 2 }),
+      body: JSON.stringify({ source: "supabase_scheduler", version: 3 }),
       signal: AbortSignal.timeout(55_000),
     });
 
