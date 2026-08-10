@@ -68,6 +68,18 @@ export const stageFourStartSchema = z.object({
   idempotencyKey: z.string().min(1).max(160).optional(),
 });
 
+export const stageFourControlSchema = z.object({
+  action: z.enum([
+    "start",
+    "pause",
+    "stop",
+    "engage_kill_switch",
+    "disengage_kill_switch",
+  ]),
+  reason: z.string().trim().max(1000).optional(),
+  idempotencyKey: z.string().min(1).max(160).optional(),
+});
+
 const commonRequestFields = {
   opportunityId: z.string().uuid(),
   idempotencyKey: z.string().min(1).max(180),
@@ -114,6 +126,8 @@ export const stageFourActionRequestSchema = z.discriminatedUnion("capabilityKey"
     channel: z.literal("system"),
     projectName: z.string().min(2).max(180),
     projectSummary: z.string().max(4000).optional(),
+    agreedValue: z.number().nonnegative(),
+    currency: z.enum(["PKR", "USD", "GBP", "EUR", "AED", "SAR"]),
     dueDate: z.string().date().optional(),
   }),
   z.object({
