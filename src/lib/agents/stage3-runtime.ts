@@ -48,6 +48,13 @@ type QualificationResult = {
   recommendedOffer: string | null;
   recommendedChannel: "email" | "whatsapp" | "phone" | "manual";
 };
+type LatestArtifactTable =
+  | "orbit_proposal_drafts"
+  | "orbit_onboarding_cases"
+  | "orbit_delivery_handoffs"
+  | "orbit_proof_referral_plans";
+
+type ArtifactRow = Record<string, any>;
 
 function throwDatabaseError(operation: string, error: { message: string } | null) {
   if (error) throw new Error(`${operation}: ${error.message}`);
@@ -426,14 +433,21 @@ function buildResearchPacket(
 
 async function latestRow(
   client: SupabaseClient,
-  table: string,
+  table: LatestArtifactTable,
   workspaceId: string,
   opportunityId: string,
   select: string,
-) {
-  const result = await client.from(table).select(select).eq("workspace_id", workspaceId).eq("opportunity_id", opportunityId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+): Promise<ArtifactRow | null> {
+  const result = await (client as SupabaseClient<any>)
+    .from(table)
+    .select(select)
+    .eq("workspace_id", workspaceId)
+    .eq("opportunity_id", opportunityId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   throwDatabaseError(`Load latest ${table}`, result.error);
-  return result.data;
+  return (result.data as ArtifactRow | null) ?? null;
 }
 
 export async function prepareStageThreeOpportunity(
@@ -791,7 +805,7 @@ export async function advanceStageThreeOpportunity(
         taskType: "sales_signal",
         title: `Interpret inbound sales signal from ${lead.company ?? lead.name}`,
         priority: 90,
-        input: { opportunityId: opportunity.id, event: input.event, responseText: input.responseText, objections: input.objections },
+        input: { opportunityId: opportunity.id, event: input.event, responseText: input.responseText!, objections: input.objections },
         idempotencyKey: rootKey ? `${rootKey}:sales` : undefined,
         execute: async (agentId, runId, taskId) => {
           const interested = input.event === "reply_interested";
@@ -805,7 +819,7 @@ export async function advanceStageThreeOpportunity(
             run_id: runId,
             task_id: taskId,
             agent_id: agentId,
-            buying_signal: input.responseText,
+            buying_signal: input.responseText!,
             objections: input.objections,
             recommended_response: recommendedResponse,
             recommended_next_state: "engaged",
@@ -836,7 +850,7 @@ export async function advanceStageThreeOpportunity(
         taskType: "proposal_draft",
         title: `Prepare internal proposal for ${lead.company ?? lead.name}`,
         priority: 92,
-        input: { opportunityId: opportunity.id, priceMin: input.priceMin, priceMax: input.priceMax, currency: input.currency },
+        input: { opportunityId: opportunity.id, priceMin: input.priceMin!, priceMax: input.priceMax!, currency: input.currency! },
         idempotencyKey: rootKey ? `${rootKey}:proposal` : undefined,
         execute: async (agentId, runId, taskId) => {
           const recommendedOffer = typeof opportunity.context.recommendedOffer === "string" ? opportunity.context.recommendedOffer : "Approved solution scope";
@@ -849,9 +863,9 @@ export async function advanceStageThreeOpportunity(
             agent_id: agentId,
             title: `Proposal for ${lead.company ?? lead.name}`,
             scope: [{ item: recommendedOffer, source: "qualification" }],
-            price_min: input.priceMin,
-            price_max: input.priceMax,
-            currency: input.currency,
+            price_min: input.priceMin!,
+            price_max: input.priceMax!,
+            currency: input.currency!,
             assumptions: [{ key: "pricing", value: "Explicit approved bounds supplied to Stage 3" }],
             status: "draft",
             external_send_enabled: false,
@@ -919,9 +933,9 @@ export async function advanceStageThreeOpportunity(
     if (input.event === "payment_confirmed") {
       const onboarding = await latestRow(client, "orbit_onboarding_cases", workspaceId, opportunity.id, "id,payment_status,onboarding_status");
       if (!onboarding) throw new Error("Payment confirmation requires an existing onboarding case.");
-      const onboardingUpdate = await client.from("orbit_onboarding_cases").update({ payment_status: "confirmed_external", onboarding_status: "ready", payment_reference: input.paymentReference }).eq("workspace_id", workspaceId).eq("id", onboarding.id);
+      const onboardingUpdate = await client.from("orbit_onboarding_cases").update({ payment_status: "confirmed_external", onboarding_status: "ready", payment_reference: input.paymentReference! }).eq("workspace_id", workspaceId).eq("id", onboarding.id);
       throwDatabaseError("Record Stage 3 external payment confirmation", onboardingUpdate.error);
-      opportunity = await transitionOpportunity(client, workspaceId, opportunity, { state: "payment_confirmed", nextAgentKey: "delivery_handoff", context: { paymentReference: input.paymentReference } });
+      opportunity = await transitionOpportunity(client, workspaceId, opportunity, { state: "payment_confirmed", nextAgentKey: "delivery_handoff", context: { paymentReference: input.paymentReference! } });
 
       const handoffStep = await runSpecialistStep(client, {
         workspaceId,
@@ -933,7 +947,7 @@ export async function advanceStageThreeOpportunity(
         taskType: "delivery_handoff",
         title: `Prepare delivery handoff for ${lead.company ?? lead.name}`,
         priority: 96,
-        input: { opportunityId: opportunity.id, onboardingId: onboarding.id, capacityStatus: input.capacityStatus },
+        input: { opportunityId: opportunity.id, onboardingId: onboarding.id, capacityStatus: input.capacityStatus! },
         idempotencyKey: rootKey ? `${rootKey}:handoff` : undefined,
         execute: async (agentId, runId, taskId) => {
           const inserted = await client.from("orbit_delivery_handoffs").insert({
@@ -945,7 +959,7 @@ export async function advanceStageThreeOpportunity(
             task_id: taskId,
             agent_id: agentId,
             brief: input.deliveryBrief ?? { source: "stage3", note: "Delivery brief requires Studio review before activation." },
-            capacity_status: input.capacityStatus,
+            capacity_status: input.capacityStatus!,
             status: input.capacityStatus === "blocked" ? "rejected" : "ready",
             external_commitment_enabled: false,
             created_by: actorId,
@@ -960,7 +974,7 @@ export async function advanceStageThreeOpportunity(
         status: input.capacityStatus === "blocked" ? "blocked" : "won",
         nextAgentKey: input.capacityStatus === "blocked" ? null : "proof_referral",
         lastAgentId: handoffStep.agentId,
-        context: { handoffId: handoffStep.handoffId, capacityStatus: input.capacityStatus },
+        context: { handoffId: handoffStep.handoffId, capacityStatus: input.capacityStatus! },
       });
       const leadUpdate = await client.from("leads").update({ stage: "won", next_action: input.capacityStatus === "blocked" ? "Resolve delivery capacity before any activation." : "Studio must review and activate delivery outside Stage 3." }).eq("workspace_id", workspaceId).eq("id", lead.id);
       throwDatabaseError("Sync Stage 3 won lead", leadUpdate.error);
@@ -983,7 +997,7 @@ export async function advanceStageThreeOpportunity(
         taskType: "proof_referral_plan",
         title: `Prepare private proof/referral plan for ${lead.company ?? lead.name}`,
         priority: 88,
-        input: { opportunityId: opportunity.id, handoffId: handoff.id, resultSummary: input.resultSummary },
+        input: { opportunityId: opportunity.id, handoffId: handoff.id, resultSummary: input.resultSummary! },
         idempotencyKey: rootKey ? `${rootKey}:proof` : undefined,
         execute: async (agentId, runId, taskId) => {
           const inserted = await client.from("orbit_proof_referral_plans").insert({
@@ -995,7 +1009,7 @@ export async function advanceStageThreeOpportunity(
             task_id: taskId,
             agent_id: agentId,
             project_id: handoff.project_id ?? null,
-            result_summary: input.resultSummary,
+            result_summary: input.resultSummary!,
             proof_permission_scope: "private",
             referral_plan: { status: "not_requested", rule: "Only request after explicit permission and Stage 4 authority." },
             status: "draft",
@@ -1018,14 +1032,14 @@ export async function advanceStageThreeOpportunity(
       const plan = await latestRow(client, "orbit_proof_referral_plans", workspaceId, opportunity.id, "id,status,proof_permission_scope");
       if (!plan) throw new Error("Proof permission requires an existing proof/referral plan.");
       const planUpdate = await client.from("orbit_proof_referral_plans").update({
-        proof_permission_scope: input.proofPermissionScope,
+        proof_permission_scope: input.proofPermissionScope!,
         status: "ready",
         proof_publish_enabled: false,
         referral_request_enabled: false,
       }).eq("workspace_id", workspaceId).eq("id", plan.id);
       throwDatabaseError("Record Stage 3 proof permission", planUpdate.error);
-      opportunity = await transitionOpportunity(client, workspaceId, opportunity, { state: "referral_ready", status: "completed", nextAgentKey: null, context: { proofPermissionScope: input.proofPermissionScope } });
-      const output = { opportunityId: opportunity.id, state: opportunity.current_state, proofReferralPlanId: plan.id, proofPermissionScope: input.proofPermissionScope, proofPublished: false, referralSent: false, externalActionExecuted: false };
+      opportunity = await transitionOpportunity(client, workspaceId, opportunity, { state: "referral_ready", status: "completed", nextAgentKey: null, context: { proofPermissionScope: input.proofPermissionScope! } });
+      const output = { opportunityId: opportunity.id, state: opportunity.current_state, proofReferralPlanId: plan.id, proofPermissionScope: input.proofPermissionScope!, proofPublished: false, referralSent: false, externalActionExecuted: false };
       await succeedRunAndTask(client, workspaceId, root.run.id, root.task.id, output);
       return { status: "succeeded" as const, rootRunId: root.run.id, ...output };
     }
