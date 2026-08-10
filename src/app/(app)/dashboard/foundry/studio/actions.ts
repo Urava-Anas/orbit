@@ -27,7 +27,10 @@ function fail(studentId: string | undefined, message: string): never {
 function refresh() {
   revalidatePath("/dashboard/foundry/studio");
   revalidatePath("/dashboard/foundry/map");
+  revalidatePath("/learn");
+  revalidatePath("/learn/studio");
   revalidatePath("/learn/progress");
+  revalidatePath("/learn/profile");
 }
 
 export async function assignStudioWork(formData: FormData) {
