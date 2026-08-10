@@ -12,7 +12,7 @@ import { getFounderStudentPreview } from "@/lib/foundry";
 import { loadFoundryJourney } from "@/lib/foundry-journey";
 
 export const metadata: Metadata = {
-  title: "Student View · Urava Foundry",
+  title: "View as Member · Orbit",
   robots: { index: false, follow: false },
 };
 
@@ -63,9 +63,7 @@ export default async function StudentPortalPreviewPage({
   const section = resolveSection(query.tab);
   if (section === "map") {
     redirect(
-      `/dashboard/foundry/map?studentId=${data.student.id}${
-        query.view === "student" ? "&view=student" : ""
-      }`,
+      `/dashboard/development/journey?studentId=${data.student.id}&view=student`,
     );
   }
 
@@ -76,7 +74,7 @@ export default async function StudentPortalPreviewPage({
     data.student.department,
   );
   const unreadCount = data.notifications.filter((item) => !item.read_at).length;
-  const previewRoot = `/dashboard/foundry/students/${data.student.id}/portal`;
+  const previewRoot = `/dashboard/people/${data.student.id}?view=member`;
 
   return (
     <StudentPreviewFrame
