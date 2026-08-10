@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { advanceStageThreeOpportunity } from "@/lib/agents/stage3-runtime";
 import {
   configureStageFourAutopilot,
   controlStageFourAutopilot,
@@ -25,6 +26,7 @@ const postSchema = z.object({
     "request_action",
     "decide_action",
     "execute_action",
+    "advance_sales",
   ]),
   input: z.unknown().optional(),
 });
@@ -182,6 +184,14 @@ export async function POST(request: Request) {
         break;
       case "execute_action":
         result = await executeStageFourAction(
+          context.supabase,
+          workspaceId,
+          context.userId,
+          input ?? {},
+        );
+        break;
+      case "advance_sales":
+        result = await advanceStageThreeOpportunity(
           context.supabase,
           workspaceId,
           context.userId,
