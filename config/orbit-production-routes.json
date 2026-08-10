@@ -1,0 +1,49 @@
+{
+  "version": "1.1",
+  "expectedCanonicalCount": 38,
+  "routes": [
+    "/",
+    "/access-pending",
+    "/credentials/[token]",
+    "/login",
+    "/forgot-password",
+    "/reset-password",
+    "/privacy",
+
+    "/dashboard",
+    "/dashboard/finance",
+    "/dashboard/integrations",
+    "/dashboard/content",
+    "/dashboard/organisation",
+    "/dashboard/projects",
+    "/dashboard/proof",
+    "/dashboard/settings",
+
+    "/dashboard/lead-engine",
+    "/dashboard/lead-engine/sources/[source]",
+    "/dashboard/lead-engine/sources/[source]/[asset]",
+
+    "/dashboard/development",
+    "/dashboard/development/attendance",
+    "/dashboard/development/sessions",
+    "/dashboard/development/journey",
+    "/dashboard/development/notes",
+    "/dashboard/development/operations",
+    "/dashboard/people",
+    "/dashboard/people/[id]",
+    "/dashboard/reviews",
+    "/dashboard/tasks",
+
+    "/portal",
+    "/portal/sessions",
+    "/portal/profile",
+    "/portal/journey",
+    "/portal/resources",
+    "/portal/work",
+    "/portal/tasks",
+
+    "/organisations/select",
+    "/onboarding",
+    "/invite/[token]"
+  ]
+}
