@@ -59,7 +59,24 @@ function stageFourCapability(capability: OrbitAgentDefinition["capabilities"][nu
 }
 
 function toStageFourDefinition(definition: OrbitAgentDefinition): OrbitAgentDefinition {
-  const isExternalActor = definition.capabilities.some((capability) =>
+  const capabilities = definition.capabilities.map(stageFourCapability);
+
+  if (definition.key === "payment_onboarding" && !capabilities.some((item) => item.key === "cash.payment_request")) {
+    capabilities.push({
+      key: "cash.payment_request",
+      authority: "red",
+      effect: "allow",
+      conditions: {
+        gatewayOnly: true,
+        founderApprovalRequired: true,
+        policyGrantEligible: true,
+        founderOnly: false,
+        noMoneyMovement: true,
+      },
+    });
+  }
+
+  const isExternalActor = capabilities.some((capability) =>
     externalCapabilities.has(capability.key as StageFourExternalCapability),
   );
 
@@ -69,7 +86,7 @@ function toStageFourDefinition(definition: OrbitAgentDefinition): OrbitAgentDefi
     tools: isExternalActor
       ? Array.from(new Set([...definition.tools, "orbit.autopilot.request_external_action"]))
       : definition.tools,
-    capabilities: definition.capabilities.map(stageFourCapability),
+    capabilities,
     config: {
       ...definition.config,
       stage: 4,
