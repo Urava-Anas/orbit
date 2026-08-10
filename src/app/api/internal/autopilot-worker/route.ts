@@ -7,6 +7,8 @@ import {
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runStageFourCompletionPlanner } from "@/lib/agents/stage4-completion-planner";
+import { isStageFourGatewayConfigured } from "@/lib/agents/stage4-gateway";
+import { stageFourProviderReadiness } from "@/lib/agents/stage4-providers";
 import { runStageFourAutopilotWorker } from "@/lib/agents/stage4-worker";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/config";
@@ -136,6 +138,12 @@ async function handle(request: Request) {
   try {
     const completionPlanner = await runStageFourCompletionPlanner(context.admin ?? undefined);
     const result = await runStageFourAutopilotWorker(8, context.admin ?? undefined);
+    const readiness = {
+      gatewayConfigured: isStageFourGatewayConfigured(),
+      providers: stageFourProviderReadiness(),
+      paymentInstructionsConfigured: Boolean(process.env.ORBIT_PAYMENT_INSTRUCTIONS?.trim()),
+      externalRuntimeEnabled: process.env.ORBIT_EXTERNAL_ACTIONS_ENABLED === "true",
+    };
     console.info("Stage 4 Autopilot worker completed", {
       completionPlanned: completionPlanner.planned,
       completionErrors: completionPlanner.errors,
@@ -144,9 +152,14 @@ async function handle(request: Request) {
       succeeded: result.succeeded,
       failed: result.failed,
       blocked: result.blocked,
+      gatewayConfigured: readiness.gatewayConfigured,
+      emailConfigured: readiness.providers.email.configured,
+      whatsappConfigured: readiness.providers.whatsapp.configured,
+      paymentInstructionsConfigured: readiness.paymentInstructionsConfigured,
+      externalRuntimeEnabled: readiness.externalRuntimeEnabled,
     });
     return NextResponse.json(
-      { ...result, completionPlanner },
+      { ...result, completionPlanner, readiness },
       {
         status: result.configured && completionPlanner.configured ? 200 : 503,
         headers: { "Cache-Control": "no-store" },
