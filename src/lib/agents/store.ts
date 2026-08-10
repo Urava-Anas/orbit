@@ -152,6 +152,7 @@ export async function enqueueAgentTask(
       run_id: request.runId,
       assigned_agent_id: agent.id,
       parent_task_id: request.parentTaskId ?? null,
+      capability_key: request.capabilityKey,
       task_type: request.taskType,
       title: request.title,
       status: request.riskLevel === "green" ? "queued" : "waiting_approval",
