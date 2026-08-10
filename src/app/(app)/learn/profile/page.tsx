@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { CurrentStudentPage } from "@/components/foundry/CurrentStudentPage";
+import { CurrentStudentExperience } from "@/components/foundry/CurrentStudentExperience";
 
 export const metadata: Metadata = {
-  title: "Profile · Urava Foundry",
+  title: "My Profile · Urava Foundry",
   robots: { index: false, follow: false },
 };
 
 export default function StudentProfilePage() {
-  return <CurrentStudentPage tab="profile" />;
+  return <CurrentStudentExperience section="profile" />;
 }
