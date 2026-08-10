@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { CurrentStudentPage } from "@/components/foundry/CurrentStudentPage";
+import { CurrentStudentExperience } from "@/components/foundry/CurrentStudentExperience";
 
 export const metadata: Metadata = {
-  title: "Aaj ka Task · Urava Foundry",
+  title: "Student Home · Urava Foundry",
   robots: { index: false, follow: false },
 };
 
@@ -10,7 +10,13 @@ type Props = {
   searchParams: Promise<{ notice?: string; error?: string }>;
 };
 
-export default async function StudentTodayPage({ searchParams }: Props) {
+export default async function StudentHomePage({ searchParams }: Props) {
   const query = await searchParams;
-  return <CurrentStudentPage error={query.error} notice={query.notice} tab="today" />;
+  return (
+    <CurrentStudentExperience
+      error={query.error}
+      notice={query.notice}
+      section="home"
+    />
+  );
 }
