@@ -109,6 +109,8 @@ export async function createJourneyTask(formData: FormData) {
   revalidatePath("/dashboard/foundry/tasks");
   revalidatePath("/dashboard/foundry/map");
   revalidatePath("/learn", "layout");
+  revalidatePath("/learn");
+  revalidatePath("/learn/tasks");
   revalidatePath("/learn/progress");
   redirect(
     `/dashboard/foundry/tasks?studentId=${parsed.data.studentId}&notice=${encodeURIComponent(

@@ -9,9 +9,7 @@ import {
   Gauge,
   House,
   Map,
-  Send,
   Sparkles,
-  Trophy,
   UserRound,
   UsersRound,
   Workflow,
@@ -29,11 +27,12 @@ const founderLinks = [
 ] as const;
 
 const studentLinks = [
-  { href: "/learn", label: "Today", icon: House },
-  { href: "/learn/learn", label: "Learn", icon: BookOpen },
-  { href: "/learn/notes", label: "Notes", icon: FileText },
-  { href: "/learn/submit", label: "Submit", icon: Send },
-  { href: "/learn/progress", label: "Map", icon: Trophy },
+  { href: "/learn", label: "Home", icon: House },
+  { href: "/learn/progress", label: "Map", icon: Map },
+  { href: "/learn/classes", label: "Classes", icon: CalendarDays },
+  { href: "/learn/resources", label: "Resources", icon: FileText },
+  { href: "/learn/tasks", label: "Tasks", icon: BookOpen },
+  { href: "/learn/studio", label: "Studio", icon: Sparkles },
   { href: "/learn/profile", label: "Profile", icon: UserRound },
 ] as const;
 
