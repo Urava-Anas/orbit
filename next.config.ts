@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
       { source: "/dashboard/cash", destination: "/dashboard/finance", permanent: true },
       { source: "/dashboard/connect", destination: "/dashboard/integrations", permanent: true },
 
+      { source: "/dashboard/leads/finder", destination: "/dashboard/lead-engine?tab=finder", permanent: true },
+      { source: "/dashboard/leads", destination: "/dashboard/lead-engine", permanent: true },
+      { source: "/dashboard/sales", destination: "/dashboard/lead-engine?tab=pipeline", permanent: true },
+
       { source: "/dashboard/foundry/attendance", destination: "/dashboard/development/attendance", permanent: true },
       { source: "/dashboard/foundry/classes", destination: "/dashboard/development/sessions", permanent: true },
       { source: "/dashboard/foundry/integrations", destination: "/dashboard/integrations", permanent: true },
@@ -53,6 +57,10 @@ const nextConfig: NextConfig = {
         { source: "/credentials/:token", destination: "/certificates/:token" },
         { source: "/dashboard/finance", destination: "/dashboard/cash" },
         { source: "/dashboard/integrations", destination: "/dashboard/connect" },
+
+        { source: "/dashboard/lead-engine", destination: "/lead-engine" },
+        { source: "/dashboard/lead-engine/sources/:source", destination: "/lead-engine/sources/:source" },
+        { source: "/dashboard/lead-engine/sources/:source/:asset", destination: "/lead-engine/sources/:source/:asset" },
 
         {
           source: "/dashboard/development",
@@ -115,6 +123,8 @@ const nextConfig: NextConfig = {
             key: "Cross-Origin-Opener-Policy",
             value: "same-origin",
           },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
         ],
       },
     ];
