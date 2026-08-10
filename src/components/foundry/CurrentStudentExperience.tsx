@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { StudentDailyHeartbeat } from "@/components/foundry/StudentDailyHeartbeat";
 import {
   StudentExperience,
   type StudentExperienceSection,
@@ -27,8 +28,14 @@ export async function CurrentStudentExperience({
     data.student.department,
   );
 
+  const checkpoints = [
+    "portal_opened" as const,
+    ...(section === "tasks" ? (["task_opened"] as const) : []),
+  ];
+
   return (
     <div className="student-portal-page">
+      <StudentDailyHeartbeat checkpoints={checkpoints} />
       <StudentExperience
         assignments={data.assignments}
         calendarMonth={calendarMonth}
