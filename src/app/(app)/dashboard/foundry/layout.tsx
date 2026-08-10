@@ -18,10 +18,10 @@ export default async function FoundryLayout({
         Skip to Founder Command
       </a>
       <header className="foundry-topline">
-        <Link className="foundry-brand" href="/dashboard/foundry">
+        <Link className="foundry-brand" href="/dashboard/development">
           <FoundryMiniMark />
           <span>
-            <small>Orbit · Founder workspace</small>
+            <small>Orbit · Development workspace</small>
             <strong>Urava Foundry</strong>
           </span>
         </Link>
