@@ -74,6 +74,9 @@ async function resolveAgentAndPermission(
     .single();
 
   throwDatabaseError("Resolve runtime agent", agentError);
+  if (!agent) {
+    throw new Error(`Agent ${agentKey} was not found.`);
+  }
   const runtimeAgent = agent as RuntimeAgentRow;
   if (runtimeAgent.status !== "active") {
     throw new Error(`Agent ${agentKey} is not active.`);
@@ -88,6 +91,9 @@ async function resolveAgentAndPermission(
     .single();
 
   throwDatabaseError(`Resolve permission ${capabilityKey}`, permissionError);
+  if (!permission) {
+    throw new Error(`Agent ${agentKey} has no permission for ${capabilityKey}.`);
+  }
   const runtimePermission = permission as PermissionRow;
   if (runtimePermission.effect !== "allow") {
     throw new Error(`Agent ${agentKey} is denied capability ${capabilityKey}.`);
@@ -285,6 +291,9 @@ export async function runFounderCommandDryRun(
       .select("*")
       .single();
     throwDatabaseError("Create agent approval", approvalError);
+    if (!approval) {
+      throw new Error("Agent approval was not returned after creation.");
+    }
 
     const { error: waitError } = await client
       .from("orbit_agent_runs")
@@ -335,6 +344,9 @@ export async function decideAgentApprovalDryRun(
     .eq("id", decision.approvalId)
     .single();
   throwDatabaseError("Resolve agent approval", error);
+  if (!data) {
+    throw new Error(`Approval ${decision.approvalId} was not found.`);
+  }
 
   const approval = data as ApprovalRow;
   if (approval.status !== "pending") {
