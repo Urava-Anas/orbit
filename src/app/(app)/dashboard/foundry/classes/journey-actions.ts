@@ -33,6 +33,7 @@ function revalidateClassSurfaces() {
   revalidatePath("/dashboard/foundry/classes");
   revalidatePath("/dashboard/foundry/map");
   revalidatePath("/learn");
+  revalidatePath("/learn/classes");
   revalidatePath("/learn/progress");
 }
 
