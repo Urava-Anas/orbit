@@ -4,6 +4,10 @@
   "outputDirectory": ".next",
   "crons": [
     {
+      "path": "/api/internal/autopilot-worker",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/internal/foundry-worker",
       "schedule": "0 2 * * *"
     }
