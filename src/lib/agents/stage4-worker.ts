@@ -376,8 +376,11 @@ async function planStageFourActions(admin: SupabaseClient) {
   return { planned, planningErrors, planningResults };
 }
 
-export async function runStageFourAutopilotWorker(limit = 8): Promise<WorkerResult> {
-  const admin = createAdminClient();
+export async function runStageFourAutopilotWorker(
+  limit = 8,
+  providedAdmin?: SupabaseClient,
+): Promise<WorkerResult> {
+  const admin = providedAdmin ?? createAdminClient();
   if (!admin) {
     return {
       configured: false,
