@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   Banknote,
   Building2,
-  Crosshair,
   FileCheck2,
   FolderKanban,
   GraduationCap,
@@ -14,18 +13,17 @@ import {
   MessageSquareText,
   PlugZap,
   Settings,
-  UsersRound,
+  Target,
 } from "lucide-react";
 
 const links = [
-  { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
-  { href: "/dashboard/development", label: "Foundry OS", icon: GraduationCap },
-  { href: "/dashboard/leads", label: "Growth", icon: UsersRound },
-  { href: "/dashboard/sales", label: "Sales Desk", icon: Crosshair },
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/dashboard/lead-engine", label: "Lead Engine", icon: Target },
   { href: "/dashboard/projects", label: "Projects", icon: FolderKanban },
   { href: "/dashboard/finance", label: "Finance", icon: Banknote },
-  { href: "/dashboard/proof", label: "Evidence", icon: FileCheck2 },
-  { href: "/dashboard/content", label: "Publishing", icon: MessageSquareText },
+  { href: "/dashboard/development", label: "Development", icon: GraduationCap },
+  { href: "/dashboard/content", label: "Content", icon: MessageSquareText },
+  { href: "/dashboard/proof", label: "Proof", icon: FileCheck2 },
   { href: "/dashboard/integrations", label: "Integrations", icon: PlugZap },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
