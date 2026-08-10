@@ -28,7 +28,8 @@ function fail(message: string): never {
 function revalidateNoteSurfaces() {
   revalidatePath("/dashboard/foundry/notes");
   revalidatePath("/dashboard/foundry/map");
-  revalidatePath("/learn/notes");
+  revalidatePath("/learn");
+  revalidatePath("/learn/resources");
   revalidatePath("/learn/progress");
 }
 
