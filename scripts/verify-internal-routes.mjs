@@ -4,6 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const appRoot = path.join(root, "src", "app");
 const sourceRoot = path.join(root, "src");
+const contractPath = path.join(root, "config", "orbit-production-routes.json");
 const pagePattern = /^page\.(tsx|ts|jsx|js)$/;
 const sourcePattern = /\.(tsx|ts|jsx|js)$/;
 
@@ -31,31 +32,8 @@ const implementationRoutes = walk(appRoot)
   .filter((file) => pagePattern.test(path.basename(file)))
   .map(routeFromPage);
 
-// Canonical public URLs implemented through Next rewrites while the legacy source
-// files remain available as compatibility implementations during migration.
-const canonicalRewriteRoutes = [
-  "/privacy",
-  "/credentials/[token]",
-  "/dashboard/finance",
-  "/dashboard/integrations",
-  "/dashboard/development",
-  "/dashboard/development/attendance",
-  "/dashboard/development/sessions",
-  "/dashboard/development/journey",
-  "/dashboard/development/notes",
-  "/dashboard/development/operations",
-  "/dashboard/people",
-  "/dashboard/people/[id]",
-  "/dashboard/reviews",
-  "/dashboard/tasks",
-  "/portal",
-  "/portal/sessions",
-  "/portal/profile",
-  "/portal/journey",
-  "/portal/resources",
-  "/portal/work",
-  "/portal/tasks",
-];
+const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+const canonicalRoutes = contract.routes ?? [];
 
 function routeRegex(route) {
   if (route === "/") return /^\/$/;
@@ -68,7 +46,7 @@ function routeRegex(route) {
   return new RegExp(`^/${parts.join("/")}/?$`);
 }
 
-const allKnownRoutes = [...implementationRoutes, ...canonicalRewriteRoutes];
+const allKnownRoutes = [...implementationRoutes, ...canonicalRoutes];
 const routeMatchers = allKnownRoutes.map((route) => ({ route, regex: routeRegex(route) }));
 
 function normalizeHref(value) {
@@ -117,5 +95,5 @@ if (missing.length) {
 }
 
 console.log(
-  `Orbit route integrity: ${references.length} static internal links checked against ${implementationRoutes.length} implementation routes + ${canonicalRewriteRoutes.length} canonical rewrite routes.`,
+  `Orbit route integrity: ${references.length} static internal links checked against ${implementationRoutes.length} implementation routes + ${canonicalRoutes.length} locked canonical routes.`,
 );
