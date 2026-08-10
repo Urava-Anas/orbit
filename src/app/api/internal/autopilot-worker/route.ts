@@ -1,8 +1,8 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { runStageFourCompletionPlanner } from "@/lib/agents/stage4-completion-planner";
 import { runStageFourAutopilotWorker } from "@/lib/agents/stage4-worker";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,23 +17,31 @@ function safeMatch(received: string, expected: string) {
 async function consumeSchedulerInvocation(request: Request) {
   const invocationId = request.headers.get("x-orbit-scheduler-invocation")?.trim();
   const token = request.headers.get("x-orbit-scheduler-token")?.trim();
-  if (!invocationId || !token || !/^[0-9a-f-]{36}$/i.test(invocationId) || token.length < 32) {
+  if (
+    !invocationId ||
+    !token ||
+    !/^[0-9a-f-]{36}$/i.test(invocationId) ||
+    !/^[0-9a-f]{64}$/i.test(token)
+  ) {
     return false;
   }
 
-  const admin = createAdminClient();
-  if (!admin) return false;
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const consumed = await admin
-    .from("orbit_scheduler_invocations")
-    .update({ used_at: new Date().toISOString() })
-    .eq("id", invocationId)
-    .eq("token_hash", tokenHash)
-    .is("used_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .select("id")
-    .maybeSingle();
-  return !consumed.error && Boolean(consumed.data?.id);
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_stage4_scheduler_invocation`, {
+      method: "POST",
+      headers: {
+        apikey: supabasePublishableKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_id: invocationId, p_token: token }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) return false;
+    return (await response.json().catch(() => false)) === true;
+  } catch {
+    return false;
+  }
 }
 
 async function authorised(request: Request) {
