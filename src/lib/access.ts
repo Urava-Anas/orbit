@@ -54,8 +54,8 @@ function normalizeAccessRow(value: unknown): OrbitAccessRow | null {
 }
 
 export function orbitHomePath(access: OrbitAccess) {
-  if (access.accountRole === "founder") return "/dashboard/foundry";
-  if (access.accountRole === "student") return "/learn";
+  if (access.accountRole === "founder") return "/dashboard";
+  if (access.accountRole === "student") return "/portal";
   return "/access-pending";
 }
 
@@ -111,7 +111,7 @@ export async function requireStudentAccess() {
   const { access } = context;
 
   if (access.accountRole === "founder") {
-    redirect("/dashboard/foundry");
+    redirect("/dashboard");
   }
 
   if (
