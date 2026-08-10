@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  StudentClassNotes,
-  type StudentClassNote,
-} from "@/components/foundry/StudentClassNotes";
+  StudentExperience,
+  type StudentExperienceSection,
+} from "@/components/foundry/StudentExperience";
 import {
-  StudentPortalView,
-  type StudentPortalTab,
-} from "@/components/foundry/StudentPortal";
+  StudentPreviewFrame,
+  type StudentPreviewSection,
+} from "@/components/foundry/StudentPreviewFrame";
 import { getFounderStudentPreview } from "@/lib/foundry";
+import { loadFoundryJourney } from "@/lib/foundry-journey";
 
 export const metadata: Metadata = {
   title: "Student View · Urava Foundry",
@@ -20,49 +20,35 @@ type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     tab?: string;
-    note?: string;
+    month?: string;
     notice?: string;
     error?: string;
     view?: string;
   }>;
 };
 
-const portalTabs: Array<{ tab: string; label: string }> = [
-  { tab: "today", label: "Today" },
-  { tab: "learn", label: "Learn" },
-  { tab: "submit", label: "Submit" },
-  { tab: "progress", label: "Map" },
-  { tab: "profile", label: "Profile" },
-  { tab: "notes", label: "Notes" },
-];
+const canonicalSections = new Set([
+  "home",
+  "map",
+  "classes",
+  "resources",
+  "tasks",
+  "studio",
+  "profile",
+]);
 
-const standardTabs = new Set(["today", "learn", "submit", "profile"]);
+const legacySections: Record<string, StudentPreviewSection> = {
+  today: "home",
+  learn: "tasks",
+  submit: "tasks",
+  progress: "map",
+  notes: "resources",
+};
 
-function PreviewNavigation({
-  active,
-  foundryId,
-  studentView = false,
-}: {
-  active: string;
-  foundryId: string;
-  studentView?: boolean;
-}) {
-  return (
-    <div className="student-preview-banner">
-      <span>{studentView ? "View as student" : "Admin controls"} · {foundryId}</span>
-      <nav aria-label="Student view navigation">
-        {portalTabs.map((item) => (
-          <Link
-            className={item.tab === active ? "is-active" : ""}
-            href={`?tab=${item.tab}${studentView ? "&view=student" : ""}`}
-            key={item.tab}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-    </div>
-  );
+function resolveSection(value?: string): StudentPreviewSection {
+  if (value && canonicalSections.has(value)) return value as StudentPreviewSection;
+  if (value && legacySections[value]) return legacySections[value];
+  return "home";
 }
 
 export default async function StudentPortalPreviewPage({
@@ -74,8 +60,8 @@ export default async function StudentPortalPreviewPage({
   const data = await getFounderStudentPreview(id);
   if (!data) notFound();
 
-  // One map only. Legacy/record-level map links resolve to the canonical map.
-  if (query.tab === "progress") {
+  const section = resolveSection(query.tab);
+  if (section === "map") {
     redirect(
       `/dashboard/foundry/map?studentId=${data.student.id}${
         query.view === "student" ? "&view=student" : ""
@@ -83,77 +69,41 @@ export default async function StudentPortalPreviewPage({
     );
   }
 
-  if (query.tab === "notes") {
-    const notesResult = await data.supabase
-      .from("foundry_class_learning_notes")
-      .select(
-        "id, class_title_snapshot, class_date, lesson_summary, key_concepts, student_notes, learning_state, understanding_level, student_progress_snapshot, progress_summary, support_note, next_step, resource_url, updated_at",
-      )
-      .eq("workspace_id", data.workspace.id)
-      .eq("student_id", data.student.id)
-      .order("class_date", { ascending: false });
-
-    const notes = (notesResult.data ?? []) as StudentClassNote[];
-    const studentView = query.view === "student";
-
-    return (
-      <div
-        className="student-portal-view is-preview"
-        style={{ width: "min(100%, 1080px)" }}
-      >
-        <PreviewNavigation
-          active="notes"
-          foundryId={data.student.foundry_id}
-          studentView={studentView}
-        />
-        <StudentClassNotes
-          journeyHref={studentView ? "?tab=progress&view=student" : "?tab=progress"}
-          notes={notes}
-          preview
-          selectedNoteId={query.note}
-          studentName={data.student.full_name}
-        />
-      </div>
-    );
-  }
-
-  const tab = standardTabs.has(query.tab ?? "")
-    ? (query.tab as StudentPortalTab)
-    : "today";
-
-  const availability = await data.supabase
-    .from("foundry_task_assignments")
-    .select("id")
-    .eq("workspace_id", data.workspace.id)
-    .eq("student_id", data.student.id)
-    .lte("starts_at", new Date().toISOString());
-  const availableIds = new Set((availability.data ?? []).map((item) => item.id));
-  const availableAssignments = data.assignments.filter((item) =>
-    availableIds.has(item.id),
+  const journey = await loadFoundryJourney(
+    data.supabase,
+    data.workspace.id,
+    data.student.id,
+    data.student.department,
   );
+  const unreadCount = data.notifications.filter((item) => !item.read_at).length;
+  const previewRoot = `/dashboard/foundry/students/${data.student.id}/portal`;
 
   return (
-    <div>
-      <PreviewNavigation
-        active={tab}
-        foundryId={data.student.foundry_id}
-        studentView={query.view === "student"}
-      />
-      <StudentPortalView
-        assignments={availableAssignments}
-        certificates={data.certificates}
-        classes={data.classes}
-        error={query.error}
-        notice={query.notice}
-        notifications={data.notifications}
-        preview
-        progress={data.progress}
-        skills={data.skills}
-        studioReviews={data.studioReviews}
-        student={data.student}
-        submissions={data.submissions}
-        tab={tab}
-      />
-    </div>
+    <StudentPreviewFrame
+      active={section}
+      foundryId={data.student.foundry_id}
+      studentId={data.student.id}
+      unreadCount={unreadCount}
+    >
+      <div className="student-portal-page">
+        <StudentExperience
+          assignments={data.assignments}
+          calendarMonth={query.month}
+          certificates={data.certificates}
+          error={query.error}
+          journey={journey}
+          notice={query.notice}
+          notifications={data.notifications}
+          preview
+          previewRoot={previewRoot}
+          progress={data.progress}
+          section={section as StudentExperienceSection}
+          skills={data.skills}
+          studioReviews={data.studioReviews}
+          student={data.student}
+          submissions={data.submissions}
+        />
+      </div>
+    </StudentPreviewFrame>
   );
 }
