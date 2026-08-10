@@ -451,7 +451,6 @@ export async function runStageFourAutopilotWorker(limit = 8): Promise<WorkerResu
       else if (status === "blocked") result.blocked += 1;
       else result.failed += 1;
       result.results.push({
-        actionRequestId,
         workspaceId: action.data.workspace_id,
         ...execution,
       });
