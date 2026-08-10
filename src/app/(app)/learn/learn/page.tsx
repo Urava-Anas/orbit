@@ -1,11 +1,5 @@
-import type { Metadata } from "next";
-import { CurrentStudentPage } from "@/components/foundry/CurrentStudentPage";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Learn · Urava Foundry",
-  robots: { index: false, follow: false },
-};
-
-export default function StudentLearnPage() {
-  return <CurrentStudentPage tab="learn" />;
+export default function LegacyStudentLearnPage() {
+  redirect("/learn/tasks");
 }
