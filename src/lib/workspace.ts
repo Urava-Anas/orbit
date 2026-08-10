@@ -7,7 +7,7 @@ export async function requireWorkspace() {
   const { access } = context;
 
   if (access.accountRole === "student") {
-    redirect("/learn");
+    redirect("/portal");
   }
 
   if (
