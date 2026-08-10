@@ -27,9 +27,35 @@ function routeFromPage(file) {
   return `/${segments.join("/")}`.replace(/\/+/g, "/");
 }
 
-const routes = walk(appRoot)
+const implementationRoutes = walk(appRoot)
   .filter((file) => pagePattern.test(path.basename(file)))
   .map(routeFromPage);
+
+// Canonical public URLs implemented through Next rewrites while the legacy source
+// files remain available as compatibility implementations during migration.
+const canonicalRewriteRoutes = [
+  "/privacy",
+  "/credentials/[token]",
+  "/dashboard/finance",
+  "/dashboard/integrations",
+  "/dashboard/development",
+  "/dashboard/development/attendance",
+  "/dashboard/development/sessions",
+  "/dashboard/development/journey",
+  "/dashboard/development/notes",
+  "/dashboard/development/operations",
+  "/dashboard/people",
+  "/dashboard/people/[id]",
+  "/dashboard/reviews",
+  "/dashboard/tasks",
+  "/portal",
+  "/portal/sessions",
+  "/portal/profile",
+  "/portal/journey",
+  "/portal/resources",
+  "/portal/work",
+  "/portal/tasks",
+];
 
 function routeRegex(route) {
   if (route === "/") return /^\/$/;
@@ -42,7 +68,8 @@ function routeRegex(route) {
   return new RegExp(`^/${parts.join("/")}/?$`);
 }
 
-const routeMatchers = routes.map((route) => ({ route, regex: routeRegex(route) }));
+const allKnownRoutes = [...implementationRoutes, ...canonicalRewriteRoutes];
+const routeMatchers = allKnownRoutes.map((route) => ({ route, regex: routeRegex(route) }));
 
 function normalizeHref(value) {
   const clean = value.split("#")[0].split("?")[0];
@@ -85,8 +112,10 @@ const missing = references.filter(
 if (missing.length) {
   console.error("\nOrbit route integrity audit failed. Missing internal routes:\n");
   for (const item of missing) console.error(`- ${item.href}  (${item.file})`);
-  console.error("\nFix the link or add an intentional canonical redirect page before deployment.\n");
+  console.error("\nFix the link or add an intentional canonical route before deployment.\n");
   process.exit(1);
 }
 
-console.log(`Orbit route integrity: ${references.length} static internal links checked against ${routes.length} app routes.`);
+console.log(
+  `Orbit route integrity: ${references.length} static internal links checked against ${implementationRoutes.length} implementation routes + ${canonicalRewriteRoutes.length} canonical rewrite routes.`,
+);
