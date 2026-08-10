@@ -20,19 +20,31 @@ export type StageFourGatewayResult = {
   errorCode: string | null;
 };
 
-function gatewayUrl() {
-  return process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_URL?.trim() || null;
+function automaticGatewayUrl() {
+  const host =
+    process.env.VERCEL_URL?.trim() ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  return host ? `https://${host}/api/internal/external-action-gateway` : null;
 }
 
-function gatewaySecret() {
-  return process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET?.trim() || null;
+export function stageFourGatewayUrl() {
+  return process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_URL?.trim() || automaticGatewayUrl();
+}
+
+export function stageFourGatewaySecret() {
+  return (
+    process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET?.trim() ||
+    process.env.ORBIT_AUTOPILOT_WORKER_SECRET?.trim() ||
+    process.env.CRON_SECRET?.trim() ||
+    null
+  );
 }
 
 export function isStageFourGatewayConfigured() {
   return Boolean(
     process.env.ORBIT_EXTERNAL_ACTIONS_ENABLED === "true" &&
-      gatewayUrl() &&
-      gatewaySecret(),
+      stageFourGatewayUrl() &&
+      stageFourGatewaySecret(),
   );
 }
 
@@ -76,8 +88,8 @@ export async function dispatchStageFourGateway(
     };
   }
 
-  const rawUrl = gatewayUrl();
-  const secret = gatewaySecret();
+  const rawUrl = stageFourGatewayUrl();
+  const secret = stageFourGatewaySecret();
   if (!rawUrl || !secret) {
     return {
       ok: false,
