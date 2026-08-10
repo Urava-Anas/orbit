@@ -27,7 +27,11 @@ function stableUuid(seed: string) {
 }
 
 function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
+  const trimmed = value.trim().toLowerCase();
+  const angle = trimmed.match(/<([^<>\s]+@[^<>\s]+)>/);
+  if (angle?.[1]) return angle[1];
+  const bare = trimmed.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+  return bare?.[0]?.toLowerCase() ?? trimmed;
 }
 
 function normalizePhone(value: string) {
