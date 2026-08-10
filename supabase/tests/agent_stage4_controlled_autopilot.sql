@@ -14,7 +14,7 @@ declare
   opp_id uuid;
   run_id uuid;
   task_id uuid;
-  approval_id uuid;
+  v_approval_id uuid;
   config_id uuid;
   action_id uuid;
   calls_before bigint;
@@ -103,7 +103,7 @@ begin
   ) values(
     w,run_id,task_id,agent_id,'red','growth.outreach_send',jsonb_build_object('stage',4),
     'pending','founder',now()+interval '1 day'
-  ) returning id into approval_id;
+  ) returning id into v_approval_id;
 
   insert into public.orbit_external_action_requests(
     workspace_id,opportunity_id,run_id,task_id,agent_id,capability_key,authority_level,
@@ -113,7 +113,7 @@ begin
     w,opp_id,run_id,task_id,agent_id,'growth.outreach_send','red','email','stage4@example.test',
     jsonb_build_object('outreachDraftId',gen_random_uuid()),
     jsonb_build_object('type','message','body','Synthetic acceptance payload only.'),
-    repeat('a',64),'waiting_approval','manual',approval_id,'stage4:acceptance:action',u
+    repeat('a',64),'waiting_approval','manual',v_approval_id,'stage4:acceptance:action',u
   ) returning id into action_id;
 
   begin
@@ -123,7 +123,7 @@ begin
       idempotency_key,created_by
     ) values(
       w,opp_id,run_id,task_id,agent_id,'growth.outreach_send','red','email','stage4@example.test',
-      '{}'::jsonb,'{}'::jsonb,repeat('b',64),'waiting_approval','manual',approval_id,
+      '{}'::jsonb,'{}'::jsonb,repeat('b',64),'waiting_approval','manual',v_approval_id,
       'stage4:acceptance:action',u
     );
     raise exception 'Stage 4 duplicate idempotency key was accepted';
@@ -131,9 +131,9 @@ begin
   end;
 
   if not exists(
-    select 1 from public.orbit_external_action_requests
-    where id=action_id and status='waiting_approval' and approval_source='manual'
-      and char_length(payload_hash)=64 and approval_id is not null
+    select 1 from public.orbit_external_action_requests r
+    where r.id=action_id and r.status='waiting_approval' and r.approval_source='manual'
+      and char_length(r.payload_hash)=64 and r.approval_id is not null
   ) then
     raise exception 'Stage 4 action queue/approval linkage invariant failed';
   end if;
