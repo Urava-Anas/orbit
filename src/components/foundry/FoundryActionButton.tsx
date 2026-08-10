@@ -6,28 +6,31 @@ import { useFormStatus } from "react-dom";
 
 type FoundryActionButtonProps = {
   children: ReactNode;
-  className: string;
+  className?: string;
   pendingLabel: string;
   name?: string;
   value?: string;
+  disabled?: boolean;
 };
 
 export function FoundryActionButton({
   children,
-  className,
+  className = "",
   pendingLabel,
   name,
   value,
+  disabled = false,
 }: FoundryActionButtonProps) {
   const { data, pending } = useFormStatus();
   const isSubmittingButton =
     pending && (!name || data?.get(name)?.toString() === value);
+  const isDisabled = pending || disabled;
 
   return (
     <button
-      aria-disabled={pending}
+      aria-disabled={isDisabled}
       className={`${className}${pending ? " is-pending" : ""}`}
-      disabled={pending}
+      disabled={isDisabled}
       name={name}
       type="submit"
       value={value}
