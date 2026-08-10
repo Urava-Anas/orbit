@@ -67,12 +67,12 @@ async function planPaymentRequest(
   workspaceId: string,
   ownerId: string,
   opportunity: Opportunity,
+  paymentInstructions: string | null,
 ) {
   if (await existingAction(admin, workspaceId, opportunity.id, "cash.payment_request")) {
     return { planned: false, reason: "payment_request_exists" };
   }
-  const paymentInstructions = process.env.ORBIT_PAYMENT_INSTRUCTIONS?.trim();
-  if (!paymentInstructions) {
+  if (!paymentInstructions?.trim()) {
     return { planned: false, reason: "payment_instructions_not_configured" };
   }
   const onboarding = await admin
@@ -96,7 +96,7 @@ async function planPaymentRequest(
     capabilityKey: "cash.payment_request",
     artifactId: onboarding.data.id,
     channel,
-    paymentInstructions,
+    paymentInstructions: paymentInstructions.trim(),
     idempotencyKey: `stage4:${opportunity.id}:payment-request:${onboarding.data.id}`,
   });
   return { planned: true, request };
@@ -167,7 +167,7 @@ export async function runStageFourCompletionPlanner(
   const result: PlannerResult = { configured: true, planned: 0, skipped: 0, errors: 0, results: [] };
   const configs = await admin
     .from("orbit_autopilot_configs")
-    .select("workspace_id")
+    .select("workspace_id,payment_instructions")
     .in("state", ["running", "degraded"]);
   if (configs.error) throw new Error(`Load Stage 4 completion planner workspaces: ${configs.error.message}`);
 
@@ -199,7 +199,13 @@ export async function runStageFourCompletionPlanner(
     for (const opportunity of (opportunities.data ?? []) as Opportunity[]) {
       try {
         const plannedResult = opportunity.current_state === "payment_pending"
-          ? await planPaymentRequest(admin, config.workspace_id, workspace.data.owner_id, opportunity)
+          ? await planPaymentRequest(
+              admin,
+              config.workspace_id,
+              workspace.data.owner_id,
+              opportunity,
+              typeof config.payment_instructions === "string" ? config.payment_instructions : null,
+            )
           : await planProjectActivation(admin, config.workspace_id, workspace.data.owner_id, opportunity);
         if (plannedResult.planned) result.planned += 1;
         else result.skipped += 1;
