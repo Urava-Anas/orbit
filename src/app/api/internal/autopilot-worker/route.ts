@@ -23,14 +23,19 @@ function authorised(request: Request) {
     if (secrets.some((secret) => safeMatch(received, `Bearer ${secret}`))) return true;
   }
 
-  const serviceSecret =
-    process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   const serviceAuth = request.headers.get("x-orbit-service-auth");
-  if (!serviceSecret || !serviceAuth) return false;
-  const expected = createHmac("sha256", serviceSecret)
-    .update("orbit-stage4-worker:v1")
-    .digest("hex");
-  return safeMatch(serviceAuth, expected);
+  if (!serviceAuth) return false;
+  const serviceIdentities = [
+    process.env.SUPABASE_SECRET_KEY,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+  ].filter((secret): secret is string => Boolean(secret));
+
+  return serviceIdentities.some((serviceSecret) => {
+    const expected = createHmac("sha256", serviceSecret)
+      .update("orbit-stage4-worker:v1")
+      .digest("hex");
+    return safeMatch(serviceAuth, expected);
+  });
 }
 
 async function handle(request: Request) {
