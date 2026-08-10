@@ -40,8 +40,10 @@ function succeed(path: string, message: string): never {
   revalidatePath("/dashboard/foundry/notes");
   revalidatePath("/dashboard/foundry/map");
   revalidatePath("/learn", "layout");
-  revalidatePath("/learn/notes");
+  revalidatePath("/learn");
+  revalidatePath("/learn/resources");
   revalidatePath("/learn/progress");
+  revalidatePath("/learn/profile");
   const separator = path.includes("?") ? "&" : "?";
   redirect(`${path}${separator}notice=${encodeURIComponent(message)}`);
 }
