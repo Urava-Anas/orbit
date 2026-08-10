@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Map as MapIcon, UsersRound } from "lucide-react";
+import { ArrowUpRight, Map as MapIcon, UsersRound } from "lucide-react";
 import { EmptyFoundryState } from "@/components/foundry/FoundryUI";
 import { StudentLearningMap } from "@/components/foundry/StudentLearningMap";
+import { StudentPreviewFrame } from "@/components/foundry/StudentPreviewFrame";
 import {
   foundryDepartmentLabel,
   requireFounderFoundry,
@@ -96,21 +97,28 @@ export default async function FoundryMapPage({ searchParams }: Props) {
     : null;
 
   if (selectedEntry && query.view === "student") {
+    const unreadResult = await supabase
+      .from("foundry_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspace.id)
+      .eq("student_id", selectedEntry.student.id)
+      .is("read_at", null);
+
     return (
-      <div className="foundry-page">
-        <Link
-          className="foundry-back-inline"
-          href={`/dashboard/foundry/map?studentId=${selectedEntry.student.id}`}
-        >
-          <ArrowLeft aria-hidden="true" size={16} />
-          Back to admin map
-        </Link>
-        <StudentLearningMap
-          journey={selectedEntry.journey}
-          mode="student"
-          student={selectedEntry.student}
-        />
-      </div>
+      <StudentPreviewFrame
+        active="map"
+        foundryId={selectedEntry.student.foundry_id}
+        studentId={selectedEntry.student.id}
+        unreadCount={unreadResult.count ?? 0}
+      >
+        <div className="student-portal-page">
+          <StudentLearningMap
+            journey={selectedEntry.journey}
+            mode="student"
+            student={selectedEntry.student}
+          />
+        </div>
+      </StudentPreviewFrame>
     );
   }
 
@@ -167,9 +175,7 @@ export default async function FoundryMapPage({ searchParams }: Props) {
                 </span>
                 <div>
                   <strong>{student.full_name}</strong>
-                  <p>
-                    {student.foundry_id} · {foundryDepartmentLabel(student.department)}
-                  </p>
+                  <p>{student.foundry_id} · {foundryDepartmentLabel(student.department)}</p>
                 </div>
                 <span className="task-state task-state-scheduled">Level {currentLevel}</span>
                 <ArrowUpRight aria-hidden="true" size={17} />
