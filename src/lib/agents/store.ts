@@ -34,6 +34,9 @@ export async function registerAgentDefinition(
       .single();
 
     throwDatabaseError("Resolve supervisor agent", error);
+    if (!data) {
+      throw new Error(`Supervisor agent ${definition.supervisorKey} was not found.`);
+    }
     supervisorAgentId = (data as AgentRow).id;
   }
 
@@ -65,6 +68,9 @@ export async function registerAgentDefinition(
     .single();
 
   throwDatabaseError("Register agent", agentError);
+  if (!agent) {
+    throw new Error(`Agent ${definition.key} was not returned after registration.`);
+  }
   const agentId = (agent as AgentRow).id;
 
   for (const capability of definition.capabilities) {
@@ -103,6 +109,9 @@ export async function createAgentRun(
     .single();
 
   throwDatabaseError("Resolve run agent", agentError);
+  if (!agent) {
+    throw new Error(`Agent ${request.agentKey} was not found.`);
+  }
   if (agent.status !== "active") {
     throw new Error(`Agent ${request.agentKey} is not active.`);
   }
@@ -123,6 +132,9 @@ export async function createAgentRun(
     .single();
 
   throwDatabaseError("Create agent run", runError);
+  if (!run) {
+    throw new Error("Agent run was not returned after creation.");
+  }
   return run;
 }
 
@@ -141,6 +153,9 @@ export async function enqueueAgentTask(
     .single();
 
   throwDatabaseError("Resolve task agent", agentError);
+  if (!agent) {
+    throw new Error(`Agent ${request.assignedAgentKey} was not found.`);
+  }
   if (agent.status !== "active") {
     throw new Error(`Agent ${request.assignedAgentKey} is not active.`);
   }
@@ -165,6 +180,9 @@ export async function enqueueAgentTask(
     .single();
 
   throwDatabaseError("Enqueue agent task", taskError);
+  if (!task) {
+    throw new Error("Agent task was not returned after enqueue.");
+  }
   return task;
 }
 
