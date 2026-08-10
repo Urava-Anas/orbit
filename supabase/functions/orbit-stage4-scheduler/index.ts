@@ -14,20 +14,40 @@ function toHex(buffer: ArrayBuffer) {
     .join("");
 }
 
-async function serviceAuth(secret: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode("orbit-stage4-worker:v1"),
-  );
-  return toHex(signature);
+function randomToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return toHex(digest);
+}
+
+async function mintInvocation(supabaseUrl: string, serviceRole: string) {
+  const token = randomToken();
+  const tokenHash = await sha256(token);
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+  const response = await fetch(`${supabaseUrl}/rest/v1/orbit_scheduler_invocations`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRole,
+      Authorization: `Bearer ${serviceRole}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({ token_hash: tokenHash, expires_at: expiresAt }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const rows = (await response.json().catch(() => [])) as Array<{ id?: string }>;
+  const id = rows[0]?.id;
+  if (!response.ok || !id) {
+    throw new Error(`Scheduler invocation mint failed with HTTP ${response.status}.`);
+  }
+  return { id, token };
 }
 
 Deno.serve(async (request: Request) => {
@@ -39,7 +59,8 @@ Deno.serve(async (request: Request) => {
   }
 
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
-  if (!serviceRole) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (!serviceRole || !supabaseUrl) {
     return new Response(JSON.stringify({ error: "Scheduler service identity is unavailable." }), {
       status: 503,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
@@ -55,15 +76,16 @@ Deno.serve(async (request: Request) => {
   }
 
   try {
-    const auth = await serviceAuth(serviceRole);
+    const invocation = await mintInvocation(supabaseUrl, serviceRole);
     const response = await fetch(workerUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Orbit-Service-Auth": auth,
+        "X-Orbit-Scheduler-Invocation": invocation.id,
+        "X-Orbit-Scheduler-Token": invocation.token,
         "User-Agent": "Orbit-Supabase-Stage4-Scheduler/1.0",
       },
-      body: JSON.stringify({ source: "supabase_scheduler", version: 1 }),
+      body: JSON.stringify({ source: "supabase_scheduler", version: 2 }),
       signal: AbortSignal.timeout(55_000),
     });
 
