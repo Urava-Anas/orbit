@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import {
   TbActivity,
@@ -26,11 +27,11 @@ const navigation: Array<{
   badge?: string;
   comingSoon?: boolean;
 }> = [
-  { label: "Lead Engine", icon: TbTargetArrow, href: "/lead-engine" },
+  { label: "Lead Engine", icon: TbTargetArrow, href: "/dashboard/lead-engine" },
   { label: "Overview", icon: TbLayoutDashboard, href: "/dashboard" },
-  { label: "Inbox", icon: TbMail, href: "/dashboard/leads", badge: "6" },
-  { label: "Studio", icon: TbBriefcase2, href: "/dashboard/projects" },
-  { label: "Foundry", icon: TbStack2, href: "/dashboard/foundry" },
+  { label: "Inbox", icon: TbMail, href: "/dashboard/lead-engine", badge: "6" },
+  { label: "Projects", icon: TbBriefcase2, href: "/dashboard/projects" },
+  { label: "Development", icon: TbStack2, href: "/dashboard/development" },
   { label: "Labs", icon: TbFlask2 },
   { label: "Proof", icon: TbShieldCheck, href: "/dashboard/proof" },
   { label: "Policies", icon: TbFileDescription },
@@ -38,7 +39,9 @@ const navigation: Array<{
 ];
 
 export function LeadEnginePageShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [toast, setToast] = useState<string | null>(null);
+  const embedded = pathname.startsWith("/dashboard/lead-engine");
 
   useEffect(() => {
     if (!toast) return;
@@ -46,10 +49,26 @@ export function LeadEnginePageShell({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const toastNode = (
+    <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite">
+      <TbActivity aria-hidden />
+      {toast}
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        {children}
+        {toastNode}
+      </>
+    );
+  }
+
   return (
     <div className={styles.shell}>
       <aside className={styles.sidebar} aria-label="Orbit navigation">
-        <Link className={styles.brand} href="/lead-engine" aria-label="Orbit Lead Engine home">
+        <Link className={styles.brand} href="/dashboard/lead-engine" aria-label="Orbit Lead Engine home">
           <LuOrbit className={styles.brandIcon} aria-hidden />
           <span>Orbit</span>
         </Link>
@@ -98,25 +117,17 @@ export function LeadEnginePageShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <button
-            className={styles.organisation}
-            type="button"
-            onClick={() => setToast("Organisation switcher is disabled in the public preview.")}
-          >
-            <span>Urava Studio</span>
-            <small>Founder</small>
-          </button>
-          <p>Public product preview</p>
-          <p>Demo data only</p>
+          <Link className={styles.organisation} href="/organisations/select">
+            <span>Organisation</span>
+            <small>Switch workspace</small>
+          </Link>
+          <p>Orbit workspace</p>
+          <p>Role-scoped access</p>
         </div>
       </aside>
 
       <main className={styles.main}>{children}</main>
-
-      <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite">
-        <TbActivity aria-hidden />
-        {toast}
-      </div>
+      {toastNode}
     </div>
   );
 }
