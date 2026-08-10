@@ -15,9 +15,12 @@ const nextConfig: NextConfig = {
       { source: "/dashboard/cash", destination: "/dashboard/finance", permanent: true },
       { source: "/dashboard/connect", destination: "/dashboard/integrations", permanent: true },
 
-      { source: "/dashboard/leads/finder", destination: "/dashboard/lead-engine?tab=finder", permanent: true },
+      { source: "/dashboard/leads/finder", destination: "/dashboard/lead-engine#lead-finder", permanent: true },
       { source: "/dashboard/leads", destination: "/dashboard/lead-engine", permanent: true },
-      { source: "/dashboard/sales", destination: "/dashboard/lead-engine?tab=pipeline", permanent: true },
+      { source: "/dashboard/sales", destination: "/dashboard/lead-engine?view=pipeline", permanent: true },
+      { source: "/lead-engine/sources/:source/:asset", destination: "/dashboard/lead-engine/sources/:source/:asset", permanent: true },
+      { source: "/lead-engine/sources/:source", destination: "/dashboard/lead-engine/sources/:source", permanent: true },
+      { source: "/lead-engine", destination: "/dashboard/lead-engine", permanent: true },
 
       { source: "/dashboard/foundry/attendance", destination: "/dashboard/development/attendance", permanent: true },
       { source: "/dashboard/foundry/classes", destination: "/dashboard/development/sessions", permanent: true },
@@ -57,10 +60,6 @@ const nextConfig: NextConfig = {
         { source: "/credentials/:token", destination: "/certificates/:token" },
         { source: "/dashboard/finance", destination: "/dashboard/cash" },
         { source: "/dashboard/integrations", destination: "/dashboard/connect" },
-
-        { source: "/dashboard/lead-engine", destination: "/lead-engine" },
-        { source: "/dashboard/lead-engine/sources/:source", destination: "/lead-engine/sources/:source" },
-        { source: "/dashboard/lead-engine/sources/:source/:asset", destination: "/lead-engine/sources/:source/:asset" },
 
         {
           source: "/dashboard/development",
