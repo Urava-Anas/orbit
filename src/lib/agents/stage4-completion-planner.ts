@@ -158,8 +158,10 @@ async function planProjectActivation(
   return { planned: true, request };
 }
 
-export async function runStageFourCompletionPlanner(): Promise<PlannerResult> {
-  const admin = createAdminClient();
+export async function runStageFourCompletionPlanner(
+  providedAdmin?: SupabaseClient,
+): Promise<PlannerResult> {
+  const admin = providedAdmin ?? createAdminClient();
   if (!admin) return { configured: false, planned: 0, skipped: 0, errors: 0, results: [] };
 
   const result: PlannerResult = { configured: true, planned: 0, skipped: 0, errors: 0, results: [] };
