@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getStageFourExecutionClient } from "@/lib/agents/stage4-execution-context";
+import { dispatchStageFourProviderGoverned } from "@/lib/agents/stage4-provider-dispatch";
 
 export type StageFourGatewayEnvelope = {
   requestId: string;
@@ -41,11 +43,9 @@ export function stageFourGatewaySecret() {
 }
 
 export function isStageFourGatewayConfigured() {
-  return Boolean(
-    process.env.ORBIT_EXTERNAL_ACTIONS_ENABLED === "true" &&
-      stageFourGatewayUrl() &&
-      stageFourGatewaySecret(),
-  );
+  // Stage 4's primary production path is the governed in-process provider dispatcher.
+  // The signed HTTP gateway remains as a compatibility fallback only.
+  return true;
 }
 
 export function signStageFourGatewayBody(body: string, secret: string) {
@@ -75,7 +75,7 @@ function validateGatewayUrl(raw: string) {
   return url;
 }
 
-export async function dispatchStageFourGateway(
+async function dispatchLegacyHttpGateway(
   envelope: StageFourGatewayEnvelope,
 ): Promise<StageFourGatewayResult> {
   if (process.env.ORBIT_EXTERNAL_ACTIONS_ENABLED !== "true") {
@@ -83,7 +83,7 @@ export async function dispatchStageFourGateway(
       ok: false,
       provider: "orbit_gateway",
       providerRequestId: null,
-      responseSummary: { blocked: true, reason: "ORBIT_EXTERNAL_ACTIONS_ENABLED is not true." },
+      responseSummary: { blocked: true, reason: "Legacy HTTP gateway is not enabled." },
       errorCode: "external_actions_disabled",
     };
   }
@@ -95,7 +95,7 @@ export async function dispatchStageFourGateway(
       ok: false,
       provider: "orbit_gateway",
       providerRequestId: null,
-      responseSummary: { blocked: true, reason: "External gateway URL or secret is missing." },
+      responseSummary: { blocked: true, reason: "Legacy external gateway URL or secret is missing." },
       errorCode: "gateway_not_configured",
     };
   }
@@ -160,10 +160,7 @@ export async function dispatchStageFourGateway(
         ok: false,
         provider,
         providerRequestId,
-        responseSummary: {
-          status: response.status,
-          ...responsePayload,
-        },
+        responseSummary: { status: response.status, ...responsePayload },
         errorCode:
           typeof responsePayload.errorCode === "string"
             ? responsePayload.errorCode.slice(0, 120)
@@ -175,10 +172,7 @@ export async function dispatchStageFourGateway(
       ok: true,
       provider,
       providerRequestId,
-      responseSummary: {
-        status: response.status,
-        ...responsePayload,
-      },
+      responseSummary: { status: response.status, ...responsePayload },
       errorCode: null,
     };
   } catch (error) {
@@ -192,4 +186,14 @@ export async function dispatchStageFourGateway(
       errorCode: "gateway_transport_error",
     };
   }
+}
+
+export async function dispatchStageFourGateway(
+  envelope: StageFourGatewayEnvelope,
+): Promise<StageFourGatewayResult> {
+  const executionClient = getStageFourExecutionClient();
+  if (executionClient) {
+    return dispatchStageFourProviderGoverned(executionClient, envelope);
+  }
+  return dispatchLegacyHttpGateway(envelope);
 }
