@@ -12,6 +12,18 @@ set module_key = excluded.module_key,
     description = excluded.description,
     risk_level = excluded.risk_level;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.lead_finder_results'::regclass
+      and conname = 'lead_finder_results_workspace_id_id_key'
+  ) then
+    alter table public.lead_finder_results
+      add constraint lead_finder_results_workspace_id_id_key unique (workspace_id, id);
+  end if;
+end $$;
+
 create table if not exists public.orbit_lead_intelligence (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
@@ -100,55 +112,30 @@ create table if not exists public.orbit_outreach_drafts (
     references public.orbit_agents(workspace_id, id) on delete restrict
 );
 
-create index if not exists orbit_lead_intelligence_lead_idx
-  on public.orbit_lead_intelligence(workspace_id, lead_id, created_at desc);
-create index if not exists orbit_lead_intelligence_finder_idx
-  on public.orbit_lead_intelligence(workspace_id, finder_result_id)
-  where finder_result_id is not null;
-create index if not exists orbit_lead_intelligence_run_idx
-  on public.orbit_lead_intelligence(workspace_id, run_id);
-create index if not exists orbit_lead_intelligence_agent_idx
-  on public.orbit_lead_intelligence(workspace_id, agent_id);
-create index if not exists orbit_lead_intelligence_created_by_idx
-  on public.orbit_lead_intelligence(created_by);
+create index if not exists orbit_lead_intelligence_lead_idx on public.orbit_lead_intelligence(workspace_id, lead_id, created_at desc);
+create index if not exists orbit_lead_intelligence_finder_idx on public.orbit_lead_intelligence(workspace_id, finder_result_id) where finder_result_id is not null;
+create index if not exists orbit_lead_intelligence_run_idx on public.orbit_lead_intelligence(workspace_id, run_id);
+create index if not exists orbit_lead_intelligence_agent_idx on public.orbit_lead_intelligence(workspace_id, agent_id);
+create index if not exists orbit_lead_intelligence_created_by_idx on public.orbit_lead_intelligence(created_by);
+create index if not exists orbit_outreach_drafts_lead_idx on public.orbit_outreach_drafts(workspace_id, lead_id, created_at desc);
+create index if not exists orbit_outreach_drafts_intelligence_idx on public.orbit_outreach_drafts(workspace_id, intelligence_id);
+create index if not exists orbit_outreach_drafts_run_idx on public.orbit_outreach_drafts(workspace_id, run_id);
+create index if not exists orbit_outreach_drafts_agent_idx on public.orbit_outreach_drafts(workspace_id, agent_id);
+create index if not exists orbit_outreach_drafts_created_by_idx on public.orbit_outreach_drafts(created_by);
 
-create index if not exists orbit_outreach_drafts_lead_idx
-  on public.orbit_outreach_drafts(workspace_id, lead_id, created_at desc);
-create index if not exists orbit_outreach_drafts_intelligence_idx
-  on public.orbit_outreach_drafts(workspace_id, intelligence_id);
-create index if not exists orbit_outreach_drafts_run_idx
-  on public.orbit_outreach_drafts(workspace_id, run_id);
-create index if not exists orbit_outreach_drafts_agent_idx
-  on public.orbit_outreach_drafts(workspace_id, agent_id);
-create index if not exists orbit_outreach_drafts_created_by_idx
-  on public.orbit_outreach_drafts(created_by);
-
-create trigger orbit_outreach_drafts_set_updated_at
-before update on public.orbit_outreach_drafts
-for each row execute function private.set_updated_at();
+create trigger orbit_outreach_drafts_set_updated_at before update on public.orbit_outreach_drafts for each row execute function private.set_updated_at();
 
 alter table public.orbit_lead_intelligence enable row level security;
 alter table public.orbit_outreach_drafts enable row level security;
 
-create policy orbit_lead_intelligence_select_member on public.orbit_lead_intelligence
-for select using ((select private.is_workspace_member(workspace_id)));
-create policy orbit_lead_intelligence_insert_admin on public.orbit_lead_intelligence
-for insert with check ((select private.is_workspace_admin(workspace_id)));
-create policy orbit_lead_intelligence_update_admin on public.orbit_lead_intelligence
-for update using ((select private.is_workspace_admin(workspace_id)))
-with check ((select private.is_workspace_admin(workspace_id)));
-create policy orbit_lead_intelligence_delete_admin on public.orbit_lead_intelligence
-for delete using ((select private.is_workspace_admin(workspace_id)));
-
-create policy orbit_outreach_drafts_select_member on public.orbit_outreach_drafts
-for select using ((select private.is_workspace_member(workspace_id)));
-create policy orbit_outreach_drafts_insert_admin on public.orbit_outreach_drafts
-for insert with check ((select private.is_workspace_admin(workspace_id)));
-create policy orbit_outreach_drafts_update_admin on public.orbit_outreach_drafts
-for update using ((select private.is_workspace_admin(workspace_id)))
-with check ((select private.is_workspace_admin(workspace_id)));
-create policy orbit_outreach_drafts_delete_admin on public.orbit_outreach_drafts
-for delete using ((select private.is_workspace_admin(workspace_id)));
+create policy orbit_lead_intelligence_select_member on public.orbit_lead_intelligence for select using ((select private.is_workspace_member(workspace_id)));
+create policy orbit_lead_intelligence_insert_admin on public.orbit_lead_intelligence for insert with check ((select private.is_workspace_admin(workspace_id)));
+create policy orbit_lead_intelligence_update_admin on public.orbit_lead_intelligence for update using ((select private.is_workspace_admin(workspace_id))) with check ((select private.is_workspace_admin(workspace_id)));
+create policy orbit_lead_intelligence_delete_admin on public.orbit_lead_intelligence for delete using ((select private.is_workspace_admin(workspace_id)));
+create policy orbit_outreach_drafts_select_member on public.orbit_outreach_drafts for select using ((select private.is_workspace_member(workspace_id)));
+create policy orbit_outreach_drafts_insert_admin on public.orbit_outreach_drafts for insert with check ((select private.is_workspace_admin(workspace_id)));
+create policy orbit_outreach_drafts_update_admin on public.orbit_outreach_drafts for update using ((select private.is_workspace_admin(workspace_id))) with check ((select private.is_workspace_admin(workspace_id)));
+create policy orbit_outreach_drafts_delete_admin on public.orbit_outreach_drafts for delete using ((select private.is_workspace_admin(workspace_id)));
 
 revoke all on table public.orbit_lead_intelligence from anon;
 revoke all on table public.orbit_outreach_drafts from anon;
