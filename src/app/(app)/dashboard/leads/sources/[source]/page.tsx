@@ -28,6 +28,7 @@ import {
 } from "../actions";
 import styles from "../../leads.module.css";
 import assetStyles from "./source-assets.module.css";
+import { WebsitePreview } from "./WebsitePreview";
 
 const sources = {
   website: { label: "Website", aliases: ["website"], description: "Website enquiries, forms and conversion-originated opportunities.", defaultType: "website" },
@@ -69,7 +70,8 @@ type PageProps = {
 export async function generateMetadata({ params }: { params: Promise<{ source: string }> }): Promise<Metadata> {
   const { source } = await params;
   const config = sources[source as SourceSlug];
-  return { title: config ? `${config.label} — Lead Engine` : "Lead Source — Lead Engine", robots: { index: false, follow: false } };
+  const title = source === "website" ? "Website Manager — Lead Engine" : config ? `${config.label} — Lead Engine` : "Lead Source — Lead Engine";
+  return { title, robots: { index: false, follow: false } };
 }
 
 function initials(lead: Lead) {
@@ -85,6 +87,15 @@ function statusClass(status: SourceAsset["status"]) {
   if (status === "active") return assetStyles.active;
   if (status === "paused") return assetStyles.paused;
   return assetStyles.disconnected;
+}
+
+function siteHost(url: string | null) {
+  if (!url) return "No domain";
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
 function AssetFields({ asset, source, defaultType }: { asset?: SourceAsset; source: SourceSlug; defaultType: string }) {
@@ -110,6 +121,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
   const config = sources[source as SourceSlug];
   if (!config) notFound();
   const sourceSlug = source as SourceSlug;
+  const isWebsiteManager = sourceSlug === "website";
 
   const { supabase, workspace } = await requireWorkspace();
   const [leadResult, assetResult] = await Promise.all([
@@ -143,89 +155,182 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
       <header className={styles.sourceWorkspaceHeader}>
         <div>
           <Link href="/dashboard/leads"><ArrowLeft size={14} aria-hidden="true" /> Lead Engine</Link>
-          <h1>{config.label}</h1>
-          <p>{config.description}</p>
+          <h1>{isWebsiteManager ? "Website Manager" : config.label}</h1>
+          <p>{isWebsiteManager ? "Preview, manage and control the websites that feed Orbit's Lead Engine." : config.description}</p>
         </div>
         <div className={assetStyles.headerActions}>
           <Link className={assetStyles.technicalButton} href="/dashboard/connect"><Link2 size={14} /> Technical connection</Link>
-          <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add account / site</a>
+          <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> {isWebsiteManager ? "Add website" : "Add account / site"}</a>
         </div>
       </header>
 
       <Notice error={query.error} notice={query.notice} />
 
-      <section className={styles.sourceStats}>
-        <article className={styles.sourceStat}><span>Total leads</span><strong>{leads.length}</strong><small>All records from this source</small></article>
-        <article className={styles.sourceStat}><span>Managed sources</span><strong>{assets.length}</strong><small>{activeAssets} active account{activeAssets === 1 ? "" : "s"} / link{activeAssets === 1 ? "" : "s"}</small></article>
-        <article className={styles.sourceStat}><span>Hot leads</span><strong>{hot.length}</strong><small>Score 85 or higher</small></article>
-        <article className={styles.sourceStat}><span>Average score</span><strong>{averageScore || "—"}</strong><small>{won.length} won and handed to Sales Desk</small></article>
-      </section>
+      {isWebsiteManager ? (
+        <section className={styles.sourceStats}>
+          <article className={styles.sourceStat}><span>Websites</span><strong>{assets.length}</strong><small>Sites managed by Orbit</small></article>
+          <article className={styles.sourceStat}><span>Active sites</span><strong>{activeAssets}</strong><small>Lead capture currently enabled</small></article>
+          <article className={styles.sourceStat}><span>Website leads</span><strong>{leads.length}</strong><small>Attributed acquisition records</small></article>
+          <article className={styles.sourceStat}><span>Hot leads</span><strong>{hot.length}</strong><small>Score 85 or higher</small></article>
+        </section>
+      ) : (
+        <section className={styles.sourceStats}>
+          <article className={styles.sourceStat}><span>Total leads</span><strong>{leads.length}</strong><small>All records from this source</small></article>
+          <article className={styles.sourceStat}><span>Managed sources</span><strong>{assets.length}</strong><small>{activeAssets} active account{activeAssets === 1 ? "" : "s"} / link{activeAssets === 1 ? "" : "s"}</small></article>
+          <article className={styles.sourceStat}><span>Hot leads</span><strong>{hot.length}</strong><small>Score 85 or higher</small></article>
+          <article className={styles.sourceStat}><span>Average score</span><strong>{averageScore || "—"}</strong><small>{won.length} won and handed to Sales Desk</small></article>
+        </section>
+      )}
 
-      <section className={assetStyles.assetPanel} aria-labelledby="managed-sources-heading">
-        <div className={assetStyles.assetHeading}>
-          <div>
-            <h2 id="managed-sources-heading">Managed websites / accounts / links</h2>
-            <p>Manage the real business-facing sources that produce {config.label} leads. Authentication and API credentials stay under Connect.</p>
+      {isWebsiteManager ? (
+        <section className={assetStyles.websiteManagerPanel} aria-labelledby="website-manager-heading">
+          <div className={assetStyles.websiteManagerHeader}>
+            <div>
+              <h2 id="website-manager-heading">Managed websites</h2>
+              <p>Each site gets a live preview plus controls for lead capture, tracking, source settings and technical connection.</p>
+            </div>
+            <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add website</a>
           </div>
-          <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add source</a>
-        </div>
 
-        {assets.length ? (
-          <div className={assetStyles.assetGrid}>
-            {assets.map((asset) => (
-              <article className={assetStyles.assetCard} key={asset.id}>
-                <div className={assetStyles.assetTop}>
-                  <div className={assetStyles.assetIdentity}>
-                    <span className={assetStyles.assetIcon}>{asset.asset_type === "website" ? <Globe2 size={17} /> : <Link2 size={17} />}</span>
-                    <div><strong>{asset.name}</strong><small>{asset.handle ?? humanize(asset.asset_type)}</small></div>
+          {assets.length ? (
+            <div className={assetStyles.websiteStack}>
+              {assets.map((asset) => (
+                <article className={assetStyles.websiteManagerCard} key={asset.id}>
+                  <WebsitePreview name={asset.name} url={asset.url} />
+
+                  <div className={assetStyles.websiteManagerDetails}>
+                    <div className={assetStyles.websiteManagerIdentity}>
+                      <div>
+                        <h3>{asset.name}</h3>
+                        <p>{asset.url ?? "No live URL added"}</p>
+                      </div>
+                      <div className={assetStyles.badges}>
+                        {asset.is_primary ? <span className={`${assetStyles.badge} ${assetStyles.primary}`}>Primary</span> : null}
+                        <span className={`${assetStyles.badge} ${statusClass(asset.status)}`}>{humanize(asset.status)}</span>
+                      </div>
+                    </div>
+
+                    <div className={assetStyles.websiteStatusGrid}>
+                      <div><small>Domain</small><strong>{siteHost(asset.url)}</strong></div>
+                      <div><small>Lead capture</small><strong>{asset.status === "active" ? "Enabled" : asset.status === "paused" ? "Paused" : "Disconnected"}</strong></div>
+                      <div><small>Tracking</small><strong>{humanize(asset.tracking_status)}</strong></div>
+                      <div><small>Last sync</small><strong>{asset.last_synced_at ? formatRelativeDate(asset.last_synced_at) : "Manual"}</strong></div>
+                    </div>
+
+                    <div className={assetStyles.websiteControlGrid}>
+                      {asset.url ? (
+                        <a className={assetStyles.websiteControl} href={asset.url} target="_blank" rel="noreferrer">
+                          <ExternalLink size={16} /><div><strong>Visit website</strong><small>Open the live production site.</small></div>
+                        </a>
+                      ) : (
+                        <div className={assetStyles.websiteControl}><Globe2 size={16} /><div><strong>Website URL</strong><small>Add a live URL from Edit before visiting.</small></div></div>
+                      )}
+                      <a className={assetStyles.websiteControl} href="#website-leads"><Search size={16} /><div><strong>Website leads</strong><small>View every lead attributed to this site source.</small></div></a>
+                      <Link className={assetStyles.websiteControl} href="/dashboard/connect"><Link2 size={16} /><div><strong>Technical connection</strong><small>Manage authentication, APIs and provider access.</small></div></Link>
+                      <form action={setLeadSourceAssetStatus}>
+                        <input name="id" type="hidden" value={asset.id} />
+                        <input name="source" type="hidden" value={sourceSlug} />
+                        <input name="status" type="hidden" value={asset.status === "active" ? "paused" : "active"} />
+                        <button className={assetStyles.websiteControlButton} type="submit">
+                          {asset.status === "active" ? <Pause size={16} /> : <Play size={16} />}
+                          <div><strong>{asset.status === "active" ? "Pause lead capture" : "Activate lead capture"}</strong><small>{asset.status === "active" ? "Stop this site from participating in acquisition." : "Return this site to active acquisition."}</small></div>
+                        </button>
+                      </form>
+                    </div>
+
+                    <div className={assetStyles.websiteManagerActions}>
+                      {asset.url ? <a className={assetStyles.visitButton} href={asset.url} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Visit website</a> : null}
+                      <details className={assetStyles.editDetails}>
+                        <summary><Pencil size={12} /> Edit website</summary>
+                        <form action={updateLeadSourceAsset} className={assetStyles.websiteManagerEdit}>
+                          <AssetFields asset={asset} source={sourceSlug} defaultType={config.defaultType} />
+                          <div className={assetStyles.formActions}><button type="submit">Save changes</button></div>
+                        </form>
+                      </details>
+                      <form action={deleteLeadSourceAsset}>
+                        <input name="id" type="hidden" value={asset.id} />
+                        <input name="source" type="hidden" value={sourceSlug} />
+                        <button className={assetStyles.dangerButton} type="submit"><Trash2 size={12} /> Remove website</button>
+                      </form>
+                    </div>
                   </div>
-                  <div className={assetStyles.badges}>
-                    {asset.is_primary ? <span className={`${assetStyles.badge} ${assetStyles.primary}`}>Primary</span> : null}
-                    <span className={`${assetStyles.badge} ${statusClass(asset.status)}`}>{humanize(asset.status)}</span>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={assetStyles.emptyAssets}>
+              <strong>No website is managed yet.</strong>
+              <p>Add the first website and Orbit will give it a live preview, acquisition controls and its attributed lead history.</p>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className={assetStyles.assetPanel} aria-labelledby="managed-sources-heading">
+          <div className={assetStyles.assetHeading}>
+            <div>
+              <h2 id="managed-sources-heading">Managed websites / accounts / links</h2>
+              <p>Manage the real business-facing sources that produce {config.label} leads. Authentication and API credentials stay under Connect.</p>
+            </div>
+            <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add source</a>
+          </div>
+
+          {assets.length ? (
+            <div className={assetStyles.assetGrid}>
+              {assets.map((asset) => (
+                <article className={assetStyles.assetCard} key={asset.id}>
+                  <div className={assetStyles.assetTop}>
+                    <div className={assetStyles.assetIdentity}>
+                      <span className={assetStyles.assetIcon}>{asset.asset_type === "website" ? <Globe2 size={17} /> : <Link2 size={17} />}</span>
+                      <div><strong>{asset.name}</strong><small>{asset.handle ?? humanize(asset.asset_type)}</small></div>
+                    </div>
+                    <div className={assetStyles.badges}>
+                      {asset.is_primary ? <span className={`${assetStyles.badge} ${assetStyles.primary}`}>Primary</span> : null}
+                      <span className={`${assetStyles.badge} ${statusClass(asset.status)}`}>{humanize(asset.status)}</span>
+                    </div>
                   </div>
-                </div>
 
-                {asset.url ? <a className={assetStyles.assetLink} href={asset.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /><span>{asset.url}</span></a> : <div className={assetStyles.assetLink}><Link2 size={13} /><span>No public URL added</span></div>}
+                  {asset.url ? <a className={assetStyles.assetLink} href={asset.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /><span>{asset.url}</span></a> : <div className={assetStyles.assetLink}><Link2 size={13} /><span>No public URL added</span></div>}
 
-                <div className={assetStyles.assetMeta}>
-                  <div><small>Tracking</small><strong>{humanize(asset.tracking_status)}</strong></div>
-                  <div><small>Account ID</small><strong>{asset.external_id ?? "Not set"}</strong></div>
-                  <div><small>Last sync</small><strong>{asset.last_synced_at ? formatRelativeDate(asset.last_synced_at) : "Manual"}</strong></div>
-                </div>
+                  <div className={assetStyles.assetMeta}>
+                    <div><small>Tracking</small><strong>{humanize(asset.tracking_status)}</strong></div>
+                    <div><small>Account ID</small><strong>{asset.external_id ?? "Not set"}</strong></div>
+                    <div><small>Last sync</small><strong>{asset.last_synced_at ? formatRelativeDate(asset.last_synced_at) : "Manual"}</strong></div>
+                  </div>
 
-                <div className={assetStyles.assetActions}>
-                  <details className={assetStyles.editDetails}>
-                    <summary><Pencil size={12} /> Edit</summary>
-                    <form action={updateLeadSourceAsset} className={assetStyles.editForm}>
-                      <AssetFields asset={asset} source={sourceSlug} defaultType={config.defaultType} />
-                      <div className={assetStyles.formActions}><button type="submit">Save changes</button></div>
+                  <div className={assetStyles.assetActions}>
+                    <details className={assetStyles.editDetails}>
+                      <summary><Pencil size={12} /> Edit</summary>
+                      <form action={updateLeadSourceAsset} className={assetStyles.editForm}>
+                        <AssetFields asset={asset} source={sourceSlug} defaultType={config.defaultType} />
+                        <div className={assetStyles.formActions}><button type="submit">Save changes</button></div>
+                      </form>
+                    </details>
+                    <form action={setLeadSourceAssetStatus}>
+                      <input name="id" type="hidden" value={asset.id} />
+                      <input name="source" type="hidden" value={sourceSlug} />
+                      <input name="status" type="hidden" value={asset.status === "active" ? "paused" : "active"} />
+                      <button type="submit">{asset.status === "active" ? <Pause size={12} /> : <Play size={12} />}{asset.status === "active" ? "Pause" : "Activate"}</button>
                     </form>
-                  </details>
-                  <form action={setLeadSourceAssetStatus}>
-                    <input name="id" type="hidden" value={asset.id} />
-                    <input name="source" type="hidden" value={sourceSlug} />
-                    <input name="status" type="hidden" value={asset.status === "active" ? "paused" : "active"} />
-                    <button type="submit">{asset.status === "active" ? <Pause size={12} /> : <Play size={12} />}{asset.status === "active" ? "Pause" : "Activate"}</button>
-                  </form>
-                  <form action={deleteLeadSourceAsset}>
-                    <input name="id" type="hidden" value={asset.id} />
-                    <input name="source" type="hidden" value={sourceSlug} />
-                    <button className={assetStyles.dangerButton} type="submit"><Trash2 size={12} /> Remove</button>
-                  </form>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className={assetStyles.emptyAssets}>
-            <strong>No {config.label} account, website or link is managed yet.</strong>
-            <p>Add the real source first. Orbit will keep business-facing source management here while Connect handles technical authentication.</p>
-          </div>
-        )}
-      </section>
+                    <form action={deleteLeadSourceAsset}>
+                      <input name="id" type="hidden" value={asset.id} />
+                      <input name="source" type="hidden" value={sourceSlug} />
+                      <button className={assetStyles.dangerButton} type="submit"><Trash2 size={12} /> Remove</button>
+                    </form>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={assetStyles.emptyAssets}>
+              <strong>No {config.label} account, website or link is managed yet.</strong>
+              <p>Add the real source first. Orbit will keep business-facing source management here while Connect handles technical authentication.</p>
+            </div>
+          )}
+        </section>
+      )}
 
-      <section className={styles.sourceWorkspaceGrid}>
-        <article className={styles.leadsPanel}>
+      <section className={`${styles.sourceWorkspaceGrid} ${isWebsiteManager ? assetStyles.websiteLeadAnchor : ""}`} id={isWebsiteManager ? "website-leads" : undefined}>
+        <article className={styles.leadsPanel} style={isWebsiteManager ? { gridColumn: "1 / -1" } : undefined}>
           <div className={styles.panelHeadingRow} style={{ padding: "15px 16px" }}>
             <div><h2>{config.label} leads</h2><p>Verified source-specific acquisition records.</p></div>
             <Link href="/dashboard/leads">Back to all leads</Link>
@@ -250,26 +355,28 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
           </div>
         </article>
 
-        <aside className={styles.sideCard}>
-          <h2>Source controls</h2>
-          <div className={styles.sourceControls}>
-            <div className={styles.controlItem}><ShieldCheck size={17} /><p><strong>Verify before outreach</strong><small>Deduplicate and confirm a valid business contact before any outbound action.</small></p></div>
-            <div className={styles.controlItem}><Sparkles size={17} /><p><strong>Score against ICP</strong><small>Prioritise fit, intent, proof gap and delivery feasibility.</small></p></div>
-            <div className={styles.controlItem}><Search size={17} /><p><strong>Keep attribution</strong><small>Every lead retains this source through qualification and the Won handoff.</small></p></div>
-            <div className={styles.controlItem}><CheckCircle2 size={17} /><p><strong>Won boundary</strong><small>When the deal is won, the client record moves to Sales Desk.</small></p></div>
-          </div>
-        </aside>
+        {!isWebsiteManager ? (
+          <aside className={styles.sideCard}>
+            <h2>Source controls</h2>
+            <div className={styles.sourceControls}>
+              <div className={styles.controlItem}><ShieldCheck size={17} /><p><strong>Verify before outreach</strong><small>Deduplicate and confirm a valid business contact before any outbound action.</small></p></div>
+              <div className={styles.controlItem}><Sparkles size={17} /><p><strong>Score against ICP</strong><small>Prioritise fit, intent, proof gap and delivery feasibility.</small></p></div>
+              <div className={styles.controlItem}><Search size={17} /><p><strong>Keep attribution</strong><small>Every lead retains this source through qualification and the Won handoff.</small></p></div>
+              <div className={styles.controlItem}><CheckCircle2 size={17} /><p><strong>Won boundary</strong><small>When the deal is won, the client record moves to Sales Desk.</small></p></div>
+            </div>
+          </aside>
+        ) : null}
       </section>
 
       <section className={assetStyles.modal} id="add-source-asset" aria-label={`Add ${config.label} source`}>
         <div className={assetStyles.modalCard}>
           <div className={assetStyles.modalHead}>
-            <div><h2>Add {config.label} source</h2><p>Add the real website, account, profile, list or link that Orbit should manage.</p></div>
+            <div><h2>{isWebsiteManager ? "Add website" : `Add ${config.label} source`}</h2><p>{isWebsiteManager ? "Add a live website for Orbit to preview, manage and attribute leads to." : "Add the real website, account, profile, list or link that Orbit should manage."}</p></div>
             <Link className={assetStyles.closeButton} href={`/dashboard/leads/sources/${sourceSlug}`}>×</Link>
           </div>
           <form action={createLeadSourceAsset} className={assetStyles.addForm}>
             <AssetFields source={sourceSlug} defaultType={config.defaultType} />
-            <div className={assetStyles.formActions}><button type="submit">Save source</button></div>
+            <div className={assetStyles.formActions}><button type="submit">{isWebsiteManager ? "Save website" : "Save source"}</button></div>
           </form>
         </div>
       </section>
