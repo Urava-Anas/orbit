@@ -1,24 +1,70 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Search, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  Globe2,
+  Link2,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { notFound } from "next/navigation";
+import { Notice } from "@/components/Notice";
 import { formatRelativeDate, humanize } from "@/lib/format";
 import type { Lead } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
+import {
+  createLeadSourceAsset,
+  deleteLeadSourceAsset,
+  setLeadSourceAssetStatus,
+  updateLeadSourceAsset,
+} from "../actions";
 import styles from "../../leads.module.css";
+import assetStyles from "./source-assets.module.css";
 
 const sources = {
-  website: { label: "Website", aliases: ["website"], description: "Website enquiries, forms and conversion-originated opportunities." },
-  google: { label: "Google Search", aliases: ["google"], description: "Organic search, Maps and Google-discovered opportunities." },
-  instagram: { label: "Instagram", aliases: ["instagram"], description: "Instagram DMs, profile actions and campaign-originated opportunities." },
-  linkedin: { label: "LinkedIn", aliases: ["linkedin"], description: "LinkedIn prospecting, inbound messages and professional-network leads." },
-  facebook: { label: "Facebook", aliases: ["facebook"], description: "Facebook page, message and campaign-originated opportunities." },
-  youtube: { label: "YouTube", aliases: ["youtube"], description: "YouTube discovery, content and video CTA-originated opportunities." },
-  referrals: { label: "Referrals", aliases: ["referral", "referrals"], description: "Warm introductions, customer referrals and partner-sourced opportunities." },
-  "cold-list": { label: "Cold List Upload", aliases: ["other", "cold_list", "upload"], description: "Imported prospect lists that still require verification before outreach." },
+  website: { label: "Website", aliases: ["website"], description: "Website enquiries, forms and conversion-originated opportunities.", defaultType: "website" },
+  google: { label: "Google Search", aliases: ["google"], description: "Organic search, Maps and Google-discovered opportunities.", defaultType: "business_profile" },
+  instagram: { label: "Instagram", aliases: ["instagram"], description: "Instagram DMs, profile actions and campaign-originated opportunities.", defaultType: "profile" },
+  linkedin: { label: "LinkedIn", aliases: ["linkedin"], description: "LinkedIn prospecting, inbound messages and professional-network leads.", defaultType: "profile" },
+  facebook: { label: "Facebook", aliases: ["facebook"], description: "Facebook page, message and campaign-originated opportunities.", defaultType: "page" },
+  youtube: { label: "YouTube", aliases: ["youtube"], description: "YouTube discovery, content and video CTA-originated opportunities.", defaultType: "profile" },
+  referrals: { label: "Referrals", aliases: ["referral", "referrals"], description: "Warm introductions, customer referrals and partner-sourced opportunities.", defaultType: "referral_program" },
+  "cold-list": { label: "Cold List Upload", aliases: ["other", "cold_list", "upload"], description: "Imported prospect lists that still require verification before outreach.", defaultType: "list" },
 } as const;
 
+const assetTypes = ["website", "account", "profile", "page", "business_profile", "list", "referral_program", "link"] as const;
+const trackingStatuses = ["connected", "manual", "unverified", "error"] as const;
 type SourceSlug = keyof typeof sources;
+
+type SourceAsset = {
+  id: string;
+  source_slug: SourceSlug;
+  asset_type: string;
+  name: string;
+  url: string | null;
+  handle: string | null;
+  external_id: string | null;
+  status: "active" | "paused" | "disconnected";
+  tracking_status: "connected" | "manual" | "unverified" | "error";
+  is_primary: boolean;
+  notes: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PageProps = {
+  params: Promise<{ source: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
+};
 
 export async function generateMetadata({ params }: { params: Promise<{ source: string }> }): Promise<Metadata> {
   const { source } = await params;
@@ -35,26 +81,62 @@ function initials(lead: Lead) {
     .join("") || "L";
 }
 
-export default async function LeadSourcePage({ params }: { params: Promise<{ source: string }> }) {
-  const { source } = await params;
+function statusClass(status: SourceAsset["status"]) {
+  if (status === "active") return assetStyles.active;
+  if (status === "paused") return assetStyles.paused;
+  return assetStyles.disconnected;
+}
+
+function AssetFields({ asset, source, defaultType }: { asset?: SourceAsset; source: SourceSlug; defaultType: string }) {
+  return (
+    <>
+      <input name="source" type="hidden" value={source} />
+      {asset ? <input name="id" type="hidden" value={asset.id} /> : null}
+      <label className={assetStyles.field}><span>Name</span><input name="name" defaultValue={asset?.name ?? ""} required minLength={2} placeholder="e.g. Urava Website" /></label>
+      <label className={assetStyles.field}><span>Type</span><select name="assetType" defaultValue={asset?.asset_type ?? defaultType}>{assetTypes.map((type) => <option key={type} value={type}>{humanize(type)}</option>)}</select></label>
+      <label className={`${assetStyles.field} ${assetStyles.wide}`}><span>Real URL / account link</span><input name="url" type="url" defaultValue={asset?.url ?? ""} placeholder="https://..." /></label>
+      <label className={assetStyles.field}><span>Handle / username</span><input name="handle" defaultValue={asset?.handle ?? ""} placeholder="@account" /></label>
+      <label className={assetStyles.field}><span>External account ID</span><input name="externalId" defaultValue={asset?.external_id ?? ""} /></label>
+      <label className={assetStyles.field}><span>Status</span><select name="status" defaultValue={asset?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="disconnected">Disconnected</option></select></label>
+      <label className={assetStyles.field}><span>Tracking</span><select name="trackingStatus" defaultValue={asset?.tracking_status ?? "manual"}>{trackingStatuses.map((status) => <option key={status} value={status}>{humanize(status)}</option>)}</select></label>
+      <label className={`${assetStyles.field} ${assetStyles.wide}`}><span>Notes</span><textarea name="notes" defaultValue={asset?.notes ?? ""} placeholder="What is this source used for?" /></label>
+      <label className={`${assetStyles.checkField} ${assetStyles.wide}`}><input name="isPrimary" type="checkbox" defaultChecked={asset?.is_primary ?? false} /> Make this the primary {sources[source].label} source</label>
+    </>
+  );
+}
+
+export default async function LeadSourcePage({ params, searchParams }: PageProps) {
+  const [{ source }, query] = await Promise.all([params, searchParams]);
   const config = sources[source as SourceSlug];
   if (!config) notFound();
+  const sourceSlug = source as SourceSlug;
 
   const { supabase, workspace } = await requireWorkspace();
-  const { data } = await supabase
-    .from("leads")
-    .select("id,name,company,email,phone,whatsapp,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
-    .eq("workspace_id", workspace.id)
-    .in("source", [...config.aliases])
-    .order("lead_score", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false });
+  const [leadResult, assetResult] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id,name,company,email,phone,whatsapp,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
+      .eq("workspace_id", workspace.id)
+      .in("source", [...config.aliases])
+      .order("lead_score", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("lead_source_assets")
+      .select("id,source_slug,asset_type,name,url,handle,external_id,status,tracking_status,is_primary,notes,last_synced_at,created_at,updated_at")
+      .eq("workspace_id", workspace.id)
+      .eq("source_slug", sourceSlug)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true }),
+  ]);
 
-  const leads = (data ?? []) as Lead[];
+  const leads = (leadResult.data ?? []) as Lead[];
+  const assets = (assetResult.data ?? []) as SourceAsset[];
   const active = leads.filter((lead) => !["won", "lost"].includes(lead.stage));
   const hot = active.filter((lead) => (lead.lead_score ?? 0) >= 85);
   const won = leads.filter((lead) => lead.stage === "won");
   const scored = leads.filter((lead) => lead.lead_score !== null);
   const averageScore = scored.length ? Math.round(scored.reduce((sum, lead) => sum + (lead.lead_score ?? 0), 0) / scored.length) : 0;
+  const activeAssets = assets.filter((asset) => asset.status === "active").length;
 
   return (
     <main className={styles.sourceWorkspace}>
@@ -64,14 +146,82 @@ export default async function LeadSourcePage({ params }: { params: Promise<{ sou
           <h1>{config.label}</h1>
           <p>{config.description}</p>
         </div>
-        <Link href="/dashboard/connect">Manage connection</Link>
+        <div className={assetStyles.headerActions}>
+          <Link className={assetStyles.technicalButton} href="/dashboard/connect"><Link2 size={14} /> Technical connection</Link>
+          <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add account / site</a>
+        </div>
       </header>
+
+      <Notice error={query.error} notice={query.notice} />
 
       <section className={styles.sourceStats}>
         <article className={styles.sourceStat}><span>Total leads</span><strong>{leads.length}</strong><small>All records from this source</small></article>
-        <article className={styles.sourceStat}><span>Active</span><strong>{active.length}</strong><small>Still inside Lead Engine</small></article>
+        <article className={styles.sourceStat}><span>Managed sources</span><strong>{assets.length}</strong><small>{activeAssets} active account{activeAssets === 1 ? "" : "s"} / link{activeAssets === 1 ? "" : "s"}</small></article>
         <article className={styles.sourceStat}><span>Hot leads</span><strong>{hot.length}</strong><small>Score 85 or higher</small></article>
         <article className={styles.sourceStat}><span>Average score</span><strong>{averageScore || "—"}</strong><small>{won.length} won and handed to Sales Desk</small></article>
+      </section>
+
+      <section className={assetStyles.assetPanel} aria-labelledby="managed-sources-heading">
+        <div className={assetStyles.assetHeading}>
+          <div>
+            <h2 id="managed-sources-heading">Managed websites / accounts / links</h2>
+            <p>Manage the real business-facing sources that produce {config.label} leads. Authentication and API credentials stay under Connect.</p>
+          </div>
+          <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add source</a>
+        </div>
+
+        {assets.length ? (
+          <div className={assetStyles.assetGrid}>
+            {assets.map((asset) => (
+              <article className={assetStyles.assetCard} key={asset.id}>
+                <div className={assetStyles.assetTop}>
+                  <div className={assetStyles.assetIdentity}>
+                    <span className={assetStyles.assetIcon}>{asset.asset_type === "website" ? <Globe2 size={17} /> : <Link2 size={17} />}</span>
+                    <div><strong>{asset.name}</strong><small>{asset.handle ?? humanize(asset.asset_type)}</small></div>
+                  </div>
+                  <div className={assetStyles.badges}>
+                    {asset.is_primary ? <span className={`${assetStyles.badge} ${assetStyles.primary}`}>Primary</span> : null}
+                    <span className={`${assetStyles.badge} ${statusClass(asset.status)}`}>{humanize(asset.status)}</span>
+                  </div>
+                </div>
+
+                {asset.url ? <a className={assetStyles.assetLink} href={asset.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /><span>{asset.url}</span></a> : <div className={assetStyles.assetLink}><Link2 size={13} /><span>No public URL added</span></div>}
+
+                <div className={assetStyles.assetMeta}>
+                  <div><small>Tracking</small><strong>{humanize(asset.tracking_status)}</strong></div>
+                  <div><small>Account ID</small><strong>{asset.external_id ?? "Not set"}</strong></div>
+                  <div><small>Last sync</small><strong>{asset.last_synced_at ? formatRelativeDate(asset.last_synced_at) : "Manual"}</strong></div>
+                </div>
+
+                <div className={assetStyles.assetActions}>
+                  <details className={assetStyles.editDetails}>
+                    <summary><Pencil size={12} /> Edit</summary>
+                    <form action={updateLeadSourceAsset} className={assetStyles.editForm}>
+                      <AssetFields asset={asset} source={sourceSlug} defaultType={config.defaultType} />
+                      <div className={assetStyles.formActions}><button type="submit">Save changes</button></div>
+                    </form>
+                  </details>
+                  <form action={setLeadSourceAssetStatus}>
+                    <input name="id" type="hidden" value={asset.id} />
+                    <input name="source" type="hidden" value={sourceSlug} />
+                    <input name="status" type="hidden" value={asset.status === "active" ? "paused" : "active"} />
+                    <button type="submit">{asset.status === "active" ? <Pause size={12} /> : <Play size={12} />}{asset.status === "active" ? "Pause" : "Activate"}</button>
+                  </form>
+                  <form action={deleteLeadSourceAsset}>
+                    <input name="id" type="hidden" value={asset.id} />
+                    <input name="source" type="hidden" value={sourceSlug} />
+                    <button className={assetStyles.dangerButton} type="submit"><Trash2 size={12} /> Remove</button>
+                  </form>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={assetStyles.emptyAssets}>
+            <strong>No {config.label} account, website or link is managed yet.</strong>
+            <p>Add the real source first. Orbit will keep business-facing source management here while Connect handles technical authentication.</p>
+          </div>
+        )}
       </section>
 
       <section className={styles.sourceWorkspaceGrid}>
@@ -82,7 +232,7 @@ export default async function LeadSourcePage({ params }: { params: Promise<{ sou
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.leadTable}>
-              <thead><tr><th>Lead</th><th>Score</th><th>Status</th><th>Next action</th><th>Added</th></tr></thead>
+              <thead><tr><th>Lead</th><th>Score</th><th>Status</th><th>Next action</th><th>Source link</th><th>Added</th></tr></thead>
               <tbody>
                 {leads.map((lead) => (
                   <tr key={lead.id}>
@@ -90,12 +240,13 @@ export default async function LeadSourcePage({ params }: { params: Promise<{ sou
                     <td><span className={styles.scorePill}>{lead.lead_score ?? "—"}</span></td>
                     <td>{humanize(lead.stage)}</td>
                     <td><strong className={styles.nextActionText}>{lead.next_action ?? "Set next action"}</strong>{lead.next_action_at ? <small>{formatRelativeDate(lead.next_action_at)}</small> : null}</td>
+                    <td>{lead.google_maps_url ? <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Open <ExternalLink size={11} /></a> : "—"}</td>
                     <td>{formatRelativeDate(lead.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!leads.length ? <div className={styles.emptyState}>No leads have been attributed to this source yet.</div> : null}
+            {!leads.length ? <div className={styles.emptyState}>No leads yet from this source. Manage the real source above, then new attributed leads will appear here.</div> : null}
           </div>
         </article>
 
@@ -108,6 +259,19 @@ export default async function LeadSourcePage({ params }: { params: Promise<{ sou
             <div className={styles.controlItem}><CheckCircle2 size={17} /><p><strong>Won boundary</strong><small>When the deal is won, the client record moves to Sales Desk.</small></p></div>
           </div>
         </aside>
+      </section>
+
+      <section className={assetStyles.modal} id="add-source-asset" aria-label={`Add ${config.label} source`}>
+        <div className={assetStyles.modalCard}>
+          <div className={assetStyles.modalHead}>
+            <div><h2>Add {config.label} source</h2><p>Add the real website, account, profile, list or link that Orbit should manage.</p></div>
+            <Link className={assetStyles.closeButton} href={`/dashboard/leads/sources/${sourceSlug}`}>×</Link>
+          </div>
+          <form action={createLeadSourceAsset} className={assetStyles.addForm}>
+            <AssetFields source={sourceSlug} defaultType={config.defaultType} />
+            <div className={assetStyles.formActions}><button type="submit">Save source</button></div>
+          </form>
+        </div>
       </section>
     </main>
   );
