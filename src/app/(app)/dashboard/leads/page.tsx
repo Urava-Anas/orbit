@@ -6,10 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
-  Facebook,
   Globe2,
-  Instagram,
-  Linkedin,
   Mail,
   MessageSquareText,
   Plus,
@@ -20,7 +17,6 @@ import {
   Star,
   UploadCloud,
   UsersRound,
-  Youtube,
 } from "lucide-react";
 import { createLead } from "@/app/(app)/dashboard/lead-actions";
 import { Notice } from "@/components/Notice";
@@ -61,10 +57,10 @@ const activeStages = new Set([
 const sourceCards = [
   { slug: "website", label: "Website", aliases: ["website"], icon: Globe2, tone: "purple" },
   { slug: "google", label: "Google Search", aliases: ["google"], icon: Search, tone: "google" },
-  { slug: "instagram", label: "Instagram", aliases: ["instagram"], icon: Instagram, tone: "instagram" },
-  { slug: "linkedin", label: "LinkedIn", aliases: ["linkedin"], icon: Linkedin, tone: "linkedin" },
-  { slug: "facebook", label: "Facebook", aliases: ["facebook"], icon: Facebook, tone: "facebook" },
-  { slug: "youtube", label: "YouTube", aliases: ["youtube"], icon: Youtube, tone: "youtube" },
+  { slug: "instagram", label: "Instagram", aliases: ["instagram"], icon: MessageSquareText, tone: "instagram" },
+  { slug: "linkedin", label: "LinkedIn", aliases: ["linkedin"], icon: UsersRound, tone: "linkedin" },
+  { slug: "facebook", label: "Facebook", aliases: ["facebook"], icon: MessageSquareText, tone: "facebook" },
+  { slug: "youtube", label: "YouTube", aliases: ["youtube"], icon: Globe2, tone: "youtube" },
   { slug: "referrals", label: "Referrals", aliases: ["referral", "referrals"], icon: UsersRound, tone: "purple" },
   { slug: "cold-list", label: "Cold List Upload", aliases: ["other", "cold_list", "upload"], icon: UploadCloud, tone: "purple" },
 ] as const;
@@ -207,7 +203,6 @@ export default async function LeadsPage({ searchParams }: PageProps) {
     return true;
   });
 
-  const active = leads.filter(isActive);
   const totalLeadCount = Math.max(leads.length, 1);
   const flowCounts = countFlow(leads);
   const activeProjects = projects.filter((project) => project.status !== "completed").length;
