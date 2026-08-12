@@ -61,9 +61,11 @@ async function sha256(value: string) {
 }
 
 async function hmacSha256(keyBytes: Uint8Array, value: string) {
+  const keyMaterial = new Uint8Array(keyBytes.byteLength);
+  keyMaterial.set(keyBytes);
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    keyMaterial.buffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
