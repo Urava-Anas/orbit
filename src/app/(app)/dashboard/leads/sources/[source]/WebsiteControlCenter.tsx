@@ -5,7 +5,7 @@ import {
   Code2,
   ExternalLink,
   Gauge,
-  Github,
+  GitBranch,
   Globe2,
   Link2,
   LockKeyhole,
@@ -116,7 +116,7 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
             <div><small>Primary</small><strong>{asset.is_primary ? "Yes" : "No"}</strong></div>
           </div>
           <div className={styles.moduleActions}>
-            {repository ? <a href={repository} target="_blank" rel="noreferrer"><Github size={13} /> Open repository <ExternalLink size={11} /></a> : null}
+            {repository ? <a href={repository} target="_blank" rel="noreferrer"><GitBranch size={13} /> Open repository <ExternalLink size={11} /></a> : null}
             <Link href="/dashboard/connect"><Link2 size={13} /> Connect GitHub</Link>
           </div>
         </article>
@@ -165,7 +165,7 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
           <div className={styles.moduleTitle}><span><Link2 size={15} /></span><div><strong>Integrations</strong><small>Services that power this website</small></div></div>
           <div className={styles.integrationRows}>
             <div><span><Rocket size={13} /> Vercel</span><strong>{isVercel ? "Detected" : "Not detected"}</strong></div>
-            <div><span><Github size={13} /> GitHub</span><strong>{repository ? "Linked" : "Not linked"}</strong></div>
+            <div><span><GitBranch size={13} /> GitHub</span><strong>{repository ? "Linked" : "Not linked"}</strong></div>
             <div><span><BarChart3 size={13} /> Analytics</span><strong>{asset.tracking_status === "connected" ? "Connected" : "Not connected"}</strong></div>
           </div>
           <div className={styles.moduleActions}>
