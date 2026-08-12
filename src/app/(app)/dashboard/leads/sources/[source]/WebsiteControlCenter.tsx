@@ -17,6 +17,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
+import { requireWorkspace } from "@/lib/workspace";
 import styles from "./WebsiteControlCenter.module.css";
 
 type WebsiteControlCenterProps = {
@@ -61,7 +62,7 @@ function repoUrl(handle: string | null) {
   return /^[\w.-]+\/[\w.-]+$/.test(clean) ? `https://github.com/${clean}` : null;
 }
 
-export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: WebsiteControlCenterProps) {
+export async function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: WebsiteControlCenterProps) {
   const hostname = host(asset.url);
   const sitemap = urlWithPath(asset.url, "/sitemap.xml");
   const robots = urlWithPath(asset.url, "/robots.txt");
@@ -69,10 +70,22 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
   const isVercel = Boolean(hostname?.endsWith(".vercel.app"));
   const https = Boolean(asset.url?.startsWith("https://"));
   const pageSpeed = asset.url ? `https://pagespeed.web.dev/analysis?url=${encodeURIComponent(asset.url)}` : null;
-  const githubApiConnected = Boolean(process.env.GITHUB_TOKEN);
-  const vercelApiConnected = Boolean(process.env.VERCEL_TOKEN);
-  const analyticsConnected = Boolean(process.env.GOOGLE_ANALYTICS_PROPERTY_ID && (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_ANALYTICS_CREDENTIALS));
-  const searchConsoleConnected = Boolean(process.env.GOOGLE_SEARCH_CONSOLE_CREDENTIALS || process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+
+  const { supabase, workspace } = await requireWorkspace();
+  const { data: connectionRows } = await supabase
+    .from("integration_connections")
+    .select("provider,status")
+    .eq("workspace_id", workspace.id)
+    .in("provider", ["github", "vercel", "google_analytics", "google_search_console"]);
+  const connectedProviders = new Set(
+    (connectionRows ?? [])
+      .filter((item) => item.status === "connected")
+      .map((item) => item.provider),
+  );
+  const githubConnected = connectedProviders.has("github");
+  const vercelConnected = connectedProviders.has("vercel");
+  const analyticsConnected = connectedProviders.has("google_analytics");
+  const searchConsoleConnected = connectedProviders.has("google_search_console");
 
   return (
     <section className={styles.controlCenter} aria-label={`${asset.name} website controls`}>
@@ -103,12 +116,12 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
           <div className={styles.moduleMetrics}>
             <div><small>Environment</small><strong>Production</strong></div>
             <div><small>Provider</small><strong>{isVercel ? "Vercel" : "External"}</strong></div>
-            <div><small>Orbit control API</small><strong>{vercelApiConnected ? "Connected" : "Not connected"}</strong></div>
+            <div><small>Orbit connection</small><strong>{vercelConnected ? "Connected" : "Not connected"}</strong></div>
           </div>
           <div className={styles.moduleActions}>
-            {vercelApiConnected && isVercel ? <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer"><Workflow size={13} /> Deployments <ExternalLink size={11} /></a> : null}
+            {vercelConnected && isVercel ? <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer"><Workflow size={13} /> Deployments <ExternalLink size={11} /></a> : null}
             {asset.url ? <a href={asset.url} target="_blank" rel="noreferrer"><Globe2 size={13} /> Production site <ExternalLink size={11} /></a> : null}
-            {!vercelApiConnected ? <Link href="/dashboard/connect?integration=vercel#integrations"><Link2 size={13} /> Connect Vercel</Link> : null}
+            {!vercelConnected ? <Link href="/dashboard/connect?integration=vercel#integrations"><Link2 size={13} /> Connect Vercel</Link> : null}
           </div>
         </article>
 
@@ -117,11 +130,11 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
           <div className={styles.moduleMetrics}>
             <div><small>Repository</small><strong>{repository ? asset.handle : "Not linked"}</strong></div>
             <div><small>Project ID</small><strong>{asset.external_id ?? "Not set"}</strong></div>
-            <div><small>Orbit control API</small><strong>{githubApiConnected ? "Connected" : "Not connected"}</strong></div>
+            <div><small>Orbit connection</small><strong>{githubConnected ? "Connected" : "Not connected"}</strong></div>
           </div>
           <div className={styles.moduleActions}>
             {repository ? <a href={repository} target="_blank" rel="noreferrer"><GitBranch size={13} /> Open repository <ExternalLink size={11} /></a> : null}
-            {!githubApiConnected ? <Link href="/dashboard/connect?integration=github#integrations"><Link2 size={13} /> Connect GitHub</Link> : null}
+            {!githubConnected ? <Link href="/dashboard/connect?integration=github#integrations"><Link2 size={13} /> Connect GitHub</Link> : null}
           </div>
         </article>
 
@@ -135,7 +148,7 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
           <div className={styles.moduleActions}>
             {sitemap ? <a href={sitemap} target="_blank" rel="noreferrer">Sitemap <ExternalLink size={11} /></a> : null}
             {robots ? <a href={robots} target="_blank" rel="noreferrer">Robots.txt <ExternalLink size={11} /></a> : null}
-            {searchConsoleConnected ? <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">Search Console <ExternalLink size={11} /></a> : <Link href="/dashboard/connect?integration=search-console#integrations"><Link2 size={13} /> Connect Search Console</Link>}
+            {searchConsoleConnected ? <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">Search Console <ExternalLink size={11} /></a> : <Link href="/dashboard/connect?integration=google_search_console#integrations"><Link2 size={13} /> Connect Search Console</Link>}
           </div>
         </article>
 
@@ -148,7 +161,7 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
           </div>
           <div className={styles.moduleActions}>
             {pageSpeed ? <a href={pageSpeed} target="_blank" rel="noreferrer"><Zap size={13} /> Run PageSpeed <ExternalLink size={11} /></a> : null}
-            <Link href="/dashboard/connect?integration=analytics#integrations"><Activity size={13} /> Connect monitoring</Link>
+            <Link href="/dashboard/connect?integration=google_analytics#integrations"><Activity size={13} /> Connect monitoring</Link>
           </div>
         </article>
 
@@ -168,21 +181,21 @@ export function WebsiteControlCenter({ asset, leadCount, hotLeadCount }: Website
         <article className={styles.managerModule} id="site-integrations">
           <div className={styles.moduleTitle}><span><Link2 size={15} /></span><div><strong>Integrations</strong><small>Services that power this website</small></div></div>
           <div className={styles.integrationRows}>
-            <Link href="/dashboard/connect?integration=vercel#integrations"><span><Rocket size={13} /> Vercel</span><strong>{vercelApiConnected ? "Connected" : "Connect"}</strong></Link>
-            <Link href="/dashboard/connect?integration=github#integrations"><span><GitBranch size={13} /> GitHub</span><strong>{githubApiConnected ? "Connected" : "Connect"}</strong></Link>
-            <Link href="/dashboard/connect?integration=analytics#integrations"><span><BarChart3 size={13} /> Analytics</span><strong>{analyticsConnected ? "Connected" : "Connect"}</strong></Link>
-            <Link href="/dashboard/connect?integration=search-console#integrations"><span><Search size={13} /> Search Console</span><strong>{searchConsoleConnected ? "Connected" : "Connect"}</strong></Link>
+            <Link href="/dashboard/connect?integration=vercel#integrations"><span><Rocket size={13} /> Vercel</span><strong>{vercelConnected ? "Connected" : "Connect"}</strong></Link>
+            <Link href="/dashboard/connect?integration=github#integrations"><span><GitBranch size={13} /> GitHub</span><strong>{githubConnected ? "Connected" : "Connect"}</strong></Link>
+            <Link href="/dashboard/connect?integration=google_analytics#integrations"><span><BarChart3 size={13} /> Analytics</span><strong>{analyticsConnected ? "Connected" : "Connect"}</strong></Link>
+            <Link href="/dashboard/connect?integration=google_search_console#integrations"><span><Search size={13} /> Search Console</span><strong>{searchConsoleConnected ? "Connected" : "Connect"}</strong></Link>
           </div>
-          <div className={styles.moduleActions}><Link href="/dashboard/connect?integration=all#integrations"><Link2 size={13} /> Manage all integrations</Link></div>
+          <div className={styles.moduleActions}><Link href="/dashboard/connect?integration=github#integrations"><Link2 size={13} /> Manage all integrations</Link></div>
         </article>
 
         <article className={styles.managerModule}>
           <div className={styles.moduleTitle}><span><ShieldCheck size={15} /></span><div><strong>Security</strong><small>Public-site protection and access</small></div></div>
           <div className={styles.securityRows}>
             <div><LockKeyhole size={14} /><span><strong>Transport security</strong><small>{https ? "HTTPS is enabled on the managed URL." : "Use an HTTPS production URL."}</small></span></div>
-            <div><ShieldCheck size={14} /><span><strong>Technical credentials</strong><small>Authentication and API secrets stay in Connect, not inside lead records.</small></span></div>
+            <div><ShieldCheck size={14} /><span><strong>Provider credentials</strong><small>OAuth and provider app secrets stay server-side and are never shown to normal Orbit users.</small></span></div>
           </div>
-          <div className={styles.moduleActions}><Link href="/dashboard/connect?integration=all#integrations"><LockKeyhole size={13} /> Security connections</Link></div>
+          <div className={styles.moduleActions}><Link href="/dashboard/connect?integration=github#integrations"><LockKeyhole size={13} /> Security connections</Link></div>
         </article>
 
         <article className={styles.managerModule} id="site-settings">
