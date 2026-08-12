@@ -28,6 +28,7 @@ import {
 } from "../actions";
 import styles from "../../leads.module.css";
 import assetStyles from "./source-assets.module.css";
+import { WebsiteControlCenter } from "./WebsiteControlCenter";
 import { WebsitePreview } from "./WebsitePreview";
 
 const sources = {
@@ -106,8 +107,8 @@ function AssetFields({ asset, source, defaultType }: { asset?: SourceAsset; sour
       <label className={assetStyles.field}><span>Name</span><input name="name" defaultValue={asset?.name ?? ""} required minLength={2} placeholder="e.g. Urava Website" /></label>
       <label className={assetStyles.field}><span>Type</span><select name="assetType" defaultValue={asset?.asset_type ?? defaultType}>{assetTypes.map((type) => <option key={type} value={type}>{humanize(type)}</option>)}</select></label>
       <label className={`${assetStyles.field} ${assetStyles.wide}`}><span>Real URL / account link</span><input name="url" type="url" defaultValue={asset?.url ?? ""} placeholder="https://..." /></label>
-      <label className={assetStyles.field}><span>Handle / username</span><input name="handle" defaultValue={asset?.handle ?? ""} placeholder="@account" /></label>
-      <label className={assetStyles.field}><span>External account ID</span><input name="externalId" defaultValue={asset?.external_id ?? ""} /></label>
+      <label className={assetStyles.field}><span>Repository / handle</span><input name="handle" defaultValue={asset?.handle ?? ""} placeholder="owner/repository or @account" /></label>
+      <label className={assetStyles.field}><span>External project ID</span><input name="externalId" defaultValue={asset?.external_id ?? ""} placeholder="e.g. Vercel project slug" /></label>
       <label className={assetStyles.field}><span>Status</span><select name="status" defaultValue={asset?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="disconnected">Disconnected</option></select></label>
       <label className={assetStyles.field}><span>Tracking</span><select name="trackingStatus" defaultValue={asset?.tracking_status ?? "manual"}>{trackingStatuses.map((status) => <option key={status} value={status}>{humanize(status)}</option>)}</select></label>
       <label className={`${assetStyles.field} ${assetStyles.wide}`}><span>Notes</span><textarea name="notes" defaultValue={asset?.notes ?? ""} placeholder="What is this source used for?" /></label>
@@ -156,7 +157,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
         <div>
           <Link href="/dashboard/leads"><ArrowLeft size={14} aria-hidden="true" /> Lead Engine</Link>
           <h1>{isWebsiteManager ? "Website Manager" : config.label}</h1>
-          <p>{isWebsiteManager ? "Preview, manage and control the websites that feed Orbit's Lead Engine." : config.description}</p>
+          <p>{isWebsiteManager ? "Preview, operate and improve every website that feeds Orbit's Lead Engine." : config.description}</p>
         </div>
         <div className={assetStyles.headerActions}>
           <Link className={assetStyles.technicalButton} href="/dashboard/connect"><Link2 size={14} /> Technical connection</Link>
@@ -187,7 +188,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
           <div className={assetStyles.websiteManagerHeader}>
             <div>
               <h2 id="website-manager-heading">Managed websites</h2>
-              <p>Each site gets a live preview plus controls for lead capture, tracking, source settings and technical connection.</p>
+              <p>Live preview, production controls, code, SEO, performance, integrations, security and lead capture in one operating surface.</p>
             </div>
             <a className={assetStyles.addButton} href="#add-source-asset"><Plus size={14} /> Add website</a>
           </div>
@@ -238,9 +239,11 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
                       </form>
                     </div>
 
+                    <WebsiteControlCenter asset={asset} leadCount={leads.length} hotLeadCount={hot.length} />
+
                     <div className={assetStyles.websiteManagerActions}>
                       {asset.url ? <a className={assetStyles.visitButton} href={asset.url} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Visit website</a> : null}
-                      <details className={assetStyles.editDetails}>
+                      <details className={assetStyles.editDetails} id="website-edit">
                         <summary><Pencil size={12} /> Edit website</summary>
                         <form action={updateLeadSourceAsset} className={assetStyles.websiteManagerEdit}>
                           <AssetFields asset={asset} source={sourceSlug} defaultType={config.defaultType} />
@@ -260,7 +263,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
           ) : (
             <div className={assetStyles.emptyAssets}>
               <strong>No website is managed yet.</strong>
-              <p>Add the first website and Orbit will give it a live preview, acquisition controls and its attributed lead history.</p>
+              <p>Add the first website and Orbit will give it a live preview, management controls and its attributed lead history.</p>
             </div>
           )}
         </section>
