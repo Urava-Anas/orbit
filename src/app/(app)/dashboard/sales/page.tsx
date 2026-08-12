@@ -1,28 +1,29 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  ArrowUpRight,
+  ArrowRight,
   Banknote,
   CheckCircle2,
-  Clock3,
-  Crosshair,
+  CircleDollarSign,
+  FileText,
+  Filter,
+  FolderKanban,
   History,
-  MapPin,
-  MessageCircle,
-  Phone,
+  Link2,
+  MoreHorizontal,
+  PackageCheck,
+  Plus,
+  Receipt,
   Search,
-  Send,
-  ShieldCheck,
-  Target,
-  UserRound,
+  StickyNote,
+  TriangleAlert,
+  UploadCloud,
+  UsersRound,
 } from "lucide-react";
 import { Notice } from "@/components/Notice";
-import { PageHeader } from "@/components/PageHeader";
-import { StatusPill } from "@/components/StatusPill";
 import { formatMoney, formatRelativeDate, humanize } from "@/lib/format";
-import type { Lead } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
-import { logSalesActivity } from "./actions";
+import { createSalesClient } from "./actions";
 import styles from "./sales.module.css";
 
 export const metadata: Metadata = {
@@ -30,537 +31,298 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const leadStages = [
-  "new",
-  "raw",
-  "scored",
-  "qualified",
-  "contacted",
-  "interested",
-  "demo_booked",
-  "proposal",
-  "won",
-  "lost",
-] as const;
+type PageProps = {
+  searchParams: Promise<{ error?: string; notice?: string; q?: string; view?: string }>;
+};
 
-const activityKinds = [
-  "whatsapp",
-  "call",
-  "email",
-  "meeting",
-  "audit",
-  "proposal",
-  "note",
-] as const;
-
-const outcomes = [
-  "logged",
-  "sent",
-  "no_answer",
-  "replied",
-  "booked",
-  "proposal_sent",
-  "won",
-  "lost",
-] as const;
-
-const activeStages = new Set([
-  "new",
-  "raw",
-  "scored",
-  "qualified",
-  "contacted",
-  "interested",
-  "demo_booked",
-  "proposal",
-]);
-
-type LeadActivity = {
+type ClientRow = {
   id: string;
-  lead_id: string;
-  kind: string;
-  direction: string;
-  outcome: string;
-  summary: string;
-  occurred_at: string;
-  next_action: string | null;
-  next_action_at: string | null;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
   created_at: string;
 };
 
-type PageProps = {
-  searchParams: Promise<{
-    error?: string;
-    notice?: string;
-    lead?: string;
-    q?: string;
-  }>;
+type ProjectRow = {
+  id: string;
+  client_id: string;
+  name: string;
+  status: string;
+  value: number;
+  currency: string;
+  due_date: string | null;
+  created_at: string;
 };
 
-const karachiDateTimeFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Karachi",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
+type InvoiceRow = {
+  id: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  status: string;
+  due_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  projects: { name: string; client_id: string } | null;
+};
 
-const activityFormatter = new Intl.DateTimeFormat("en-PK", {
-  timeZone: "Asia/Karachi",
-  dateStyle: "medium",
-  timeStyle: "short",
-});
+type WonLead = {
+  id: string;
+  stage: string;
+  estimated_value: number;
+  currency: string;
+};
 
-function isActive(lead: Lead) {
-  return activeStages.has(lead.stage);
+type AuditRow = {
+  id: number;
+  action: string;
+  entity_type: string;
+  created_at: string;
+};
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "C";
 }
 
-function isOverdue(lead: Lead, now: number) {
-  if (!isActive(lead) || !lead.next_action_at) return false;
-  const timestamp = new Date(lead.next_action_at).getTime();
-  return Number.isFinite(timestamp) && timestamp < now;
+function projectStage(project?: ProjectRow) {
+  if (!project) return "Onboarding";
+  if (project.status === "planned") return "Onboarding";
+  if (project.status === "in_progress") return "Active";
+  if (project.status === "review") return "Review";
+  if (project.status === "blocked") return "Blocked";
+  if (project.status === "completed") return "Completed";
+  return humanize(project.status);
 }
 
-function attentionRank(lead: Lead, activities: LeadActivity[], now: number) {
-  if (isOverdue(lead, now)) return 0;
-  if (!activities.length && isActive(lead)) return 1;
-  if ((lead.lead_score ?? 0) >= 90 && isActive(lead)) return 2;
-  if (!lead.next_action || !lead.next_action_at) return 3;
-  if (lead.stage === "won") return 5;
-  if (lead.stage === "lost") return 6;
-  return 4;
+function stageTone(stage: string) {
+  if (["Active", "Completed", "Won"].includes(stage)) return "green";
+  if (["Onboarding", "Review"].includes(stage)) return "purple";
+  if (["Blocked", "Payment due"].includes(stage)) return "red";
+  return "blue";
 }
 
-function ownerName(lead: Lead) {
-  if (!lead.name || lead.name === lead.company) return "team";
-  return lead.name;
-}
-
-function leadInitials(lead: Lead) {
-  const label = lead.company ?? lead.name;
-  return label
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "L";
-}
-
-function cleanSentence(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return trimmed;
-  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-}
-
-function outreachMessage(lead: Lead) {
-  const business = lead.company ?? lead.name;
-  const observedPain = lead.pain_point
-    ? cleanSentence(lead.pain_point)
-    : "Your current online enquiry path may be making it harder for serious customers to understand the offer and take the next step.";
-
-  return `Assalam-o-Alaikum ${ownerName(lead)}, I was reviewing ${business}. ${observedPain} Urava recently built PBIC's mobile-first website and WhatsApp enquiry system. I can send you a short 3-point audit showing what to fix first, with no obligation. Should I send it here?`;
-}
-
-function whatsappHref(value: string | null, message: string) {
-  if (!value) return null;
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("0")) digits = `92${digits.slice(1)}`;
-  if (!digits) return null;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
-}
-
-function phoneHref(value: string) {
-  return `tel:${value.replace(/[^\d+]/g, "")}`;
-}
-
-function toKarachiDateTimeLocal(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = karachiDateTimeFormatter.formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
-}
-
-function scoreClass(lead: Lead) {
-  const score = lead.lead_score ?? 0;
-  if (score >= 90) return `${styles.score} ${styles.scoreHot}`;
-  if (score >= 75) return `${styles.score} ${styles.scoreWarm}`;
-  return styles.score;
-}
-
-function salesHref(leadId: string, query: string) {
-  const search = new URLSearchParams({ lead: leadId });
-  if (query) search.set("q", query);
-  return `/dashboard/sales?${search.toString()}`;
+function sparkline(values: number[]) {
+  const width = 220;
+  const height = 78;
+  if (!values.length) return `0,${height} ${width},${height}`;
+  const max = Math.max(...values, 1);
+  const step = values.length === 1 ? width : width / (values.length - 1);
+  return values.map((value, index) => `${Math.round(index * step)},${Math.round(height - (value / max) * (height - 8))}`).join(" ");
 }
 
 export default async function SalesDeskPage({ searchParams }: PageProps) {
   const { supabase, workspace } = await requireWorkspace();
   const params = await searchParams;
+  const monthStart = new Date();
+  monthStart.setHours(0, 0, 0, 0);
+  monthStart.setDate(1);
 
-  const [leadResult, activityResult] = await Promise.all([
-    supabase
-      .from("leads")
-      .select(
-        "id, name, company, email, phone, whatsapp, source, stage, niche, lead_score, estimated_value, currency, pain_point, next_action, next_action_at, google_maps_url, notes, legacy_notion_url, imported_at, created_at",
-      )
-      .eq("workspace_id", workspace.id)
-      .order("lead_score", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("lead_activities")
-      .select(
-        "id, lead_id, kind, direction, outcome, summary, occurred_at, next_action, next_action_at, created_at",
-      )
-      .eq("workspace_id", workspace.id)
-      .order("occurred_at", { ascending: false })
-      .limit(250),
+  const [clientsResult, projectsResult, invoicesResult, wonResult, auditResult] = await Promise.all([
+    supabase.from("clients").select("id,name,contact_name,email,phone,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("projects").select("id,client_id,name,status,value,currency,due_date,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("invoices").select("id,reference,amount,currency,status,due_at,paid_at,created_at,projects(name,client_id)").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("leads").select("id,stage,estimated_value,currency").eq("workspace_id", workspace.id).eq("stage", "won"),
+    supabase.from("audit_events").select("id,action,entity_type,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(6),
   ]);
 
-  const leads = (leadResult.data ?? []) as Lead[];
-  const activities = (activityResult.data ?? []) as LeadActivity[];
-  const activitiesByLead = new Map<string, LeadActivity[]>();
+  const clients = (clientsResult.data ?? []) as ClientRow[];
+  const projects = (projectsResult.data ?? []) as ProjectRow[];
+  const invoices = (invoicesResult.data ?? []) as unknown as InvoiceRow[];
+  const wonLeads = (wonResult.data ?? []) as WonLead[];
+  const audit = (auditResult.data ?? []) as AuditRow[];
 
-  for (const activity of activities) {
-    const list = activitiesByLead.get(activity.lead_id) ?? [];
-    list.push(activity);
-    activitiesByLead.set(activity.lead_id, list);
+  const activeProjects = projects.filter((project) => project.status !== "completed");
+  const pipelinePkr = activeProjects.filter((project) => project.currency === "PKR").reduce((sum, project) => sum + Number(project.value || 0), 0);
+  const paidThisMonth = invoices.filter((invoice) => invoice.status === "paid" && invoice.currency === "PKR" && invoice.paid_at && new Date(invoice.paid_at).getTime() >= monthStart.getTime());
+  const revenueThisMonth = paidThisMonth.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+  const overdueInvoices = invoices.filter((invoice) => invoice.status === "overdue");
+  const overduePkr = overdueInvoices.filter((invoice) => invoice.currency === "PKR").reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+  const totalPaidPkr = invoices.filter((invoice) => invoice.status === "paid" && invoice.currency === "PKR").reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+
+  const latestProjectByClient = new Map<string, ProjectRow>();
+  for (const project of projects) if (!latestProjectByClient.has(project.client_id)) latestProjectByClient.set(project.client_id, project);
+  const invoiceByClient = new Map<string, InvoiceRow[]>();
+  for (const invoice of invoices) {
+    const clientId = invoice.projects?.client_id;
+    if (!clientId) continue;
+    const list = invoiceByClient.get(clientId) ?? [];
+    list.push(invoice);
+    invoiceByClient.set(clientId, list);
   }
 
-  const now = Date.now();
-  const sortedLeads = [...leads].sort(
-    (a, b) =>
-      attentionRank(a, activitiesByLead.get(a.id) ?? [], now) -
-        attentionRank(b, activitiesByLead.get(b.id) ?? [], now) ||
-      (b.lead_score ?? 0) - (a.lead_score ?? 0),
-  );
-  const query = params.q?.trim().toLowerCase() ?? "";
-  const visibleLeads = query
-    ? sortedLeads.filter((lead) =>
-        [lead.company, lead.name, lead.niche, lead.stage]
-          .filter(Boolean)
-          .some((value) => value?.toLowerCase().includes(query)),
-      )
-    : sortedLeads;
-  const selectedLead =
-    visibleLeads.find((lead) => lead.id === params.lead) ??
-    sortedLeads.find((lead) => lead.id === params.lead) ??
-    visibleLeads[0] ??
-    sortedLeads[0] ??
-    null;
+  const q = params.q?.trim().toLowerCase() ?? "";
+  const view = params.view ?? "all";
+  const clientRows = clients.map((client) => {
+    const project = latestProjectByClient.get(client.id);
+    const clientInvoices = invoiceByClient.get(client.id) ?? [];
+    const overdue = clientInvoices.some((invoice) => invoice.status === "overdue");
+    const stage = projectStage(project);
+    const status = overdue ? "Payment due" : project?.status === "blocked" ? "Blocked" : stage === "Completed" ? "Completed" : stage === "Onboarding" ? "Onboarding" : "Active";
+    const lastAt = clientInvoices[0]?.paid_at ?? clientInvoices[0]?.created_at ?? project?.created_at ?? client.created_at;
+    return { client, project, stage, status, lastAt };
+  }).filter((row) => {
+    const haystack = [row.client.name, row.client.contact_name, row.client.email, row.project?.name].filter(Boolean).join(" ").toLowerCase();
+    if (q && !haystack.includes(q)) return false;
+    if (view === "active" && row.status !== "Active") return false;
+    if (view === "onboarding" && row.stage !== "Onboarding") return false;
+    if (view === "completed" && row.stage !== "Completed") return false;
+    return true;
+  });
 
-  const activeLeads = leads.filter(isActive);
-  const overdue = activeLeads.filter((lead) => isOverdue(lead, now));
-  const untouched = activeLeads.filter(
-    (lead) => !(activitiesByLead.get(lead.id) ?? []).length,
-  );
-  const won = leads.filter((lead) => lead.stage === "won");
-  const pipelineValue = activeLeads.reduce(
-    (sum, lead) => sum + Number(lead.estimated_value || 0),
-    0,
-  );
-  const primaryCurrency = activeLeads[0]?.currency ?? "PKR";
-  const selectedActivities = selectedLead
-    ? activitiesByLead.get(selectedLead.id) ?? []
-    : [];
-  const selectedMessage = selectedLead ? outreachMessage(selectedLead) : "";
-  const selectedWhatsapp = selectedLead
-    ? whatsappHref(selectedLead.whatsapp ?? selectedLead.phone, selectedMessage)
-    : null;
-  const selectedOverdue = selectedLead ? isOverdue(selectedLead, now) : false;
+  const planned = projects.filter((project) => project.status === "planned");
+  const inProgress = projects.filter((project) => project.status === "in_progress");
+  const review = projects.filter((project) => project.status === "review");
+  const completed = projects.filter((project) => project.status === "completed");
+  const paymentDue = invoices.filter((invoice) => ["sent", "overdue"].includes(invoice.status));
+  const wonValuePkr = wonLeads.filter((lead) => lead.currency === "PKR").reduce((sum, lead) => sum + Number(lead.estimated_value || 0), 0);
+  const flowCards = [
+    { label: "Won", count: wonLeads.length, value: wonValuePkr, icon: CheckCircle2, tone: "green" },
+    { label: "Onboarding", count: planned.length, value: planned.filter((item) => item.currency === "PKR").reduce((sum, item) => sum + Number(item.value || 0), 0), icon: PackageCheck, tone: "purple" },
+    { label: "Active", count: inProgress.length, value: inProgress.filter((item) => item.currency === "PKR").reduce((sum, item) => sum + Number(item.value || 0), 0), icon: FolderKanban, tone: "blue" },
+    { label: "Review", count: review.length, value: review.filter((item) => item.currency === "PKR").reduce((sum, item) => sum + Number(item.value || 0), 0), icon: History, tone: "amber" },
+    { label: "Payment Due", count: paymentDue.length, value: paymentDue.filter((item) => item.currency === "PKR").reduce((sum, item) => sum + Number(item.amount || 0), 0), icon: CircleDollarSign, tone: "red" },
+    { label: "Completed", count: completed.length, value: completed.filter((item) => item.currency === "PKR").reduce((sum, item) => sum + Number(item.value || 0), 0), icon: CheckCircle2, tone: "green" },
+  ];
+
+  const cumulativeRevenue = [...paidThisMonth].reverse().reduce<number[]>((series, invoice) => {
+    series.push((series.at(-1) ?? 0) + Number(invoice.amount || 0));
+    return series;
+  }, []);
+  const linePoints = sparkline(cumulativeRevenue);
+
+  const taskItems = [
+    ...overdueInvoices.slice(0, 2).map((invoice) => ({ title: `Collect ${invoice.reference}`, detail: formatMoney(Number(invoice.amount), invoice.currency), due: invoice.due_at ? formatRelativeDate(invoice.due_at) : "Overdue" })),
+    ...activeProjects.filter((project) => project.due_date).slice(0, 2).map((project) => ({ title: project.name, detail: project.status === "blocked" ? "Delivery blocked" : "Delivery follow-up", due: formatRelativeDate(project.due_date) })),
+  ].slice(0, 4);
 
   return (
-    <div className="page-stack">
-      <PageHeader
-        kicker="Revenue execution"
-        title="Sales Desk"
-        description="Select an opportunity, open its complete sales profile, and control every interaction from one focused workspace."
-        action={
-          <div className={styles.headerActions}>
-            <Link className="button button-quiet" href="/dashboard/leads#lead-finder">
-              <Search size={15} aria-hidden="true" /> Find leads
-            </Link>
-            <Link className="button button-primary" href="/dashboard/leads">
-              <Target size={15} aria-hidden="true" /> Growth cockpit
-            </Link>
-          </div>
-        }
-      />
+    <main className={styles.salesPage}>
+      <header className={styles.pageHeader}>
+        <div>
+          <div className={styles.titleRow}><h1>Sales Desk</h1><span>v2</span></div>
+          <p>Manage won leads and clients from onboarding through payment, completion and renewal.</p>
+        </div>
+        <div className={styles.headerActions}>
+          <Link className={styles.secondaryButton} href="/dashboard/leads/sources/cold-list"><UploadCloud size={15} /> Import</Link>
+          <a className={styles.primaryButton} href="#add-client"><Plus size={16} /> Add Client</a>
+        </div>
+      </header>
 
       <Notice error={params.error} notice={params.notice} />
 
-      <section className={styles.metrics} aria-label="Sales performance controls">
-        <article className={styles.metric}>
-          <Crosshair size={17} aria-hidden="true" />
-          <div><strong>{activeLeads.length}</strong><span>active</span></div>
-        </article>
-        <article className={`${styles.metric} ${overdue.length ? styles.metricDanger : ""}`}>
-          <Clock3 size={17} aria-hidden="true" />
-          <div><strong>{overdue.length}</strong><span>overdue</span></div>
-        </article>
-        <article className={`${styles.metric} ${untouched.length ? styles.metricWarning : ""}`}>
-          <Send size={17} aria-hidden="true" />
-          <div><strong>{untouched.length}</strong><span>untouched</span></div>
-        </article>
-        <article className={styles.metric}>
-          <Banknote size={17} aria-hidden="true" />
-          <div><strong>{formatMoney(pipelineValue, primaryCurrency)}</strong><span>pipeline</span></div>
-        </article>
-        <article className={styles.metric}>
-          <CheckCircle2 size={17} aria-hidden="true" />
-          <div><strong>{won.length}</strong><span>won</span></div>
-        </article>
-      </section>
+      <div className={styles.salesGrid}>
+        <div className={styles.mainColumn}>
+          <section className={styles.metricsGrid}>
+            <article><span className={`${styles.metricIcon} ${styles.purple}`}><UsersRound size={18} /></span><p>Total Clients<strong>{clients.length}</strong><small>Won relationships under management</small></p></article>
+            <article><span className={`${styles.metricIcon} ${styles.blue}`}><FolderKanban size={18} /></span><p>Active Projects<strong>{activeProjects.length}</strong><small>{projects.length} total projects</small></p></article>
+            <article><span className={`${styles.metricIcon} ${styles.green}`}><CircleDollarSign size={18} /></span><p>Active Client Value<strong>{formatMoney(pipelinePkr, "PKR")}</strong><small>Non-completed PKR delivery</small></p></article>
+            <article><span className={`${styles.metricIcon} ${styles.purple}`}><Banknote size={18} /></span><p>Revenue This Month<strong>{formatMoney(revenueThisMonth, "PKR")}</strong><small>Paid PKR invoices this month</small></p></article>
+            <article><span className={`${styles.metricIcon} ${styles.red}`}><TriangleAlert size={18} /></span><p>Overdue Invoices<strong>{overdueInvoices.length}</strong><small>{formatMoney(overduePkr, "PKR")}</small></p></article>
+          </section>
 
-      <section className={styles.rules}>
-        <ShieldCheck size={17} aria-hidden="true" />
-        <p><strong>Urava conversion standard:</strong> biggest benefit, specific problem, truthful proof, low risk and one easy next action.</p>
-        <span>Cashvertising active</span>
-      </section>
-
-      <section className={styles.workspace}>
-        <aside className={styles.directory} aria-label="Sales opportunities">
-          <div className={styles.directoryHead}>
-            <div>
-              <span className="section-kicker">Opportunity directory</span>
-              <h2>Leads</h2>
+          <section className={styles.pipelinePanel}>
+            <div className={styles.panelHeading}><h2>Client lifecycle</h2><Link href="/dashboard/projects">View delivery <ArrowRight size={13} /></Link></div>
+            <div className={styles.pipelineTrack}>
+              {flowCards.map(({ label, count, value, icon: Icon, tone }, index) => (
+                <article key={label}>
+                  <div className={styles.pipelineTop}><span className={`${styles.pipelineIcon} ${styles[tone]}`}><Icon size={17} /></span>{index < flowCards.length - 1 ? <i /> : null}</div>
+                  <span>{label}</span><strong>{count}</strong><small>{formatMoney(value, "PKR")}</small>
+                </article>
+              ))}
             </div>
-            <span>{visibleLeads.length}</span>
-          </div>
+          </section>
 
-          <form className={styles.searchBox} method="get" action="/dashboard/sales">
-            <Search size={15} aria-hidden="true" />
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search leads" aria-label="Search sales leads" />
-            {selectedLead ? <input type="hidden" name="lead" value={selectedLead.id} /> : null}
-          </form>
-
-          <nav className={styles.profileList} aria-label="Choose a lead profile">
-            {visibleLeads.map((lead) => {
-              const leadActivities = activitiesByLead.get(lead.id) ?? [];
-              const overdueLead = isOverdue(lead, now);
-              const selected = selectedLead?.id === lead.id;
-              return (
-                <Link
-                  className={`${styles.profileRow} ${selected ? styles.profileRowActive : ""}`}
-                  href={salesHref(lead.id, params.q ?? "")}
-                  key={lead.id}
-                  aria-current={selected ? "page" : undefined}
-                >
-                  <span className={styles.avatar}>{leadInitials(lead)}</span>
-                  <span className={styles.profileCopy}>
-                    <strong>{lead.company ?? lead.name}</strong>
-                    <small>{lead.niche ?? "Niche not set"} · {humanize(lead.stage)}</small>
-                    <em className={overdueLead ? styles.overdueText : ""}>
-                      {overdueLead
-                        ? "Follow-up overdue"
-                        : leadActivities[0]
-                          ? `Last: ${humanize(leadActivities[0].outcome)}`
-                          : "No interaction logged"}
-                    </em>
-                  </span>
-                  <span className={scoreClass(lead)}>{lead.lead_score ?? "—"}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          {!visibleLeads.length ? (
-            <div className={styles.listEmpty}>
-              <UserRound size={22} aria-hidden="true" />
-              <strong>No matching lead</strong>
-              <p>Clear the search or find a new opportunity.</p>
+          <section className={styles.clientPanel}>
+            <nav className={styles.tabs}>
+              <Link className={view === "all" ? styles.activeTab : ""} href="/dashboard/sales?view=all">All Clients</Link>
+              <Link className={view === "active" ? styles.activeTab : ""} href="/dashboard/sales?view=active">Active</Link>
+              <Link className={view === "onboarding" ? styles.activeTab : ""} href="/dashboard/sales?view=onboarding">Onboarding</Link>
+              <Link className={view === "completed" ? styles.activeTab : ""} href="/dashboard/sales?view=completed">Completed</Link>
+            </nav>
+            <form className={styles.filterBar} action="/dashboard/sales" method="get">
+              <input type="hidden" name="view" value={view} />
+              <label className={styles.searchBox}><Search size={15} /><input name="q" defaultValue={params.q ?? ""} placeholder="Search clients by name, business, email or project..." /></label>
+              <select aria-label="Owner"><option>All owners</option></select>
+              <select aria-label="Service"><option>All services</option></select>
+              <select aria-label="Stage"><option>All stages</option></select>
+              <button type="submit"><Filter size={14} /> Filters</button>
+            </form>
+            <div className={styles.tableWrap}>
+              <table className={styles.clientTable}>
+                <thead><tr><th>Client</th><th>Stage</th><th>Project / Service</th><th>Owner</th><th>Value</th><th>Status</th><th>Last Activity</th><th /></tr></thead>
+                <tbody>
+                  {clientRows.slice(0, 12).map(({ client, project, stage, status, lastAt }) => (
+                    <tr key={client.id}>
+                      <td><div className={styles.clientIdentity}><span>{initials(client.name)}</span><div><strong>{client.name}</strong><small>{client.contact_name ?? client.email ?? "Client record"}</small></div></div></td>
+                      <td><span className={`${styles.stagePill} ${styles[`stage_${stageTone(stage)}`]}`}>{stage}</span></td>
+                      <td>{project?.name ?? "Onboarding / scope"}</td>
+                      <td><span className={styles.ownerAvatar}>U</span> Urava Team</td>
+                      <td>{project ? formatMoney(Number(project.value), project.currency) : "—"}</td>
+                      <td><span className={`${styles.statusPill} ${styles[`stage_${stageTone(status)}`]}`}>{status}</span></td>
+                      <td>{formatRelativeDate(lastAt)}</td>
+                      <td><Link className={styles.moreButton} href="/dashboard/projects" aria-label={`Open ${client.name}`}><MoreHorizontal size={16} /></Link></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!clientRows.length ? <div className={styles.emptyState}>No clients match this view. Won deals should become client records here.</div> : null}
             </div>
-          ) : null}
+            <footer className={styles.tableFooter}><span>Showing {Math.min(clientRows.length, 12)} of {clients.length} clients</span><span>Won leads hand off here — pre-Won work stays in Lead Engine.</span></footer>
+          </section>
+        </div>
+
+        <aside className={styles.sideColumn}>
+          <section className={styles.sideCard}>
+            <div className={styles.sideHeading}><h2>Revenue overview</h2><span>This Month</span></div>
+            <p className={styles.revenueLabel}>Total Revenue</p>
+            <strong className={styles.revenueValue}>{formatMoney(revenueThisMonth, "PKR")}</strong>
+            <small className={styles.revenueSub}>{formatMoney(totalPaidPkr, "PKR")} collected lifetime</small>
+            <div className={styles.chartWrap}>
+              <svg viewBox="0 0 220 86" role="img" aria-label="Revenue trend"><path className={styles.gridLine} d="M0 20H220M0 50H220M0 80H220" /><polyline className={styles.revenueLine} points={linePoints} /></svg>
+            </div>
+          </section>
+
+          <section className={styles.sideCard}>
+            <div className={styles.sideHeading}><h2>Tasks & follow-ups</h2><Link href="/dashboard">View all</Link></div>
+            <div className={styles.taskList}>
+              {taskItems.length ? taskItems.map((task) => <div key={`${task.title}-${task.due}`}><span /><p><strong>{task.title}</strong><small>{task.detail}</small></p><time>{task.due}</time></div>) : <div className={styles.emptyMini}>No client follow-ups need attention.</div>}
+            </div>
+          </section>
+
+          <section className={styles.sideCard}>
+            <div className={styles.sideHeading}><h2>Recent activity</h2><Link href="/dashboard">View all</Link></div>
+            <div className={styles.activityList}>
+              {audit.length ? audit.map((event) => <div key={event.id}><span className={styles.activityDot} /><p><strong>{humanize(event.action)} {humanize(event.entity_type)}</strong><small>Organisation record changed</small></p><time>{formatRelativeDate(event.created_at)}</time></div>) : <div className={styles.emptyMini}>No recent client activity.</div>}
+            </div>
+          </section>
+
+          <section className={styles.sideCard}>
+            <h2>Quick actions</h2>
+            <div className={styles.quickActions}>
+              <Link href="/dashboard/projects"><FileText size={17} /><span>New Project</span></Link>
+              <Link href="/dashboard/cash"><Receipt size={17} /><span>Create Invoice</span></Link>
+              <Link href="/dashboard/cash"><Link2 size={17} /><span>Payment</span></Link>
+              <Link href="#add-client"><StickyNote size={17} /><span>Client Note</span></Link>
+            </div>
+          </section>
         </aside>
+      </div>
 
-        <main className={styles.profilePane}>
-          {selectedLead ? (
-            <article className={styles.leadProfile}>
-              <header className={styles.profileHeader}>
-                <div className={styles.identity}>
-                  <span className={styles.avatarLarge}>{leadInitials(selectedLead)}</span>
-                  <div>
-                    <div className={styles.leadTitle}>
-                      <h2>{selectedLead.company ?? selectedLead.name}</h2>
-                      <StatusPill value={selectedLead.stage} />
-                      <span className={scoreClass(selectedLead)}>{selectedLead.lead_score ?? "—"}/100</span>
-                    </div>
-                    <p>
-                      {selectedLead.name !== selectedLead.company ? selectedLead.name : "Owner not recorded"}
-                      <span>•</span>
-                      {selectedLead.niche ?? "Niche not set"}
-                      <span>•</span>
-                      {formatMoney(Number(selectedLead.estimated_value), selectedLead.currency)}
-                    </p>
-                  </div>
-                </div>
-                <div className={styles.contactActions}>
-                  {selectedWhatsapp ? (
-                    <a className="button button-primary" href={selectedWhatsapp} target="_blank" rel="noreferrer">
-                      <MessageCircle size={14} aria-hidden="true" /> WhatsApp
-                    </a>
-                  ) : null}
-                  {selectedLead.phone ? (
-                    <a className="button button-quiet" href={phoneHref(selectedLead.phone)}>
-                      <Phone size={14} aria-hidden="true" /> Call
-                    </a>
-                  ) : null}
-                  {selectedLead.google_maps_url ? (
-                    <a className="button button-quiet" href={selectedLead.google_maps_url} target="_blank" rel="noreferrer">
-                      <MapPin size={14} aria-hidden="true" /> Research
-                    </a>
-                  ) : null}
-                </div>
-              </header>
-
-              <div className={styles.profileStats}>
-                <div><span>Stage</span><strong>{humanize(selectedLead.stage)}</strong></div>
-                <div><span>Score</span><strong>{selectedLead.lead_score ?? "—"}/100</strong></div>
-                <div><span>Interactions</span><strong>{selectedActivities.length}</strong></div>
-                <div><span>Source</span><strong>{humanize(selectedLead.source)}</strong></div>
-              </div>
-
-              <div className={styles.controlGrid}>
-                <div className={styles.brief}>
-                  <span>Observed problem</span>
-                  <p>{selectedLead.pain_point ?? "No verified pain point has been recorded yet. Research before contacting."}</p>
-                </div>
-                <div className={`${styles.brief} ${selectedOverdue ? styles.briefDanger : ""}`}>
-                  <span>Next controlled action</span>
-                  <strong>{selectedLead.next_action ?? "No next action assigned"}</strong>
-                  <p>{selectedLead.next_action_at ? formatRelativeDate(selectedLead.next_action_at) : "No follow-up time assigned"}</p>
-                </div>
-                <div className={styles.brief}>
-                  <span>Latest activity</span>
-                  <strong>{selectedActivities[0] ? humanize(selectedActivities[0].outcome) : "No interaction"}</strong>
-                  <p>{selectedActivities[0]?.summary ?? "Nothing has been logged in Orbit yet."}</p>
-                </div>
-              </div>
-
-              <details className={styles.outreachPanel}>
-                <summary>Open Cashvertising outreach message</summary>
-                <div className={styles.outreachBody}>
-                  <textarea aria-label={`Outreach message for ${selectedLead.company ?? selectedLead.name}`} readOnly defaultValue={selectedMessage} />
-                  <div>
-                    <p>Confirm the visible problem before sending. Never invent results, urgency or proof.</p>
-                    {selectedWhatsapp ? (
-                      <a className="button button-primary" href={selectedWhatsapp} target="_blank" rel="noreferrer">
-                        Open prepared message <ArrowUpRight size={13} aria-hidden="true" />
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              </details>
-
-              <details className={styles.activityPanel} open={selectedOverdue || !selectedActivities.length}>
-                <summary>Log activity and set the next move</summary>
-                <form action={logSalesActivity} className={styles.activityForm}>
-                  <input type="hidden" name="leadId" value={selectedLead.id} />
-                  <input type="hidden" name="currentStage" value={selectedLead.stage} />
-                  <input type="hidden" name="returnLeadId" value={selectedLead.id} />
-
-                  <div className="field">
-                    <label htmlFor={`kind-${selectedLead.id}`}>Activity</label>
-                    <select id={`kind-${selectedLead.id}`} name="kind" defaultValue="whatsapp">
-                      {activityKinds.map((kind) => <option value={kind} key={kind}>{humanize(kind)}</option>)}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`direction-${selectedLead.id}`}>Direction</label>
-                    <select id={`direction-${selectedLead.id}`} name="direction" defaultValue="outbound">
-                      <option value="outbound">Outbound</option>
-                      <option value="inbound">Inbound</option>
-                      <option value="internal">Internal note</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`outcome-${selectedLead.id}`}>Outcome</label>
-                    <select id={`outcome-${selectedLead.id}`} name="outcome" defaultValue="sent">
-                      {outcomes.map((outcome) => <option value={outcome} key={outcome}>{humanize(outcome)}</option>)}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`stage-${selectedLead.id}`}>Pipeline stage</label>
-                    <select id={`stage-${selectedLead.id}`} name="nextStage" defaultValue={selectedLead.stage}>
-                      {leadStages.map((stage) => <option value={stage} key={stage}>{humanize(stage)}</option>)}
-                    </select>
-                  </div>
-                  <div className={`field ${styles.formWide}`}>
-                    <label htmlFor={`summary-${selectedLead.id}`}>What happened?</label>
-                    <textarea
-                      id={`summary-${selectedLead.id}`}
-                      name="summary"
-                      minLength={2}
-                      maxLength={4000}
-                      placeholder="Example: Sent the 3-point audit. Client asked about price and delivery time."
-                      required
-                    />
-                  </div>
-                  <div className={`field ${styles.formWide}`}>
-                    <label htmlFor={`next-action-${selectedLead.id}`}>Exact next action</label>
-                    <input
-                      id={`next-action-${selectedLead.id}`}
-                      name="nextAction"
-                      maxLength={240}
-                      defaultValue={selectedLead.next_action ?? ""}
-                      placeholder="Follow up with proof, schedule discovery call, send proposal…"
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`next-at-${selectedLead.id}`}>When?</label>
-                    <input
-                      id={`next-at-${selectedLead.id}`}
-                      name="nextActionAt"
-                      type="datetime-local"
-                      defaultValue={toKarachiDateTimeLocal(selectedLead.next_action_at)}
-                    />
-                  </div>
-                  <div className={styles.submitWrap}>
-                    <button className="button button-primary" type="submit">
-                      Save activity and control lead
-                    </button>
-                  </div>
-                </form>
-              </details>
-
-              <section className={styles.timelinePanel}>
-                <div className={styles.timelineHead}>
-                  <History size={14} aria-hidden="true" />
-                  <strong>Sales timeline</strong>
-                  <span>{selectedActivities.length} records</span>
-                </div>
-                {selectedActivities.length ? (
-                  <div className={styles.timeline}>
-                    {selectedActivities.slice(0, 12).map((activity) => (
-                      <article key={activity.id}>
-                        <div>
-                          <strong>{humanize(activity.kind)} · {humanize(activity.outcome)}</strong>
-                          <span>{activityFormatter.format(new Date(activity.occurred_at))}</span>
-                        </div>
-                        <p>{activity.summary}</p>
-                        {activity.next_action ? <small>Next: {activity.next_action}</small> : null}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={styles.timelineEmpty}>No sales activity has been logged for this lead.</div>
-                )}
-              </section>
-            </article>
-          ) : (
-            <div className={styles.emptyState}>
-              <Crosshair size={28} aria-hidden="true" />
-              <h3>No sales opportunities</h3>
-              <p>Find a real business, verify a real problem, and approve it into Growth.</p>
-              <Link className="button button-primary" href="/dashboard/leads#lead-finder">Open Lead Finder</Link>
-            </div>
-          )}
-        </main>
+      <section className={styles.addPanel} id="add-client" aria-label="Add client">
+        <div className={styles.addPanelCard}>
+          <div className={styles.addPanelHeader}><div><h2>Add client</h2><p>Create the client record that exists after a deal is won.</p></div><Link href="/dashboard/sales">×</Link></div>
+          <form action={createSalesClient} className={styles.addForm}>
+            <label><span>Business name</span><input name="name" minLength={2} required /></label>
+            <label><span>Contact name</span><input name="contactName" /></label>
+            <label><span>Email</span><input name="email" type="email" /></label>
+            <label><span>Phone / WhatsApp</span><input name="phone" type="tel" /></label>
+            <label className={styles.wideField}><span>Website</span><input name="website" type="url" placeholder="https://" /></label>
+            <label className={styles.wideField}><span>Client notes</span><textarea name="notes" /></label>
+            <div className={styles.formActions}><Link href="/dashboard/sales">Cancel</Link><button type="submit">Save client</button></div>
+          </form>
+        </div>
       </section>
-    </div>
+    </main>
   );
 }

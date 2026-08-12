@@ -1,28 +1,30 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  ArrowUpRight,
-  Clock3,
-  Flame,
-  MapPin,
-  MessageCircle,
-  Phone,
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  CircleDollarSign,
+  Facebook,
+  Globe2,
+  Instagram,
+  Linkedin,
+  Mail,
+  MessageSquareText,
   Plus,
   Search,
-  Target,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  UploadCloud,
   UsersRound,
+  Youtube,
 } from "lucide-react";
-import {
-  createLead,
-  updateLead,
-  updateLeadStage,
-} from "@/app/(app)/dashboard/lead-actions";
-import { EmptyState } from "@/components/EmptyState";
-import { MetricCard } from "@/components/MetricCard";
+import { createLead } from "@/app/(app)/dashboard/lead-actions";
 import { Notice } from "@/components/Notice";
-import { PageHeader } from "@/components/PageHeader";
-import { StatusPill } from "@/components/StatusPill";
-import { formatMoney, formatRelativeDate, humanize } from "@/lib/format";
+import { formatRelativeDate, humanize } from "@/lib/format";
 import type { Lead } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 import styles from "./leads.module.css";
@@ -32,36 +34,40 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const leadSources = [
-  "direct",
-  "referral",
-  "website",
-  "whatsapp",
-  "facebook",
-  "instagram",
-  "linkedin",
-  "google",
-  "other",
-] as const;
-
-const leadStages = [
+const stages = [
+  "new",
   "raw",
   "scored",
+  "qualified",
   "contacted",
   "interested",
   "demo_booked",
+  "proposal",
   "won",
   "lost",
 ] as const;
 
-const activeStages = ["raw", "scored", "contacted", "interested", "demo_booked"] as const;
-const currencies = ["PKR", "USD", "GBP", "EUR", "AED", "SAR"] as const;
-const viewModes = ["focus", "pipeline", "directory"] as const;
-const priorityFilters = ["all", "hot", "overdue", "missing_action"] as const;
+const activeStages = new Set([
+  "new",
+  "raw",
+  "scored",
+  "qualified",
+  "contacted",
+  "interested",
+  "demo_booked",
+  "proposal",
+]);
 
-type LeadStage = (typeof leadStages)[number];
-type ViewMode = (typeof viewModes)[number];
-type PriorityFilter = (typeof priorityFilters)[number];
+const sourceCards = [
+  { slug: "website", label: "Website", aliases: ["website"], icon: Globe2, tone: "purple" },
+  { slug: "google", label: "Google Search", aliases: ["google"], icon: Search, tone: "google" },
+  { slug: "instagram", label: "Instagram", aliases: ["instagram"], icon: Instagram, tone: "instagram" },
+  { slug: "linkedin", label: "LinkedIn", aliases: ["linkedin"], icon: Linkedin, tone: "linkedin" },
+  { slug: "facebook", label: "Facebook", aliases: ["facebook"], icon: Facebook, tone: "facebook" },
+  { slug: "youtube", label: "YouTube", aliases: ["youtube"], icon: Youtube, tone: "youtube" },
+  { slug: "referrals", label: "Referrals", aliases: ["referral", "referrals"], icon: UsersRound, tone: "purple" },
+  { slug: "cold-list", label: "Cold List Upload", aliases: ["other", "cold_list", "upload"], icon: UploadCloud, tone: "purple" },
+] as const;
 
 type PageProps = {
   searchParams: Promise<{
@@ -70,721 +76,369 @@ type PageProps = {
     q?: string;
     stage?: string;
     priority?: string;
-    view?: string;
   }>;
 };
 
-type ResolvedFilters = {
-  q: string;
-  stage: LeadStage | "all";
-  priority: PriorityFilter;
-  view: ViewMode;
+type LeadActivity = {
+  id: string;
+  outcome: string;
+  summary: string;
+  occurred_at: string;
 };
 
-const karachiFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Karachi",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
+type AutopilotConfig = {
+  state: string | null;
+  max_active_projects: number | null;
+  last_preflight_result: unknown;
+  blocked_reason: string | null;
+};
 
-function isLeadStage(value: string | undefined): value is LeadStage {
-  return leadStages.includes(value as LeadStage);
-}
+type ExternalAction = {
+  id: string;
+  channel: string | null;
+  status: string | null;
+  created_at: string;
+};
 
-function isViewMode(value: string | undefined): value is ViewMode {
-  return viewModes.includes(value as ViewMode);
-}
-
-function isPriorityFilter(value: string | undefined): value is PriorityFilter {
-  return priorityFilters.includes(value as PriorityFilter);
-}
-
-function toKarachiDateTimeLocal(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = karachiFormatter.formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
-}
-
-function ownerValue(lead?: Lead) {
-  if (!lead || lead.name === lead.company) return "";
-  return lead.name;
-}
-
-function isActiveLead(lead: Lead) {
-  return !["won", "lost"].includes(lead.stage);
+function isActive(lead: Lead) {
+  return activeStages.has(lead.stage);
 }
 
 function isOverdue(lead: Lead, now: number) {
-  if (!isActiveLead(lead) || !lead.next_action_at) return false;
-  const due = new Date(lead.next_action_at).getTime();
-  return !Number.isNaN(due) && due < now;
+  if (!isActive(lead) || !lead.next_action_at) return false;
+  const timestamp = new Date(lead.next_action_at).getTime();
+  return Number.isFinite(timestamp) && timestamp < now;
 }
 
-function attentionRank(lead: Lead, now: number) {
-  if (isOverdue(lead, now)) return 0;
-  if ((lead.lead_score ?? 0) >= 90) return 1;
-  if (!lead.next_action || !lead.next_action_at) return 2;
-  return 3;
+function stageTone(stage: string) {
+  if (stage === "won") return "green";
+  if (["proposal", "demo_booked", "interested"].includes(stage)) return "amber";
+  if (["contacted", "qualified"].includes(stage)) return "blue";
+  if (stage === "lost") return "red";
+  return "neutral";
 }
 
-function urgencyLabel(lead: Lead, now: number) {
-  if (isOverdue(lead, now)) return "Follow-up overdue";
-  if ((lead.lead_score ?? 0) >= 90) return "High-value opportunity";
-  if (!lead.next_action || !lead.next_action_at) return "Next action missing";
-  return lead.next_action_at ? formatRelativeDate(lead.next_action_at) : "Needs control";
+function sourceLabel(source: string) {
+  return sourceCards.find((card) => card.aliases.includes(source as never))?.label ?? humanize(source);
 }
 
-function scoreClass(lead: Lead) {
-  const score = lead.lead_score ?? 0;
-  if (score >= 90) return `${styles.score} ${styles.scoreHot}`;
-  if (score >= 75) return `${styles.score} ${styles.scoreWarm}`;
-  return styles.score;
+function initials(lead: Lead) {
+  return (lead.company ?? lead.name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "L";
 }
 
-function phoneHref(value: string) {
-  return `tel:${value.replace(/[^\d+]/g, "")}`;
+function normaliseStage(value: string | undefined) {
+  return stages.includes(value as (typeof stages)[number]) ? value : "all";
 }
 
-function whatsappHref(value: string) {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("0")) digits = `92${digits.slice(1)}`;
-  return digits ? `https://wa.me/${digits}` : null;
-}
-
-function buildHref(
-  filters: ResolvedFilters,
-  overrides: Partial<ResolvedFilters>,
-) {
-  const next = { ...filters, ...overrides };
-  const search = new URLSearchParams();
-  if (next.q) search.set("q", next.q);
-  if (next.stage !== "all") search.set("stage", next.stage);
-  if (next.priority !== "all") search.set("priority", next.priority);
-  search.set("view", next.view);
-  return `/dashboard/leads?${search.toString()}`;
-}
-
-function LeadFormFields({ lead }: { lead?: Lead }) {
-  return (
-    <div className="form-grid">
-      <div className="field">
-        <label htmlFor={lead ? `business-${lead.id}` : "lead-business"}>Business name</label>
-        <input
-          id={lead ? `business-${lead.id}` : "lead-business"}
-          name="businessName"
-          minLength={2}
-          maxLength={160}
-          defaultValue={lead?.company ?? lead?.name ?? ""}
-          required
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `owner-${lead.id}` : "lead-owner"}>Owner or contact</label>
-        <input
-          id={lead ? `owner-${lead.id}` : "lead-owner"}
-          name="ownerName"
-          maxLength={120}
-          defaultValue={ownerValue(lead)}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `email-${lead.id}` : "lead-email"}>Email</label>
-        <input
-          id={lead ? `email-${lead.id}` : "lead-email"}
-          name="email"
-          type="email"
-          maxLength={254}
-          defaultValue={lead?.email ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `phone-${lead.id}` : "lead-phone"}>Phone</label>
-        <input
-          id={lead ? `phone-${lead.id}` : "lead-phone"}
-          name="phone"
-          type="tel"
-          maxLength={40}
-          defaultValue={lead?.phone ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `whatsapp-${lead.id}` : "lead-whatsapp"}>WhatsApp</label>
-        <input
-          id={lead ? `whatsapp-${lead.id}` : "lead-whatsapp"}
-          name="whatsapp"
-          type="tel"
-          maxLength={40}
-          defaultValue={lead?.whatsapp ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `niche-${lead.id}` : "lead-niche"}>Niche</label>
-        <input
-          id={lead ? `niche-${lead.id}` : "lead-niche"}
-          name="niche"
-          maxLength={100}
-          placeholder="Visa Consultant, Salon, Clinic…"
-          defaultValue={lead?.niche ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `source-${lead.id}` : "lead-source"}>Source</label>
-        <select
-          id={lead ? `source-${lead.id}` : "lead-source"}
-          name="source"
-          defaultValue={lead?.source ?? "direct"}
-        >
-          {leadSources.map((source) => (
-            <option value={source} key={source}>
-              {humanize(source)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `stage-${lead.id}` : "lead-stage"}>Status</label>
-        <select
-          id={lead ? `stage-${lead.id}` : "lead-stage"}
-          name="stage"
-          defaultValue={isLeadStage(lead?.stage) ? lead.stage : "raw"}
-        >
-          {leadStages.map((stage) => (
-            <option value={stage} key={stage}>
-              {humanize(stage)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `score-${lead.id}` : "lead-score"}>Lead score</label>
-        <input
-          id={lead ? `score-${lead.id}` : "lead-score"}
-          name="leadScore"
-          type="number"
-          min="0"
-          max="100"
-          step="1"
-          defaultValue={lead?.lead_score ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `value-${lead.id}` : "lead-value"}>Estimated value</label>
-        <input
-          id={lead ? `value-${lead.id}` : "lead-value"}
-          name="estimatedValue"
-          type="number"
-          min="0"
-          step="0.01"
-          defaultValue={lead?.estimated_value ?? 0}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `currency-${lead.id}` : "lead-currency"}>Currency</label>
-        <select
-          id={lead ? `currency-${lead.id}` : "lead-currency"}
-          name="currency"
-          defaultValue={lead?.currency ?? "PKR"}
-        >
-          {currencies.map((currency) => (
-            <option value={currency} key={currency}>
-              {currency}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field field-wide">
-        <label htmlFor={lead ? `pain-${lead.id}` : "lead-pain"}>Observed pain point</label>
-        <textarea
-          id={lead ? `pain-${lead.id}` : "lead-pain"}
-          name="painPoint"
-          maxLength={4000}
-          defaultValue={lead?.pain_point ?? ""}
-          placeholder="What business problem makes this opportunity worth pursuing?"
-        />
-      </div>
-      <div className="field field-wide">
-        <label htmlFor={lead ? `next-${lead.id}` : "lead-next"}>Next action</label>
-        <input
-          id={lead ? `next-${lead.id}` : "lead-next"}
-          name="nextAction"
-          maxLength={240}
-          defaultValue={lead?.next_action ?? ""}
-          placeholder="Send audit, call owner, request facts, send proposal…"
-        />
-      </div>
-      <div className="field">
-        <label htmlFor={lead ? `next-at-${lead.id}` : "lead-next-at"}>Follow-up date</label>
-        <input
-          id={lead ? `next-at-${lead.id}` : "lead-next-at"}
-          name="nextActionAt"
-          type="datetime-local"
-          defaultValue={toKarachiDateTimeLocal(lead?.next_action_at ?? null)}
-        />
-      </div>
-      <div className="field field-wide">
-        <label htmlFor={lead ? `maps-${lead.id}` : "lead-maps"}>Google Maps or research link</label>
-        <input
-          id={lead ? `maps-${lead.id}` : "lead-maps"}
-          name="googleMapsUrl"
-          type="url"
-          maxLength={500}
-          defaultValue={lead?.google_maps_url ?? ""}
-        />
-      </div>
-      <div className="field field-wide">
-        <label htmlFor={lead ? `notes-${lead.id}` : "lead-notes"}>Evidence and sales notes</label>
-        <textarea
-          id={lead ? `notes-${lead.id}` : "lead-notes"}
-          name="notes"
-          maxLength={4000}
-          defaultValue={lead?.notes ?? ""}
-        />
-      </div>
-    </div>
-  );
-}
-
-function LeadQuickActions({ lead }: { lead: Lead }) {
-  const whatsapp = lead.whatsapp ? whatsappHref(lead.whatsapp) : null;
-  return (
-    <div className={styles.quickActions}>
-      {whatsapp ? (
-        <a
-          className={styles.quickAction}
-          href={whatsapp}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Message ${lead.company ?? lead.name} on WhatsApp`}
-        >
-          <MessageCircle size={13} aria-hidden="true" /> WhatsApp
-        </a>
-      ) : null}
-      {lead.phone ? (
-        <a className={styles.quickAction} href={phoneHref(lead.phone)}>
-          <Phone size={13} aria-hidden="true" /> Call
-        </a>
-      ) : null}
-      {lead.google_maps_url ? (
-        <a
-          className={styles.quickAction}
-          href={lead.google_maps_url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <MapPin size={13} aria-hidden="true" /> Research
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
-function LeadEditPanel({ lead }: { lead: Lead }) {
-  return (
-    <details className={styles.editPanel}>
-      <summary>Open complete record and edit</summary>
-      <form action={updateLead}>
-        <input type="hidden" name="id" value={lead.id} />
-        <LeadFormFields lead={lead} />
-        <div className="form-actions">
-          <button className="button button-primary" type="submit">
-            Save changes
-          </button>
-        </div>
-      </form>
-    </details>
-  );
+function countFlow(leads: Lead[]) {
+  const notLost = leads.filter((lead) => lead.stage !== "lost");
+  const verified = notLost.filter((lead) => lead.lead_score !== null || !["new", "raw"].includes(lead.stage));
+  const scored = notLost.filter((lead) => lead.lead_score !== null || ["scored", "qualified", "contacted", "interested", "demo_booked", "proposal", "won"].includes(lead.stage));
+  const outreach = notLost.filter((lead) => ["contacted", "interested", "demo_booked", "proposal", "won"].includes(lead.stage));
+  const followup = notLost.filter((lead) => Boolean(lead.next_action));
+  const qualified = notLost.filter((lead) => ["qualified", "interested", "demo_booked", "proposal", "won"].includes(lead.stage));
+  const proposal = notLost.filter((lead) => ["proposal", "won"].includes(lead.stage));
+  const won = notLost.filter((lead) => lead.stage === "won");
+  return [notLost.length, verified.length, scored.length, outreach.length, followup.length, qualified.length, proposal.length, won.length];
 }
 
 export default async function LeadsPage({ searchParams }: PageProps) {
   const { supabase, workspace } = await requireWorkspace();
   const params = await searchParams;
-  const { data } = await supabase
-    .from("leads")
-    .select(
-      "id, name, company, email, phone, whatsapp, source, stage, niche, lead_score, estimated_value, currency, pain_point, next_action, next_action_at, google_maps_url, notes, legacy_notion_url, imported_at, created_at",
-    )
-    .eq("workspace_id", workspace.id)
-    .order("lead_score", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false });
+  const monthStart = new Date();
+  monthStart.setHours(0, 0, 0, 0);
+  monthStart.setDate(1);
 
-  const leads = (data ?? []) as Lead[];
+  const [leadResult, activityResult, autopilotResult, projectResult, actionResult] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id,name,company,email,phone,whatsapp,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
+      .eq("workspace_id", workspace.id)
+      .order("lead_score", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("lead_activities")
+      .select("id,outcome,summary,occurred_at")
+      .eq("workspace_id", workspace.id)
+      .order("occurred_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("orbit_autopilot_configs")
+      .select("state,max_active_projects,last_preflight_result,blocked_reason")
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("projects")
+      .select("id,status")
+      .eq("workspace_id", workspace.id),
+    supabase
+      .from("orbit_external_action_requests")
+      .select("id,channel,status,created_at")
+      .eq("workspace_id", workspace.id)
+      .gte("created_at", monthStart.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(250),
+  ]);
+
+  const leads = (leadResult.data ?? []) as Lead[];
+  const activities = (activityResult.data ?? []) as LeadActivity[];
+  const autopilot = (autopilotResult.data ?? null) as AutopilotConfig | null;
+  const projects = projectResult.data ?? [];
+  const externalActions = (actionResult.data ?? []) as ExternalAction[];
   const now = Date.now();
-  const filters: ResolvedFilters = {
-    q: params.q?.trim() ?? "",
-    stage: isLeadStage(params.stage) ? params.stage : "all",
-    priority: isPriorityFilter(params.priority) ? params.priority : "all",
-    view: isViewMode(params.view) ? params.view : "focus",
-  };
 
-  const query = filters.q.toLowerCase();
-  const filteredLeads = leads.filter((lead) => {
-    const searchable = [
-      lead.company,
-      lead.name,
-      lead.niche,
-      lead.pain_point,
-      lead.next_action,
-      lead.notes,
-    ]
+  const q = params.q?.trim().toLowerCase() ?? "";
+  const stage = normaliseStage(params.stage);
+  const priority = params.priority ?? "all";
+  const visibleLeads = leads.filter((lead) => {
+    const searchText = [lead.company, lead.name, lead.niche, lead.pain_point, lead.next_action]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-
-    if (query && !searchable.includes(query)) return false;
-    if (filters.stage !== "all" && lead.stage !== filters.stage) return false;
-    if (filters.priority === "hot" && (lead.lead_score ?? 0) < 90) return false;
-    if (filters.priority === "overdue" && !isOverdue(lead, now)) return false;
-    if (
-      filters.priority === "missing_action" &&
-      lead.next_action &&
-      lead.next_action_at
-    ) {
-      return false;
-    }
+    if (q && !searchText.includes(q)) return false;
+    if (stage !== "all" && lead.stage !== stage) return false;
+    if (priority === "hot" && (lead.lead_score ?? 0) < 85) return false;
+    if (priority === "overdue" && !isOverdue(lead, now)) return false;
     return true;
   });
 
-  const activeLeads = leads.filter(isActiveLead);
-  const highPriority = activeLeads.filter((lead) => (lead.lead_score ?? 0) >= 90);
-  const overdue = activeLeads.filter((lead) => isOverdue(lead, now));
-  const won = leads.filter((lead) => lead.stage === "won");
-  const missingAction = activeLeads.filter(
-    (lead) => !lead.next_action || !lead.next_action_at,
-  );
-  const missingScore = activeLeads.filter((lead) => lead.lead_score === null);
-  const missingPain = activeLeads.filter((lead) => !lead.pain_point);
-  const focusLeads = filteredLeads
-    .filter(isActiveLead)
-    .sort((a, b) => {
-      const rank = attentionRank(a, now) - attentionRank(b, now);
-      if (rank !== 0) return rank;
-      return (b.lead_score ?? 0) - (a.lead_score ?? 0);
-    });
-  const maxStageCount = Math.max(
-    ...leadStages.map((stage) => filteredLeads.filter((lead) => lead.stage === stage).length),
-    1,
-  );
+  const active = leads.filter(isActive);
+  const totalLeadCount = Math.max(leads.length, 1);
+  const flowCounts = countFlow(leads);
+  const activeProjects = projects.filter((project) => project.status !== "completed").length;
+  const maxProjects = autopilot?.max_active_projects ?? 0;
+  const capacityAvailable = maxProjects > 0
+    ? Math.max(0, Math.round(((maxProjects - activeProjects) / maxProjects) * 100))
+    : null;
+  const emailActionsThisMonth = externalActions.filter(
+    (action) => action.channel === "email" && ["completed", "sent", "succeeded"].includes(action.status ?? ""),
+  ).length;
+  const autopilotState = autopilot?.state ? humanize(autopilot.state) : "Not configured";
+  const health = autopilot?.blocked_reason ? "Needs attention" : autopilot ? "Healthy" : "Setup required";
 
   return (
-    <div className="page">
-      <PageHeader
-        kicker="Revenue control"
-        title="Lead Engine"
-        description="Know which opportunity matters, what must happen next, and where every prospect sits in the path from research to revenue."
-        action={
-          <a className="button button-primary" href="#add-lead">
-            <Plus size={15} aria-hidden="true" /> Add lead
-          </a>
-        }
-      />
+    <main className={styles.enginePage}>
+      <header className={styles.pageHeader}>
+        <div>
+          <h1>Lead Engine</h1>
+          <p>Find leads, nurture them and turn opportunities into clients.</p>
+        </div>
+        <a className={styles.primaryButton} href="#add-lead">
+          <Plus size={16} aria-hidden="true" /> Add lead
+        </a>
+      </header>
+
       <Notice error={params.error} notice={params.notice} />
 
-      <section className="metrics-grid" aria-label="Lead engine metrics">
-        <MetricCard label="Active pipeline" value={activeLeads.length} note={`${leads.length} total records`} />
-        <MetricCard label="Hot leads" value={highPriority.length} note="Score 90 or above" />
-        <MetricCard label="Overdue" value={overdue.length} note="Follow-ups already missed" />
-        <MetricCard label="Won" value={won.length} note="Converted acquisition records" />
+      <section className={styles.sourcePanel} aria-labelledby="lead-sources-title">
+        <div className={styles.panelHeadingRow}>
+          <div>
+            <h2 id="lead-sources-title">Lead Sources</h2>
+            <p>All your lead sources in one place. Click any source to view and manage leads.</p>
+          </div>
+          <Link href="/dashboard/connect">Manage sources</Link>
+        </div>
+        <div className={styles.sourceGrid}>
+          {sourceCards.map(({ slug, label, aliases, icon: Icon, tone }) => {
+            const count = leads.filter((lead) => aliases.includes(lead.source as never)).length;
+            const share = Math.round((count / totalLeadCount) * 100);
+            return (
+              <Link className={styles.sourceCard} href={`/dashboard/leads/sources/${slug}`} key={slug}>
+                <div className={styles.sourceTitle}>
+                  <span className={`${styles.sourceIcon} ${styles[`tone_${tone}`]}`}><Icon size={19} aria-hidden="true" /></span>
+                  <span>{label}</span>
+                </div>
+                <div className={styles.sourceMetricRow}>
+                  <strong>{count.toLocaleString()}</strong>
+                  <ChevronRight size={17} aria-hidden="true" />
+                </div>
+                <small>{share}% of current lead records</small>
+              </Link>
+            );
+          })}
+          <Link className={`${styles.sourceCard} ${styles.addSourceCard}`} href="/dashboard/connect">
+            <Plus size={22} aria-hidden="true" />
+            <span>Add source</span>
+          </Link>
+        </div>
       </section>
 
-      <nav className={styles.modeNav} aria-label="Lead Engine views">
-        {viewModes.map((mode) => (
-          <Link
-            className={`${styles.modeLink} ${filters.view === mode ? styles.modeLinkActive : ""}`}
-            href={buildHref(filters, { view: mode })}
-            key={mode}
-          >
-            {mode === "focus" ? <Target size={13} aria-hidden="true" /> : null}
-            {mode === "pipeline" ? <Flame size={13} aria-hidden="true" /> : null}
-            {mode === "directory" ? <UsersRound size={13} aria-hidden="true" /> : null}
-            {humanize(mode)}
-          </Link>
-        ))}
-      </nav>
-
-      <form className={styles.controlBar} method="get" action="/dashboard/leads">
-        <input type="hidden" name="view" value={filters.view} />
-        <div className={styles.searchField}>
-          <Search size={15} aria-hidden="true" />
-          <input
-            aria-label="Search leads"
-            name="q"
-            defaultValue={filters.q}
-            placeholder="Search business, niche, pain or next action"
-          />
-        </div>
-        <div className={styles.filterWrap}>
-          <label htmlFor="stage-filter">Stage</label>
-          <select
-            className={styles.filterSelect}
-            id="stage-filter"
-            name="stage"
-            defaultValue={filters.stage}
-          >
-            <option value="all">All stages</option>
-            {leadStages.map((stage) => (
-              <option value={stage} key={stage}>
-                {humanize(stage)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.filterWrap}>
-          <label htmlFor="priority-filter">Priority</label>
-          <select
-            className={styles.filterSelect}
-            id="priority-filter"
-            name="priority"
-            defaultValue={filters.priority}
-          >
-            <option value="all">All priorities</option>
-            <option value="hot">Hot · score 90+</option>
-            <option value="overdue">Overdue follow-up</option>
-            <option value="missing_action">Missing next action</option>
-          </select>
-        </div>
-        <div className={styles.controlActions}>
-          <button className="button button-primary" type="submit">Apply</button>
-          <Link className="button button-quiet" href={buildHref(filters, { q: "", stage: "all", priority: "all" })}>
-            Clear
-          </Link>
-        </div>
-      </form>
-
-      <details className="create-panel" id="add-lead">
-        <summary>Add a controlled opportunity</summary>
-        <form action={createLead}>
-          <LeadFormFields />
-          <div className="form-actions">
-            <button className="button button-primary" type="submit">
-              Save lead
-            </button>
-          </div>
-        </form>
-      </details>
-
-      {filters.view === "focus" ? (
-        <section className={styles.focusGrid}>
-          <article className={styles.focusPanel}>
-            <div className={styles.sectionHead}>
+      <div className={styles.contentGrid}>
+        <div className={styles.mainColumn}>
+          <section className={styles.flowPanel} aria-labelledby="lead-flow-title">
+            <div className={styles.panelHeadingRow}>
               <div>
-                <h2>Founder focus</h2>
-                <p>Overdue first, then high-value, then uncontrolled opportunities.</p>
+                <h2 id="lead-flow-title">Lead Engine Flow</h2>
+                <p>Everything before Won lives here. Won leads hand off to Sales Desk.</p>
               </div>
-              <span>{focusLeads.length} active</span>
+              <Link href="/dashboard/sales">View Sales Desk <ArrowRight size={14} aria-hidden="true" /></Link>
             </div>
-            {focusLeads.length ? (
-              <div className={styles.focusList}>
-                {focusLeads.map((lead) => (
-                  <article className={styles.focusCard} key={lead.id}>
-                    <div>
-                      <div className={styles.leadHeading}>
-                        <h3>{lead.company ?? lead.name}</h3>
-                        <StatusPill value={lead.stage} />
-                        <span className={scoreClass(lead)}>{lead.lead_score ?? "—"}/100</span>
-                      </div>
-                      <div className={styles.leadMeta}>
-                        <span>{lead.name !== lead.company ? lead.name : "Owner not recorded"}</span>
-                        <span>{lead.niche ?? "Niche not set"}</span>
-                        <span>{formatMoney(Number(lead.estimated_value), lead.currency)}</span>
-                      </div>
-                      <p className={styles.nextAction}>
-                        <strong>Next:</strong> {lead.next_action ?? "No next action has been assigned."}
-                      </p>
-                      <span
-                        className={`${styles.urgency} ${isOverdue(lead, now) ? styles.urgencyCritical : ""}`}
-                      >
-                        <Clock3 size={12} aria-hidden="true" /> {urgencyLabel(lead, now)}
-                      </span>
-                    </div>
-                    <LeadQuickActions lead={lead} />
-                    <LeadEditPanel lead={lead} />
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className={styles.emptyFiltered}>
-                <div>
-                  <strong>No active lead matches this view.</strong>
-                  Clear filters or add a real opportunity.
-                </div>
-              </div>
-            )}
-          </article>
-
-          <aside className={styles.healthPanel}>
-            <div className={styles.sectionHead}>
-              <div>
-                <h2>Pipeline health</h2>
-                <p>Control gaps that weaken conversion.</p>
-              </div>
-            </div>
-            <div className={styles.healthBody}>
-              <div className={styles.healthCallout}>
-                <strong>{overdue.length}</strong>
-                <span>follow-ups are overdue. Revenue leaks when the next action is missed.</span>
-              </div>
-              <div className={styles.stageStack}>
-                {activeStages.map((stage) => {
-                  const count = filteredLeads.filter((lead) => lead.stage === stage).length;
-                  return (
-                    <div className={styles.stageRow} key={stage}>
-                      <span>{humanize(stage)}</span>
-                      <div className={styles.stageBar} aria-hidden="true">
-                        <i style={{ width: `${Math.max((count / maxStageCount) * 100, count ? 8 : 0)}%` }} />
-                      </div>
-                      <strong>{count}</strong>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className={styles.healthRules}>
-                <div className={styles.healthRule}>
-                  <span>Missing next action</span><strong>{missingAction.length}</strong>
-                </div>
-                <div className={styles.healthRule}>
-                  <span>Missing score</span><strong>{missingScore.length}</strong>
-                </div>
-                <div className={styles.healthRule}>
-                  <span>Missing pain point</span><strong>{missingPain.length}</strong>
-                </div>
-              </div>
-            </div>
-          </aside>
-        </section>
-      ) : null}
-
-      {filters.view === "pipeline" ? (
-        <section>
-          {filteredLeads.length ? (
-            <div className={styles.boardWrap}>
-              <div className={styles.board}>
-                {leadStages.map((stage) => {
-                  const stageLeads = filteredLeads.filter((lead) => lead.stage === stage);
-                  return (
-                    <section className={styles.boardColumn} key={stage}>
-                      <div className={styles.boardHead}>
-                        <strong>{humanize(stage)}</strong>
-                        <span>{stageLeads.length}</span>
-                      </div>
-                      <div className={styles.boardCards}>
-                        {stageLeads.length ? stageLeads.map((lead) => (
-                          <article className={styles.boardCard} key={lead.id}>
-                            <h3>{lead.company ?? lead.name}</h3>
-                            <div className={styles.boardMeta}>
-                              <span>{lead.lead_score ?? "—"}/100</span>
-                              <span>{lead.niche ?? "No niche"}</span>
-                            </div>
-                            <p>{lead.next_action ?? "No next action assigned."}</p>
-                            <div className={styles.boardMeta}>
-                              <span>{lead.next_action_at ? formatRelativeDate(lead.next_action_at) : "No date"}</span>
-                              {lead.whatsapp && whatsappHref(lead.whatsapp) ? (
-                                <a href={whatsappHref(lead.whatsapp) ?? undefined} target="_blank" rel="noreferrer">
-                                  WhatsApp <ArrowUpRight size={9} aria-hidden="true" />
-                                </a>
-                              ) : null}
-                            </div>
-                            <form className={styles.boardForm} action={updateLeadStage}>
-                              <input type="hidden" name="id" value={lead.id} />
-                              <select name="stage" defaultValue={lead.stage} aria-label={`Move ${lead.company ?? lead.name}`}>
-                                {leadStages.map((option) => (
-                                  <option value={option} key={option}>{humanize(option)}</option>
-                                ))}
-                              </select>
-                              <button type="submit">Move</button>
-                            </form>
-                            <Link
-                              className={styles.quickAction}
-                              href={buildHref(filters, {
-                                view: "directory",
-                                q: lead.company ?? lead.name,
-                                stage: "all",
-                                priority: "all",
-                              })}
-                            >
-                              Open record
-                            </Link>
-                          </article>
-                        )) : (
-                          <div className={styles.boardEmpty}>No leads</div>
-                        )}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              icon={UsersRound}
-              title="No leads match these filters"
-              description="Clear the filters or capture a new opportunity."
-            />
-          )}
-        </section>
-      ) : null}
-
-      {filters.view === "directory" ? (
-        <section className={styles.directoryPanel}>
-          <div className={styles.sectionHead}>
-            <div>
-              <h2>Lead directory</h2>
-              <p>Complete qualification, evidence, contact and follow-up records.</p>
-            </div>
-            <span>{filteredLeads.length} records</span>
-          </div>
-          {filteredLeads.length ? (
-            <div className={styles.directoryList}>
-              {filteredLeads.map((lead) => (
-                <article className={styles.directoryCard} key={lead.id}>
-                  <div className={styles.directoryCell}>
-                    <span>Opportunity</span>
-                    <strong>{lead.company ?? lead.name}</strong>
-                    <p>{lead.name !== lead.company ? lead.name : "Owner not recorded"} · {lead.niche ?? "No niche"}</p>
-                    <div className={styles.leadHeading}>
-                      <StatusPill value={lead.stage} />
-                      <span className={scoreClass(lead)}>{lead.lead_score ?? "—"}/100</span>
-                    </div>
+            <div className={styles.flowTrack}>
+              {[
+                { label: "Find Leads", icon: Search, tone: "purple" },
+                { label: "Verify & Deduplicate", icon: ShieldCheck, tone: "blue" },
+                { label: "Score Leads", icon: Star, tone: "green" },
+                { label: "Outreach", icon: Send, tone: "amber" },
+                { label: "Follow-up", icon: Mail, tone: "amber" },
+                { label: "Qualify", icon: MessageSquareText, tone: "red" },
+                { label: "Proposal / Negotiation", icon: Sparkles, tone: "purple" },
+                { label: "Won → Sales Desk", icon: CheckCircle2, tone: "green" },
+              ].map(({ label, icon: Icon, tone }, index) => (
+                <div className={styles.flowStep} key={label}>
+                  <div className={styles.flowIconWrap}>
+                    <span className={`${styles.flowIcon} ${styles[`flow_${tone}`]}`}><Icon size={20} aria-hidden="true" /></span>
+                    {index < 7 ? <i aria-hidden="true" /> : null}
                   </div>
-                  <div className={styles.directoryCell}>
-                    <span>Observed pain</span>
-                    <p>{lead.pain_point ?? "Pain point has not been documented."}</p>
-                  </div>
-                  <div className={styles.directoryCell}>
-                    <span>Next action</span>
-                    <strong>{lead.next_action ?? "Not assigned"}</strong>
-                    <p>{lead.next_action_at ? formatRelativeDate(lead.next_action_at) : "No follow-up date"}</p>
-                  </div>
-                  <div className={styles.directoryCell}>
-                    <span>Actions</span>
-                    <LeadQuickActions lead={lead} />
-                    {lead.legacy_notion_url ? (
-                      <a className={styles.quickAction} href={lead.legacy_notion_url} target="_blank" rel="noreferrer">
-                        Legacy source <ArrowUpRight size={11} aria-hidden="true" />
-                      </a>
-                    ) : null}
-                  </div>
-                  <LeadEditPanel lead={lead} />
-                </article>
+                  <span className={styles.stepNumber}>{index + 1}</span>
+                  <strong>{label}</strong>
+                  <b>{flowCounts[index].toLocaleString()}</b>
+                </div>
               ))}
             </div>
-          ) : (
-            <div className={styles.emptyFiltered}>
-              <div>
-                <strong>No lead matches this search.</strong>
-                Change the filters or add a new record.
-              </div>
+            <div className={styles.autopilotNote}>
+              <Sparkles size={15} aria-hidden="true" />
+              <span>Orbit can run approved acquisition work automatically. Founder attention stays on exceptions and red-authority decisions.</span>
             </div>
-          )}
-        </section>
-      ) : null}
-    </div>
+          </section>
+
+          <section className={styles.leadsPanel} aria-labelledby="lead-list-title">
+            <div className={styles.tabs}>
+              <span className={styles.activeTab}>All Leads</span>
+              <Link href="/dashboard/leads?priority=hot">Hot Leads</Link>
+              <Link href="/dashboard/leads?stage=contacted">Outreach</Link>
+              <Link href="/dashboard/leads?stage=interested">Responses</Link>
+              <Link href="/dashboard/leads?stage=proposal">Opportunities</Link>
+              <Link href="/dashboard/sales">Won → Sales Desk</Link>
+            </div>
+
+            <form className={styles.filterBar} action="/dashboard/leads" method="get">
+              <label className={styles.searchBox}>
+                <Search size={15} aria-hidden="true" />
+                <input name="q" defaultValue={params.q ?? ""} placeholder="Search business, niche, pain or next action" />
+              </label>
+              <select name="stage" defaultValue={stage} aria-label="Filter by stage">
+                <option value="all">All stages</option>
+                {stages.map((value) => <option value={value} key={value}>{humanize(value)}</option>)}
+              </select>
+              <select name="priority" defaultValue={priority} aria-label="Filter by priority">
+                <option value="all">All priorities</option>
+                <option value="hot">Hot leads</option>
+                <option value="overdue">Overdue</option>
+              </select>
+              <button type="submit">Apply</button>
+              <Link href="/dashboard/leads">Clear</Link>
+            </form>
+
+            <div className={styles.tableWrap}>
+              <table className={styles.leadTable}>
+                <thead>
+                  <tr>
+                    <th id="lead-list-title">Lead</th>
+                    <th>Source</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                    <th>Last contact</th>
+                    <th>Next action</th>
+                    <th>Owner</th>
+                    <th>Priority</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleLeads.slice(0, 10).map((lead) => {
+                    const overdue = isOverdue(lead, now);
+                    const score = lead.lead_score ?? 0;
+                    return (
+                      <tr key={lead.id}>
+                        <td>
+                          <div className={styles.leadIdentity}>
+                            <span>{initials(lead)}</span>
+                            <div><strong>{lead.company ?? lead.name}</strong><small>{lead.niche ?? "Niche not set"}</small></div>
+                          </div>
+                        </td>
+                        <td>{sourceLabel(lead.source)}</td>
+                        <td><span className={styles.scorePill}>{lead.lead_score ?? "—"}</span></td>
+                        <td><span className={`${styles.statusPill} ${styles[`status_${stageTone(lead.stage)}`]}`}>{humanize(lead.stage)}</span></td>
+                        <td>{formatRelativeDate(lead.created_at)}</td>
+                        <td><strong className={styles.nextActionText}>{lead.next_action ?? "Set next action"}</strong>{lead.next_action_at ? <small>{formatRelativeDate(lead.next_action_at)}</small> : null}</td>
+                        <td><span>AI Agent</span><small>Orbit Outbound</small></td>
+                        <td><span className={`${styles.priorityPill} ${overdue || score >= 90 ? styles.priorityHigh : score >= 75 ? styles.priorityMedium : ""}`}>{overdue || score >= 90 ? "High" : score >= 75 ? "Medium" : "Normal"}</span></td>
+                        <td><Link className={styles.rowAction} href={lead.stage === "won" ? "/dashboard/sales" : `/dashboard/leads?q=${encodeURIComponent(lead.company ?? lead.name)}`} aria-label={`Open ${lead.company ?? lead.name}`}><ArrowRight size={15} /></Link></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!visibleLeads.length ? <div className={styles.emptyState}>No leads match these filters.</div> : null}
+            </div>
+          </section>
+        </div>
+
+        <aside className={styles.sideColumn}>
+          <section className={styles.sideCard}>
+            <h2>Autopilot at a glance</h2>
+            <div className={styles.glanceList}>
+              <div><Activity size={15} /><span>Status</span><strong className={styles.good}>{autopilotState}</strong></div>
+              <div><ShieldCheck size={15} /><span>Health</span><strong className={autopilot?.blocked_reason ? styles.bad : styles.good}>{health}</strong></div>
+              <div><CircleDollarSign size={15} /><span>Studio Capacity</span><strong>{capacityAvailable === null ? "Not set" : `${capacityAvailable}% available`}</strong></div>
+              <div><Sparkles size={15} /><span>Active Sources</span><strong>{sourceCards.filter((card) => leads.some((lead) => card.aliases.includes(lead.source as never))).length}</strong></div>
+              <div><Mail size={15} /><span>Emails Sent This Month</span><strong>{emailActionsThisMonth}</strong></div>
+            </div>
+          </section>
+
+          <section className={styles.sideCard}>
+            <div className={styles.sideHeading}><h2>Recent activity</h2><Link href="/dashboard">View all</Link></div>
+            <div className={styles.activityList}>
+              {activities.length ? activities.map((activity) => (
+                <div key={activity.id}>
+                  <span className={styles.activityDot} />
+                  <p><strong>{humanize(activity.outcome)}</strong><small>{activity.summary}</small></p>
+                  <time>{formatRelativeDate(activity.occurred_at)}</time>
+                </div>
+              )) : <div className={styles.emptyMini}>No lead activity yet.</div>}
+            </div>
+          </section>
+
+          <section className={styles.sideCard}>
+            <h2>Authority guide</h2>
+            <div className={styles.authorityList}>
+              <div><span className={`${styles.authorityIcon} ${styles.authorityGreen}`}>○</span><p><strong>Green</strong><small>Automatic · no action needed</small></p></div>
+              <div><span className={`${styles.authorityIcon} ${styles.authorityAmber}`}>◒</span><p><strong>Amber</strong><small>AI acts within approved rules</small></p></div>
+              <div><span className={`${styles.authorityIcon} ${styles.authorityRed}`}>♥</span><p><strong>Red</strong><small>Needs founder approval</small></p></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <section className={styles.addPanel} id="add-lead" aria-label="Add lead">
+        <div className={styles.addPanelCard}>
+          <div className={styles.addPanelHeader}><div><h2>Add lead</h2><p>Create a controlled acquisition record.</p></div><Link href="/dashboard/leads">×</Link></div>
+          <form action={createLead} className={styles.addForm}>
+            <label><span>Business name</span><input name="businessName" required minLength={2} /></label>
+            <label><span>Owner or contact</span><input name="ownerName" /></label>
+            <label><span>Email</span><input name="email" type="email" /></label>
+            <label><span>Phone</span><input name="phone" type="tel" /></label>
+            <label><span>WhatsApp</span><input name="whatsapp" type="tel" /></label>
+            <label><span>Niche</span><input name="niche" /></label>
+            <label><span>Source</span><select name="source" defaultValue="direct"><option value="direct">Direct</option><option value="website">Website</option><option value="google">Google</option><option value="instagram">Instagram</option><option value="linkedin">LinkedIn</option><option value="facebook">Facebook</option><option value="referral">Referral</option><option value="other">Other</option></select></label>
+            <label><span>Stage</span><select name="stage" defaultValue="raw"><option value="raw">Raw</option><option value="scored">Scored</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="demo_booked">Demo booked</option><option value="won">Won</option><option value="lost">Lost</option></select></label>
+            <label><span>Lead score</span><input name="leadScore" type="number" min="0" max="100" /></label>
+            <label><span>Estimated value</span><input name="estimatedValue" type="number" min="0" defaultValue="0" /></label>
+            <label><span>Currency</span><select name="currency" defaultValue="PKR"><option>PKR</option><option>USD</option><option>GBP</option><option>EUR</option><option>AED</option><option>SAR</option></select></label>
+            <label className={styles.wideField}><span>Pain point</span><textarea name="painPoint" /></label>
+            <label className={styles.wideField}><span>Next action</span><input name="nextAction" /></label>
+            <label><span>Follow-up date</span><input name="nextActionAt" type="datetime-local" /></label>
+            <label className={styles.wideField}><span>Research link</span><input name="googleMapsUrl" type="url" /></label>
+            <label className={styles.wideField}><span>Notes</span><textarea name="notes" /></label>
+            <div className={styles.formActions}><Link href="/dashboard/leads">Cancel</Link><button type="submit">Save lead</button></div>
+          </form>
+        </div>
+      </section>
+    </main>
   );
 }

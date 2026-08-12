@@ -1,15 +1,5 @@
 import type { ReactNode } from "react";
-import { LeadDiscoveryPanel } from "./LeadDiscoveryPanel";
 
-type LeadsLayoutProps = {
-  children: ReactNode;
-};
-
-export default function LeadsLayout({ children }: LeadsLayoutProps) {
-  return (
-    <>
-      {children}
-      <LeadDiscoveryPanel />
-    </>
-  );
+export default function LeadsLayout({ children }: { children: ReactNode }) {
+  return children;
 }
