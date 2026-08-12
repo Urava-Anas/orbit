@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ExternalLink, Monitor, RefreshCw, Smartphone, Tablet } from "lucide-react";
-import assetStyles from "./source-assets.module.css";
+import styles from "./WebsitePreview.module.css";
 
 type WebsitePreviewProps = {
   name: string;
@@ -17,7 +17,7 @@ export function WebsitePreview({ name, url }: WebsitePreviewProps) {
 
   if (!url) {
     return (
-      <div className={`${assetStyles.websitePreview} ${assetStyles.websitePreviewEmpty}`}>
+      <div className={`${styles.websitePreview} ${styles.websitePreviewEmpty}`}>
         <GlobePlaceholder />
         <strong>No website URL yet</strong>
         <span>Add a live URL to show the website preview here.</span>
@@ -33,25 +33,25 @@ export function WebsitePreview({ name, url }: WebsitePreviewProps) {
   }
 
   return (
-    <div className={assetStyles.websitePreview}>
-      <div className={assetStyles.websiteBrowserBar}>
-        <span className={assetStyles.browserDots} aria-hidden="true"><i /><i /><i /></span>
-        <span className={assetStyles.browserAddress}>{hostname}</span>
-        <div className={assetStyles.deviceSwitcher} aria-label="Preview size">
-          <button className={device === "desktop" ? assetStyles.deviceActive : ""} type="button" onClick={() => setDevice("desktop")} title="Desktop preview" aria-label="Desktop preview"><Monitor size={13} /></button>
-          <button className={device === "tablet" ? assetStyles.deviceActive : ""} type="button" onClick={() => setDevice("tablet")} title="Tablet preview" aria-label="Tablet preview"><Tablet size={13} /></button>
-          <button className={device === "mobile" ? assetStyles.deviceActive : ""} type="button" onClick={() => setDevice("mobile")} title="Mobile preview" aria-label="Mobile preview"><Smartphone size={13} /></button>
+    <div className={styles.websitePreview}>
+      <div className={styles.websiteBrowserBar}>
+        <span className={styles.browserDots} aria-hidden="true"><i /><i /><i /></span>
+        <span className={styles.browserAddress}>{hostname}</span>
+        <div className={styles.deviceSwitcher} aria-label="Preview size">
+          <button className={device === "desktop" ? styles.deviceActive : ""} type="button" onClick={() => setDevice("desktop")} title="Desktop preview" aria-label="Desktop preview"><Monitor size={13} /></button>
+          <button className={device === "tablet" ? styles.deviceActive : ""} type="button" onClick={() => setDevice("tablet")} title="Tablet preview" aria-label="Tablet preview"><Tablet size={13} /></button>
+          <button className={device === "mobile" ? styles.deviceActive : ""} type="button" onClick={() => setDevice("mobile")} title="Mobile preview" aria-label="Mobile preview"><Smartphone size={13} /></button>
         </div>
-        <div className={assetStyles.browserActions}>
+        <div className={styles.browserActions}>
           <button type="button" onClick={() => setPreviewKey((value) => value + 1)} title="Refresh preview" aria-label={`Refresh ${name} preview`}><RefreshCw size={13} /></button>
           <a href={url} target="_blank" rel="noreferrer" title="Open website" aria-label={`Open ${name}`}><ExternalLink size={13} /></a>
         </div>
       </div>
-      <div className={`${assetStyles.websiteFrameWrap} ${assetStyles[`preview_${device}`]}`}>
-        <div className={assetStyles.previewViewport}>
+      <div className={`${styles.websiteFrameWrap} ${styles[`preview_${device}`]}`}>
+        <div className={styles.previewViewport}>
           <iframe key={`${previewKey}-${device}`} src={url} title={`${name} website preview`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
         </div>
-        <div className={assetStyles.websiteFrameFallback}>Interactive preview · switch device size above or open the live site in a new tab.</div>
+        <div className={styles.websiteFrameFallback}>Interactive preview · switch device size above or open the live site in a new tab.</div>
       </div>
     </div>
   );
