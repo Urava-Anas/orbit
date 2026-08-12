@@ -114,8 +114,17 @@ function stageTone(stage: string) {
   return "neutral";
 }
 
+function sourceCard(source: string) {
+  return sourceCards.find((card) => card.aliases.includes(source as never));
+}
+
 function sourceLabel(source: string) {
-  return sourceCards.find((card) => card.aliases.includes(source as never))?.label ?? humanize(source);
+  return sourceCard(source)?.label ?? humanize(source);
+}
+
+function sourceWorkspaceHref(source: string) {
+  const card = sourceCard(source);
+  return card ? `/dashboard/leads/sources/${card.slug}` : "/dashboard/leads";
 }
 
 function initials(lead: Lead) {
@@ -348,6 +357,14 @@ export default async function LeadsPage({ searchParams }: PageProps) {
                   {visibleLeads.slice(0, 10).map((lead) => {
                     const overdue = isOverdue(lead, now);
                     const score = lead.lead_score ?? 0;
+                    const sourceLinkStyle = {
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      color: "#d8e2ee",
+                      textDecoration: "underline",
+                      textUnderlineOffset: "3px",
+                    } as const;
                     return (
                       <tr key={lead.id}>
                         <td>
@@ -356,7 +373,27 @@ export default async function LeadsPage({ searchParams }: PageProps) {
                             <div><strong>{lead.company ?? lead.name}</strong><small>{lead.niche ?? "Niche not set"}</small></div>
                           </div>
                         </td>
-                        <td>{sourceLabel(lead.source)}</td>
+                        <td>
+                          {lead.google_maps_url ? (
+                            <a
+                              href={lead.google_maps_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={sourceLinkStyle}
+                              title="Open the original source where this lead was found"
+                            >
+                              {sourceLabel(lead.source)} <ArrowRight size={12} aria-hidden="true" />
+                            </a>
+                          ) : (
+                            <Link
+                              href={sourceWorkspaceHref(lead.source)}
+                              style={sourceLinkStyle}
+                              title="Open this lead source workspace"
+                            >
+                              {sourceLabel(lead.source)} <ArrowRight size={12} aria-hidden="true" />
+                            </Link>
+                          )}
+                        </td>
                         <td><span className={styles.scorePill}>{lead.lead_score ?? "—"}</span></td>
                         <td><span className={`${styles.statusPill} ${styles[`status_${stageTone(lead.stage)}`]}`}>{humanize(lead.stage)}</span></td>
                         <td>{formatRelativeDate(lead.created_at)}</td>
@@ -428,7 +465,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
             <label className={styles.wideField}><span>Pain point</span><textarea name="painPoint" /></label>
             <label className={styles.wideField}><span>Next action</span><input name="nextAction" /></label>
             <label><span>Follow-up date</span><input name="nextActionAt" type="datetime-local" /></label>
-            <label className={styles.wideField}><span>Research link</span><input name="googleMapsUrl" type="url" /></label>
+            <label className={styles.wideField}><span>Source link</span><input name="googleMapsUrl" type="url" placeholder="Paste the exact page, profile or listing URL where this lead was found" /></label>
             <label className={styles.wideField}><span>Notes</span><textarea name="notes" /></label>
             <div className={styles.formActions}><Link href="/dashboard/leads">Cancel</Link><button type="submit">Save lead</button></div>
           </form>
