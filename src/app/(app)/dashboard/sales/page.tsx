@@ -193,7 +193,7 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
 
   const taskItems = [
     ...overdueInvoices.slice(0, 2).map((invoice) => ({ title: `Collect ${invoice.reference}`, detail: formatMoney(Number(invoice.amount), invoice.currency), due: invoice.due_at ? formatRelativeDate(invoice.due_at) : "Overdue" })),
-    ...activeProjects.filter((project) => project.due_date).slice(0, 2).map((project) => ({ title: project.name, detail: project.status === "blocked" ? "Delivery blocked" : "Delivery follow-up", due: formatRelativeDate(project.due_date) })),
+    ...activeProjects.filter((project) => project.due_date).slice(0, 2).map((project) => ({ title: project.name, detail: project.status === "blocked" ? "Delivery blocked" : "Delivery follow-up", due: formatRelativeDate(project.due_date ?? project.created_at) })),
   ].slice(0, 4);
 
   return (
