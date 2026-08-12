@@ -31,7 +31,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const schemaUrl = "https://orbit-two-delta.vercel.app/orbit-gpt-actions.openapi.json";
+const orbitUrl = "https://orbit-two-delta.vercel.app";
+const schemaUrl = `${orbitUrl}/orbit-gpt-actions.openapi.json`;
+const githubSetupUrl = "https://github.com/settings/apps/new";
 
 type ConnectionStatus = "connected" | "available" | "pending";
 type ProviderId =
@@ -64,8 +66,7 @@ type Provider = {
   usedBy: string[];
   icon: ReactNode;
   connectPath?: string;
-  providerUrl?: string;
-  providerLabel?: string;
+  manageUrl?: string;
   platformReady: boolean;
 };
 
@@ -120,8 +121,8 @@ function messageFor(code: string | undefined) {
 
 function errorFor(code: string | undefined) {
   const messages: Record<string, string> = {
-    github_platform_setup: "GitHub connection is not available yet because the Orbit GitHub App still needs its one-time platform registration.",
-    vercel_platform_setup: "Vercel connection is not available yet because the Orbit Vercel Integration still needs its one-time platform registration.",
+    github_platform_setup: "Orbit's GitHub App still needs its one-time product-owner registration before normal users can connect.",
+    vercel_platform_setup: "Orbit's Vercel Integration still needs its one-time product-owner registration before normal users can connect.",
     github_oauth_incomplete: "GitHub did not return a complete installation response. Try connecting again.",
     github_state_mismatch: "GitHub connection validation failed. Start the connection again from Orbit.",
     github_installation_unverified: "Orbit could not verify that GitHub App installation.",
@@ -140,7 +141,7 @@ function errorFor(code: string | undefined) {
 
 export default async function OrbitConnectPage({ searchParams }: PageProps) {
   const [query, foundry] = await Promise.all([searchParams, requireFounderFoundry()]);
-  const { supabase, workspace } = foundry;
+  const { supabase, workspace, role } = foundry;
   const [keys, connectionsResult] = await Promise.all([
     listOrbitActionKeys(supabase, workspace.id),
     supabase
@@ -150,9 +151,11 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       )
       .eq("workspace_id", workspace.id),
   ]);
+
   const activeKeys = keys.filter((key) => key.is_active);
   const connections = (connectionsResult.data ?? []) as ConnectionRecord[];
   const connectionsByProvider = new Map(connections.map((item) => [item.provider, item]));
+  const isOrbitPlatformOwner = role === "owner" && workspace.slug === "urava";
 
   const providers: Provider[] = [
     {
@@ -163,8 +166,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       usedBy: ["Website Manager", "Delivery", "Automation"],
       icon: <Code2 aria-hidden="true" size={18} />,
       connectPath: "/api/integrations/github/start",
-      providerUrl: "https://github.com/settings/installations",
-      providerLabel: "Manage on GitHub",
+      manageUrl: "https://github.com/settings/installations",
       platformReady: githubAppReady(),
     },
     {
@@ -175,8 +177,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       usedBy: ["Website Manager", "Delivery", "Production"],
       icon: <Rocket aria-hidden="true" size={18} />,
       connectPath: "/api/integrations/vercel/start",
-      providerUrl: "https://vercel.com/dashboard/integrations",
-      providerLabel: "Manage on Vercel",
+      manageUrl: "https://vercel.com/dashboard/integrations",
       platformReady: vercelIntegrationReady(),
     },
     {
@@ -186,8 +187,6 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       description: "Choose a Google account and the verified website properties Orbit may read and manage.",
       usedBy: ["Website Manager", "SEO", "Growth"],
       icon: <Search aria-hidden="true" size={18} />,
-      providerUrl: "https://search.google.com/search-console",
-      providerLabel: "Open Search Console",
       platformReady: false,
     },
     {
@@ -197,8 +196,6 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       description: "Choose the Google Analytics account and properties Orbit may use for traffic and conversion reporting.",
       usedBy: ["Website Manager", "Growth", "Evidence"],
       icon: <BarChart3 aria-hidden="true" size={18} />,
-      providerUrl: "https://analytics.google.com",
-      providerLabel: "Open Analytics",
       platformReady: false,
     },
     {
@@ -208,8 +205,6 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       description: "Authorize Meta once, then choose the Pages, Instagram accounts and business assets Orbit may use.",
       usedBy: ["Lead Engine", "Marketing", "Publishing"],
       icon: <Share2 aria-hidden="true" size={18} />,
-      providerUrl: "https://business.facebook.com/settings",
-      providerLabel: "Open Meta Business",
       platformReady: false,
     },
     {
@@ -219,8 +214,6 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       description: "Authorize LinkedIn and choose the organisation pages and approved account access Orbit may use.",
       usedBy: ["Lead Engine", "Marketing", "Publishing"],
       icon: <MessageCircle aria-hidden="true" size={18} />,
-      providerUrl: "https://www.linkedin.com/mypreferences/d/third-party-applications",
-      providerLabel: "Open LinkedIn",
       platformReady: false,
     },
     {
@@ -230,8 +223,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       description: "Advanced founder connection for governed AI actions through revocable organisation-scoped action keys.",
       usedBy: ["Founder Command", "Orbit Operator", "Automation"],
       icon: <Bot aria-hidden="true" size={18} />,
-      providerUrl: schemaUrl,
-      providerLabel: "Open Orbit schema",
+      manageUrl: schemaUrl,
       platformReady: true,
     },
   ];
@@ -263,7 +255,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
           <span>Organisation connections</span>
           <h1>Connect</h1>
           <p>
-            Orbit uses one consistent connection flow: Connect → choose account → choose assets → approve → return to Orbit. Normal users never copy API tokens or see provider secrets.
+            Connect → choose account → choose assets → approve → return to Orbit. Normal users never copy API tokens or see provider secrets.
           </p>
         </div>
         <div className={styles.heroActions}>
@@ -286,7 +278,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
         <aside className={styles.rail}>
           <div className={styles.railHead}>
             <strong>Integrations</strong>
-            <small>Any Orbit module with missing access deep-links here and opens the exact provider automatically.</small>
+            <small>Missing access from any Orbit module opens the exact provider here.</small>
           </div>
           <nav className={styles.railNav} aria-label="Integration tabs">
             {providers.map((item) => {
@@ -312,7 +304,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
                 <div><h2>{selected.name}</h2><p>{selected.description}</p></div>
               </div>
               <span className={`${styles.statusPill} ${statusClass(selectedStatus)}`}>
-                {selectedStatus === "connected" ? "Connected" : selectedStatus === "available" ? "Ready to connect" : "OAuth connector pending"}
+                {selectedStatus === "connected" ? "Connected" : selectedStatus === "available" ? "Ready to connect" : "Platform setup required"}
               </span>
             </header>
 
@@ -361,7 +353,8 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
             ) : (
               <div className={styles.detailBody}>
                 <section className={styles.block}>
-                  <h3>{selectedStatus === "connected" ? "Connected account" : "Connect account"}</h3>
+                  <h3>{selectedStatus === "connected" ? "Connected account" : selectedStatus === "available" ? "Connect account" : "Connector setup"}</h3>
+
                   {selectedStatus === "connected" && selectedRecord ? (
                     <>
                       <div className={styles.accountCard}>
@@ -370,7 +363,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
                       </div>
                       <p>Orbit stores the provider installation server-side. Secret credentials are never displayed in the browser.</p>
                       <div className={styles.detailActions}>
-                        {selected.providerUrl ? <a className={styles.primary} href={selected.providerUrl} target="_blank" rel="noreferrer">Manage access <ExternalLink size={11} /></a> : null}
+                        {selected.manageUrl ? <a className={styles.primary} href={selected.manageUrl} target="_blank" rel="noreferrer">Manage access <ExternalLink size={11} /></a> : null}
                         <form action={`/api/integrations/${selected.id}/disconnect`} method="post">
                           <button className={styles.disconnectButton} type="submit">Disconnect</button>
                         </form>
@@ -378,19 +371,32 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
                     </>
                   ) : selected.connectPath && selected.platformReady ? (
                     <>
-                      <p>No credentials are required. Orbit will send you to {selected.name}, where you choose the account and assets you want to approve.</p>
+                      <p>No credentials are required. Orbit sends you to {selected.name}, where you choose the account and assets to approve.</p>
                       <div className={styles.flowSteps}>
                         <span>1. Connect</span><span>2. Choose account</span><span>3. Choose assets</span><span>4. Approve</span><span>5. Return to Orbit</span>
                       </div>
                       <div className={styles.detailActions}><a className={styles.primary} href={selected.connectPath}>Connect {selected.name}</a></div>
                     </>
+                  ) : selected.id === "github" && isOrbitPlatformOwner ? (
+                    <>
+                      <p><strong>Orbit's GitHub App has not been registered yet.</strong> The Installed GitHub Apps page you saw is for apps already installed on your account; it is not the Orbit registration screen.</p>
+                      <p>This is a one-time Urava product-owner setup. After it is completed, normal Orbit users will only see the real Connect GitHub authorization flow.</p>
+                      <ol className={styles.setupList}>
+                        <li><CheckCircle2 aria-hidden="true" size={17} />Open GitHub Developer Settings → GitHub Apps → New GitHub App.</li>
+                        <li><CheckCircle2 aria-hidden="true" size={17} />Name the app <strong>Orbit by Urava</strong> and use <strong>{orbitUrl}</strong> as the homepage.</li>
+                        <li><CheckCircle2 aria-hidden="true" size={17} />Set Setup URL to <strong>{orbitUrl}/api/integrations/github/callback</strong> and enable redirect after installation updates.</li>
+                        <li><CheckCircle2 aria-hidden="true" size={17} />Allow installation on any account and grant only the repository permissions Orbit needs.</li>
+                      </ol>
+                      <div className={styles.detailActions}>
+                        <a className={styles.primary} href={githubSetupUrl} target="_blank" rel="noreferrer">Register Orbit GitHub App <ExternalLink size={11} /></a>
+                      </div>
+                    </>
                   ) : (
                     <>
-                      <p>The Orbit-side OAuth/App connector for {selected.name} is being prepared. Normal users will not be asked for API keys when it becomes available.</p>
+                      <p>The Orbit-side OAuth/App connector for {selected.name} is not enabled at platform level yet. Normal users will not be asked for API keys.</p>
                       <div className={styles.flowSteps}>
                         <span>Connect</span><span>Choose account</span><span>Choose assets</span><span>Approve</span><span>Manage</span>
                       </div>
-                      {selected.providerUrl ? <div className={styles.detailActions}><a href={selected.providerUrl} target="_blank" rel="noreferrer">Open {selected.name} <ExternalLink size={11} /></a></div> : null}
                     </>
                   )}
                 </section>
@@ -411,7 +417,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
                     ) : <p>The provider installation is connected. Orbit will refresh the approved asset list when the provider exposes it.</p>
                   ) : (
                     <>
-                      <p>Orbit asks only for the permissions needed by the modules below. Users can change or revoke provider access later.</p>
+                      <p>Orbit asks only for permissions needed by these modules. Users can change or revoke provider access later.</p>
                       <div className={styles.usedBy}>{selected.usedBy.map((label) => <span key={label}>{label}</span>)}</div>
                     </>
                   )}
