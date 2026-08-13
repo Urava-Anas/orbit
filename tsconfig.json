@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "react-icons/si": ["./src/app/(app)/dashboard/connect/BrandIconCompat.tsx"]
     }
   },
   "include": [
