@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.114.0
       - name: Fix historical fresh-replay ordering
         run: |
           python - <<'PY'
