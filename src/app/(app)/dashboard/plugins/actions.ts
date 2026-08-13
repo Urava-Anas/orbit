@@ -123,6 +123,56 @@ export async function installPlugin(formData: FormData) {
   revalidatePlugins(slug);
 }
 
+export async function approvePluginUpdate(formData: FormData) {
+  const slug = pluginSlug(formData);
+  const { supabase, workspace, user, role } = await requireWorkspace();
+  requirePluginAdmin(role);
+  const { data: plugin, manifest } = await loadPluginForWrite(supabase, slug);
+
+  const { data: current, error: currentError } = await supabase
+    .from("plugin_installations")
+    .select("id,status,version,granted_permissions")
+    .eq("workspace_id", workspace.id)
+    .eq("plugin_id", plugin.id)
+    .maybeSingle();
+  if (currentError) throw new Error(`Plugin update check failed: ${currentError.message}`);
+  if (!current || current.status !== "pending_review") {
+    throw new Error("This plugin does not have an update awaiting approval.");
+  }
+
+  const previousVersion = current.version;
+  const previousPermissions = Array.isArray(current.granted_permissions) ? current.granted_permissions : [];
+  const { data: updated, error } = await supabase
+    .from("plugin_installations")
+    .update({
+      version: plugin.current_version,
+      status: "installed",
+      granted_permissions: manifest.permissions,
+    })
+    .eq("id", current.id)
+    .eq("workspace_id", workspace.id)
+    .eq("status", "pending_review")
+    .select("id,status")
+    .single();
+  if (error || !updated) throw new Error(`Plugin update could not be approved: ${error?.message ?? "unknown error"}`);
+
+  await logPluginEvent({
+    supabase,
+    workspaceId: workspace.id,
+    pluginId: plugin.id,
+    installationId: updated.id,
+    eventType: "version_changed",
+    actorUserId: user.id,
+    payload: {
+      fromVersion: previousVersion,
+      toVersion: plugin.current_version,
+      previousPermissions,
+      approvedPermissions: manifest.permissions,
+    },
+  });
+  revalidatePlugins(slug);
+}
+
 export async function disablePlugin(formData: FormData) {
   const slug = pluginSlug(formData);
   const { supabase, workspace, user, role } = await requireWorkspace();
@@ -134,20 +184,13 @@ export async function disablePlugin(formData: FormData) {
     .update({ status: "disabled" })
     .eq("workspace_id", workspace.id)
     .eq("plugin_id", plugin.id)
-    .neq("status", "revoked")
+    .in("status", ["installed", "pending_connections"])
     .select("id")
     .maybeSingle();
   if (error) throw new Error(`Plugin could not be disabled: ${error.message}`);
-  if (!updated) throw new Error("Plugin is not installed.");
+  if (!updated) throw new Error("Plugin is not active.");
 
-  await logPluginEvent({
-    supabase,
-    workspaceId: workspace.id,
-    pluginId: plugin.id,
-    installationId: updated.id,
-    eventType: "disabled",
-    actorUserId: user.id,
-  });
+  await logPluginEvent({ supabase, workspaceId: workspace.id, pluginId: plugin.id, installationId: updated.id, eventType: "disabled", actorUserId: user.id });
   revalidatePlugins(slug);
 }
 
@@ -162,20 +205,13 @@ export async function enablePlugin(formData: FormData) {
     .update({ status: "installed" })
     .eq("workspace_id", workspace.id)
     .eq("plugin_id", plugin.id)
-    .in("status", ["disabled", "pending_connections"])
+    .eq("status", "disabled")
     .select("id")
     .maybeSingle();
   if (error) throw new Error(`Plugin could not be enabled: ${error.message}`);
   if (!updated) throw new Error("Plugin is not available to enable.");
 
-  await logPluginEvent({
-    supabase,
-    workspaceId: workspace.id,
-    pluginId: plugin.id,
-    installationId: updated.id,
-    eventType: "enabled",
-    actorUserId: user.id,
-  });
+  await logPluginEvent({ supabase, workspaceId: workspace.id, pluginId: plugin.id, installationId: updated.id, eventType: "enabled", actorUserId: user.id });
   revalidatePlugins(slug);
 }
 
@@ -196,13 +232,6 @@ export async function uninstallPlugin(formData: FormData) {
   if (error) throw new Error(`Plugin could not be uninstalled: ${error.message}`);
   if (!updated) throw new Error("Plugin is not installed.");
 
-  await logPluginEvent({
-    supabase,
-    workspaceId: workspace.id,
-    pluginId: plugin.id,
-    installationId: updated.id,
-    eventType: "uninstalled",
-    actorUserId: user.id,
-  });
+  await logPluginEvent({ supabase, workspaceId: workspace.id, pluginId: plugin.id, installationId: updated.id, eventType: "uninstalled", actorUserId: user.id });
   revalidatePlugins(slug);
 }
