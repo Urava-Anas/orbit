@@ -19,7 +19,7 @@ import {
   providerLabel,
   resolvePluginAppConnections,
 } from "@/lib/plugins/connections";
-import { disablePlugin, enablePlugin, installPlugin, uninstallPlugin } from "../actions";
+import { approvePluginUpdate, disablePlugin, enablePlugin, installPlugin, uninstallPlugin } from "../actions";
 import styles from "../plugins.module.css";
 
 type PageProps = { params: Promise<{ slug: string }> };
@@ -47,15 +47,15 @@ export default async function PluginDetailPage({ params }: PageProps) {
         <div className={styles.detailTitle}>
           <div className={styles.logo}><Blocks size={23} /></div>
           <div>
-            <div className={styles.eyebrow}>{plugin.catalog.verified ? <><BadgeCheck size={12} /> Verified plugin</> : <>Orbit plugin</>}</div>
+            <div className={styles.eyebrow}>{plugin.catalog.verified ? <><BadgeCheck size={12} /> Marketplace reviewed</> : <>Orbit plugin</>}</div>
             <h1>{plugin.catalog.name}</h1>
             <p>{plugin.catalog.short_description}</p>
             <div className={styles.heroMeta}>
               <span>{plugin.catalog.developer_name}</span>
               <span>{plugin.manifest.category}</span>
-              <span>Version {plugin.catalog.current_version}</span>
-              <span>{plugin.catalog.first_party ? "First-party" : "Third-party"}</span>
-              {installation ? <span>{installation.status.replaceAll("_", " ")}</span> : null}
+              <span>Catalog v{plugin.catalog.current_version}</span>
+              <span>{plugin.catalog.first_party ? "First-party" : "Marketplace"}</span>
+              {installation ? <span>Installed v{installation.version}</span> : null}
             </div>
           </div>
         </div>
@@ -70,12 +70,21 @@ export default async function PluginDetailPage({ params }: PageProps) {
             {canManage && installation?.status === "disabled" ? (
               <form action={enablePlugin}><input type="hidden" name="pluginSlug" value={slug} /><button className={styles.button} type="submit">Enable</button></form>
             ) : null}
+            {canManage && installation?.status === "pending_review" ? (
+              <form action={approvePluginUpdate}><input type="hidden" name="pluginSlug" value={slug} /><button className={styles.button} type="submit">Approve v{plugin.catalog.current_version}</button></form>
+            ) : null}
             {canManage && installation ? (
               <form action={uninstallPlugin}><input type="hidden" name="pluginSlug" value={slug} /><button className={styles.buttonDanger} type="submit">Uninstall</button></form>
             ) : null}
           </div>
         </div>
       </section>
+
+      {installation?.status === "pending_review" ? (
+        <section className={styles.notice}>
+          <CircleAlert size={13} /> Execution is blocked. This marketplace version changed its permission or remote-runtime boundary. Review the permissions and endpoint below, then explicitly approve the update.
+        </section>
+      ) : null}
 
       {installation?.status === "pending_connections" && requiredMissing.length ? (
         <section className={styles.notice}>
@@ -86,7 +95,7 @@ export default async function PluginDetailPage({ params }: PageProps) {
       <section className={styles.detailColumns}>
         <article className={styles.panel}>
           <h2>What this plugin adds</h2>
-          <p>Orbit exposes only the declared capabilities below. Nothing outside this manifest is implicitly trusted.</p>
+          <p>Orbit exposes only the declared capabilities below. Nothing outside this reviewed manifest is implicitly trusted.</p>
           <div className={styles.list}>
             {plugin.manifest.skills.map((skill) => (
               <div className={styles.listItem} key={skill.id}><Sparkles size={15} /><span><strong>{skill.name}</strong><small>{skill.description}</small></span></div>
@@ -98,8 +107,8 @@ export default async function PluginDetailPage({ params }: PageProps) {
         </article>
 
         <article className={styles.panel}>
-          <h2>Requested permissions</h2>
-          <p>Installing is the explicit approval step. Orbit stores this grant per organisation and can revoke it later.</p>
+          <h2>Approved permission boundary</h2>
+          <p>Install/update approval is the explicit grant. Orbit never silently widens the permission set.</p>
           <div className={styles.permissionList}>
             {plugin.manifest.permissions.map((permission) => <div key={permission}><CheckCircle2 size={12} /><code>{permission}</code></div>)}
           </div>
@@ -126,12 +135,17 @@ export default async function PluginDetailPage({ params }: PageProps) {
               </div>
             )) : <div className={styles.listItem}><ShieldCheck size={15} /><span><strong>No external app required</strong><small>This plugin stays inside Orbit.</small></span></div>}
           </div>
+          {plugin.manifest.mcp ? (
+            <div className={styles.list}>
+              <div className={styles.listItem}><ShieldCheck size={15} /><span><strong>Remote runtime</strong><small>{plugin.manifest.mcp.url}</small></span></div>
+            </div>
+          ) : null}
           <div className={styles.actions}><div><Link className={styles.buttonQuiet} href="/dashboard/connect">Manage all apps <ExternalLink size={11} /></Link></div></div>
         </article>
 
         <article className={styles.panel}>
           <h2>Installation activity</h2>
-          <p>Append-only workspace history for install, enable, disable and revoke events.</p>
+          <p>Workspace audit history for installation, state changes, version approvals and governed tool activity.</p>
           <div className={styles.audit}>
             {events.length ? events.map((event) => (
               <div key={event.id}><strong>{event.event_type.replaceAll("_", " ")}</strong><span>{new Date(event.occurred_at).toLocaleString()}</span></div>
