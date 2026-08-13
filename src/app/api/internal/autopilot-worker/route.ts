@@ -12,7 +12,7 @@ import { isStageFourGatewayConfigured } from "@/lib/agents/stage4-gateway";
 import { stageFourProviderReadinessForWorkspace } from "@/lib/agents/stage4-providers";
 import { runStageFourAutopilotWorker } from "@/lib/agents/stage4-worker";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/config";
+import { supabaseUrl } from "@/lib/supabase/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,7 +29,7 @@ function safeMatch(received: string, expected: string) {
   return actual.length === target.length && timingSafeEqual(actual, target);
 }
 
-async function consumeSchedulerInvocation(request: Request) {
+function schedulerInvocationHeaders(request: Request) {
   const invocationId = request.headers.get("x-orbit-scheduler-invocation")?.trim();
   const token = request.headers.get("x-orbit-scheduler-token")?.trim();
   if (
@@ -40,24 +40,7 @@ async function consumeSchedulerInvocation(request: Request) {
   ) {
     return null;
   }
-
-  try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_stage4_scheduler_invocation`, {
-      method: "POST",
-      headers: {
-        apikey: supabasePublishableKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ p_id: invocationId, p_token: token }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!response.ok) return null;
-    const consumed = (await response.json().catch(() => false)) === true;
-    return consumed ? token : null;
-  } catch {
-    return null;
-  }
+  return { invocationId, token };
 }
 
 function decryptSchedulerServiceRole(request: Request, token: string) {
@@ -68,7 +51,7 @@ function decryptSchedulerServiceRole(request: Request, token: string) {
   try {
     const iv = Buffer.from(encodedIv, "base64");
     const encrypted = Buffer.from(encodedCiphertext, "base64");
-    if (iv.length !== 12 || encrypted.length <= 16) return null;
+    if (iv.length !== 12 || encrypted.length <= 16 || encrypted.length > 4096) return null;
 
     const key = createHash("sha256").update(token).digest();
     const ciphertext = encrypted.subarray(0, encrypted.length - 16);
@@ -79,7 +62,7 @@ function decryptSchedulerServiceRole(request: Request, token: string) {
       decipher.update(ciphertext),
       decipher.final(),
     ]).toString("utf8").trim();
-    return plaintext.length >= 32 ? plaintext : null;
+    return plaintext.length >= 32 && plaintext.length <= 2048 ? plaintext : null;
   } catch {
     return null;
   }
@@ -92,6 +75,18 @@ function ephemeralAdmin(secret: string) {
       persistSession: false,
     },
   });
+}
+
+async function consumeSchedulerInvocation(admin: SupabaseClient, invocationId: string, token: string) {
+  try {
+    const { data, error } = await admin.rpc("consume_stage4_scheduler_invocation", {
+      p_id: invocationId,
+      p_token: token,
+    });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
 }
 
 async function authorisedContext(request: Request): Promise<AuthorisedContext> {
@@ -123,11 +118,20 @@ async function authorisedContext(request: Request): Promise<AuthorisedContext> {
     }
   }
 
-  const token = await consumeSchedulerInvocation(request);
-  if (!token) return { authorised: false, admin: null };
-  const encryptedServiceRole = decryptSchedulerServiceRole(request, token);
+  // The scheduler path is intentionally service-role-first: the one-time token RPC is no longer public.
+  // The service-role credential is AES-GCM encrypted by the scheduler with the one-time token as key material.
+  const scheduler = schedulerInvocationHeaders(request);
+  if (!scheduler) return { authorised: false, admin: null };
+  const encryptedServiceRole = decryptSchedulerServiceRole(request, scheduler.token);
   if (!encryptedServiceRole) return { authorised: false, admin: null };
-  return { authorised: true, admin: ephemeralAdmin(encryptedServiceRole) };
+  const schedulerAdmin = ephemeralAdmin(encryptedServiceRole);
+  const consumed = await consumeSchedulerInvocation(
+    schedulerAdmin,
+    scheduler.invocationId,
+    scheduler.token,
+  );
+  if (!consumed) return { authorised: false, admin: null };
+  return { authorised: true, admin: schedulerAdmin };
 }
 
 async function handle(request: Request) {
