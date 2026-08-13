@@ -4,6 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const appRoot = path.join(root, "src", "app");
 const sourceRoot = path.join(root, "src");
+const contractPath = path.join(root, "config", "orbit-production-routes.json");
 const pagePattern = /^page\.(tsx|ts|jsx|js)$/;
 const sourcePattern = /\.(tsx|ts|jsx|js)$/;
 
@@ -27,9 +28,12 @@ function routeFromPage(file) {
   return `/${segments.join("/")}`.replace(/\/+/g, "/");
 }
 
-const routes = walk(appRoot)
+const implementationRoutes = walk(appRoot)
   .filter((file) => pagePattern.test(path.basename(file)))
   .map(routeFromPage);
+
+const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+const canonicalRoutes = contract.routes ?? [];
 
 function routeRegex(route) {
   if (route === "/") return /^\/$/;
@@ -42,7 +46,8 @@ function routeRegex(route) {
   return new RegExp(`^/${parts.join("/")}/?$`);
 }
 
-const routeMatchers = routes.map((route) => ({ route, regex: routeRegex(route) }));
+const allKnownRoutes = [...implementationRoutes, ...canonicalRoutes];
+const routeMatchers = allKnownRoutes.map((route) => ({ route, regex: routeRegex(route) }));
 
 function normalizeHref(value) {
   const clean = value.split("#")[0].split("?")[0];
@@ -85,8 +90,10 @@ const missing = references.filter(
 if (missing.length) {
   console.error("\nOrbit route integrity audit failed. Missing internal routes:\n");
   for (const item of missing) console.error(`- ${item.href}  (${item.file})`);
-  console.error("\nFix the link or add an intentional canonical redirect page before deployment.\n");
+  console.error("\nFix the link or add an intentional canonical route before deployment.\n");
   process.exit(1);
 }
 
-console.log(`Orbit route integrity: ${references.length} static internal links checked against ${routes.length} app routes.`);
+console.log(
+  `Orbit route integrity: ${references.length} static internal links checked against ${implementationRoutes.length} implementation routes + ${canonicalRoutes.length} locked canonical routes.`,
+);

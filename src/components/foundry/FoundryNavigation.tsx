@@ -16,24 +16,24 @@ import {
 } from "lucide-react";
 
 const founderLinks = [
-  { href: "/dashboard/foundry", label: "Command", icon: House },
-  { href: "/dashboard/foundry/students", label: "Members", icon: UsersRound },
-  { href: "/dashboard/foundry/map", label: "Map", icon: Map },
-  { href: "/dashboard/foundry/classes", label: "Classes", icon: CalendarDays },
-  { href: "/dashboard/foundry/notes", label: "Notes", icon: FileText },
-  { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
-  { href: "/dashboard/foundry/studio", label: "Studio", icon: Sparkles },
-  { href: "/dashboard/foundry/operations", label: "Activity", icon: Workflow },
+  { href: "/dashboard/development", label: "Command", icon: House },
+  { href: "/dashboard/people", label: "Members", icon: UsersRound },
+  { href: "/dashboard/development/journey", label: "Map", icon: Map },
+  { href: "/dashboard/development/sessions", label: "Classes", icon: CalendarDays },
+  { href: "/dashboard/development/notes", label: "Notes", icon: FileText },
+  { href: "/dashboard/tasks", label: "Tasks", icon: BookOpen },
+  { href: "/dashboard/projects?view=delivery", label: "Studio Work", icon: Sparkles },
+  { href: "/dashboard/development/operations", label: "Activity", icon: Workflow },
 ] as const;
 
 const studentLinks = [
-  { href: "/learn", label: "Home", icon: House },
-  { href: "/learn/progress", label: "Map", icon: Map },
-  { href: "/learn/classes", label: "Classes", icon: CalendarDays },
-  { href: "/learn/resources", label: "Resources", icon: FileText },
-  { href: "/learn/tasks", label: "Tasks", icon: BookOpen },
-  { href: "/learn/studio", label: "Studio", icon: Sparkles },
-  { href: "/learn/profile", label: "Profile", icon: UserRound },
+  { href: "/portal", label: "Home", icon: House },
+  { href: "/portal/journey", label: "Map", icon: Map },
+  { href: "/portal/sessions", label: "Classes", icon: CalendarDays },
+  { href: "/portal/resources", label: "Resources", icon: FileText },
+  { href: "/portal/tasks", label: "Tasks", icon: BookOpen },
+  { href: "/portal/work", label: "Studio", icon: Sparkles },
+  { href: "/portal/profile", label: "Profile", icon: UserRound },
 ] as const;
 
 export function FounderFoundryNavigation() {
@@ -42,10 +42,11 @@ export function FounderFoundryNavigation() {
   return (
     <nav className="foundry-nav" aria-label="Foundry founder navigation">
       {founderLinks.map(({ href, label, icon: Icon }) => {
+        const route = href.split("?")[0];
         const active =
-          href === "/dashboard/foundry"
-            ? pathname === href
-            : pathname.startsWith(href);
+          route === "/dashboard/development"
+            ? pathname === route
+            : pathname.startsWith(route);
         return (
           <Link
             className={`foundry-nav-link ${active ? "is-active" : ""}`}
@@ -69,7 +70,7 @@ export function StudentFoundryNavigation() {
     <nav className="student-nav" aria-label="Foundry student navigation">
       {studentLinks.map(({ href, label, icon: Icon }) => {
         const active =
-          href === "/learn" ? pathname === href : pathname.startsWith(href);
+          href === "/portal" ? pathname === href : pathname.startsWith(href);
         return (
           <Link
             className={`student-nav-link ${active ? "is-active" : ""}`}

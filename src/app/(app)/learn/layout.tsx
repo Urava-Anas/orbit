@@ -14,7 +14,7 @@ export default async function LearnLayout({
         Seedha student workspace par jayen
       </a>
       <header className="student-shell-header">
-        <Link className="student-brand" href="/learn">
+        <Link className="student-brand" href="/portal">
           <span>
             <Orbit aria-hidden="true" size={18} />
           </span>
@@ -25,7 +25,7 @@ export default async function LearnLayout({
         <Link
           aria-label={`${unreadCount} unread Foundry updates`}
           className="student-notification-link"
-          href="/learn"
+          href="/portal"
         >
           <Bell aria-hidden="true" size={17} />
           <span>Updates</span>

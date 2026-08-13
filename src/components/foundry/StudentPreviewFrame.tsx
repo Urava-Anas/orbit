@@ -44,13 +44,10 @@ export function StudentPreviewFrame({
   studentId: string;
   unreadCount?: number;
 }) {
-  const previewRoot = `/dashboard/foundry/students/${studentId}/portal`;
+  const memberRoot = `/dashboard/people/${studentId}`;
 
   function href(section: StudentPreviewSection) {
-    if (section === "map") {
-      return `/dashboard/foundry/map?studentId=${studentId}&view=student`;
-    }
-    return `${previewRoot}?tab=${section}&view=student`;
+    return `${memberRoot}?view=member&tab=${section}`;
   }
 
   return (
