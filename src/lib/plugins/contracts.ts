@@ -8,12 +8,13 @@ export const orbitPluginManifestV1Schema = z
     schema_version: z.literal("1"),
     id,
     name: z.string().min(2).max(80),
+    description: z.string().min(8).max(240).optional(),
     version: semver,
     category: z.string().min(2).max(40),
     developer: z
       .object({
         name: z.string().min(2).max(100),
-        url: z.string().url().optional(),
+        url: z.string().url().startsWith("https://").optional(),
       })
       .strict(),
     skills: z
@@ -77,6 +78,7 @@ export type PluginInstallStatus =
   | "installed"
   | "disabled"
   | "pending_connections"
+  | "pending_review"
   | "revoked";
 
 export type PluginCatalogRecord = {
@@ -90,6 +92,7 @@ export type PluginCatalogRecord = {
   status: "published" | "deprecated";
   verified: boolean;
   first_party: boolean;
+  publisher_id?: string | null;
   manifest: unknown;
 };
 
