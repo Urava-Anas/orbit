@@ -41,6 +41,7 @@ function normalizeCatalogRow(row: Record<string, unknown>): PluginCatalogRecord 
     status: row.status,
     verified: row.verified === true,
     first_party: row.first_party === true,
+    publisher_id: typeof row.publisher_id === "string" ? row.publisher_id : null,
     manifest: parsed.data,
   };
 }
@@ -51,7 +52,7 @@ function normalizeInstallationRow(row: Record<string, unknown>): PluginInstallat
     typeof row.workspace_id !== "string" ||
     typeof row.plugin_id !== "string" ||
     typeof row.version !== "string" ||
-    !["installed", "disabled", "pending_connections", "revoked"].includes(String(row.status)) ||
+    !["installed", "disabled", "pending_connections", "pending_review", "revoked"].includes(String(row.status)) ||
     !Array.isArray(row.granted_permissions) ||
     typeof row.installed_at !== "string" ||
     typeof row.updated_at !== "string"
@@ -76,25 +77,24 @@ function normalizeInstallationRow(row: Record<string, unknown>): PluginInstallat
   };
 }
 
+const catalogSelect = "id,slug,name,short_description,developer_name,developer_url,current_version,status,verified,first_party,publisher_id,manifest";
+const installationSelect = "id,workspace_id,plugin_id,version,status,granted_permissions,configuration,installed_by,installed_at,updated_at";
+
 export async function getPluginMarketplace(supabase: SupabaseClient, workspaceId: string) {
   const [catalogResult, installationsResult] = await Promise.all([
     supabase
       .from("plugin_catalog")
-      .select("id,slug,name,short_description,developer_name,developer_url,current_version,status,verified,first_party,manifest")
+      .select(catalogSelect)
       .order("first_party", { ascending: false })
       .order("name", { ascending: true }),
     supabase
       .from("plugin_installations")
-      .select("id,workspace_id,plugin_id,version,status,granted_permissions,configuration,installed_by,installed_at,updated_at")
+      .select(installationSelect)
       .eq("workspace_id", workspaceId),
   ]);
 
-  if (catalogResult.error) {
-    throw new Error(`Plugin catalog failed to load: ${catalogResult.error.message}`);
-  }
-  if (installationsResult.error) {
-    throw new Error(`Plugin installations failed to load: ${installationsResult.error.message}`);
-  }
+  if (catalogResult.error) throw new Error(`Plugin catalog failed to load: ${catalogResult.error.message}`);
+  if (installationsResult.error) throw new Error(`Plugin installations failed to load: ${installationsResult.error.message}`);
 
   const installations = new Map<string, PluginInstallationRecord>();
   for (const raw of installationsResult.data ?? []) {
@@ -122,7 +122,7 @@ export async function getPluginBySlug(
 ): Promise<PluginMarketplaceItem | null> {
   const { data: catalogRow, error: catalogError } = await supabase
     .from("plugin_catalog")
-    .select("id,slug,name,short_description,developer_name,developer_url,current_version,status,verified,first_party,manifest")
+    .select(catalogSelect)
     .eq("slug", slug)
     .maybeSingle();
 
@@ -132,13 +132,11 @@ export async function getPluginBySlug(
   const catalog = normalizeCatalogRow(catalogRow as Record<string, unknown>);
   if (!catalog) return null;
   const parsed = safeParsePluginManifest(catalog.manifest);
-  if (!parsed.success || parsed.data.id !== catalog.slug || parsed.data.version !== catalog.current_version) {
-    return null;
-  }
+  if (!parsed.success || parsed.data.id !== catalog.slug || parsed.data.version !== catalog.current_version) return null;
 
   const { data: installRow, error: installError } = await supabase
     .from("plugin_installations")
-    .select("id,workspace_id,plugin_id,version,status,granted_permissions,configuration,installed_by,installed_at,updated_at")
+    .select(installationSelect)
     .eq("workspace_id", workspaceId)
     .eq("plugin_id", catalog.id)
     .maybeSingle();
@@ -167,6 +165,5 @@ export async function getPluginEvents(
     .limit(Math.min(Math.max(limit, 1), 50));
 
   if (error) throw new Error(`Plugin activity failed to load: ${error.message}`);
-
   return (data ?? []).map((row) => row as PluginEventRecord);
 }
