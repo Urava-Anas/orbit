@@ -3,6 +3,10 @@ import { z } from "zod";
 const id = z.string().min(2).max(80).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/);
 const semver = z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/);
 
+function hasDuplicates(values: string[]) {
+  return new Set(values).size !== values.length;
+}
+
 export const orbitPluginManifestV1Schema = z
   .object({
     schema_version: z.literal("1"),
@@ -18,40 +22,14 @@ export const orbitPluginManifestV1Schema = z
       })
       .strict(),
     skills: z
-      .array(
-        z
-          .object({
-            id,
-            name: z.string().min(2).max(80),
-            description: z.string().min(4).max(240),
-          })
-          .strict(),
-      )
-      .max(40)
-      .default([]),
+      .array(z.object({ id, name: z.string().min(2).max(80), description: z.string().min(4).max(240) }).strict())
+      .max(40).default([]),
     apps: z
-      .array(
-        z
-          .object({
-            provider: id,
-            required: z.boolean().default(true),
-          })
-          .strict(),
-      )
-      .max(30)
-      .default([]),
+      .array(z.object({ provider: id, required: z.boolean().default(true) }).strict())
+      .max(30).default([]),
     workflows: z
-      .array(
-        z
-          .object({
-            id,
-            name: z.string().min(2).max(100),
-            description: z.string().min(4).max(300),
-          })
-          .strict(),
-      )
-      .max(50)
-      .default([]),
+      .array(z.object({ id, name: z.string().min(2).max(100), description: z.string().min(4).max(300) }).strict())
+      .max(50).default([]),
     permissions: z.array(id).max(80).default([]),
     orbit_modules: z.array(id).max(40).default([]),
     mcp: z
@@ -62,7 +40,25 @@ export const orbitPluginManifestV1Schema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((manifest, ctx) => {
+    const checks: Array<[string, string[], string]> = [
+      ["skills", manifest.skills.map((item) => item.id), "Skill IDs must be unique."],
+      ["apps", manifest.apps.map((item) => item.provider), "App providers must be unique."],
+      ["workflows", manifest.workflows.map((item) => item.id), "Workflow IDs must be unique."],
+      ["permissions", manifest.permissions, "Permissions must be unique."],
+      ["orbit_modules", manifest.orbit_modules, "Orbit modules must be unique."],
+    ];
+    for (const [path, values, message] of checks) {
+      if (hasDuplicates(values)) ctx.addIssue({ code: "custom", path: [path], message });
+    }
+    if (manifest.mcp) {
+      const endpoint = new URL(manifest.mcp.url);
+      if (endpoint.username || endpoint.password || (endpoint.port && endpoint.port !== "443")) {
+        ctx.addIssue({ code: "custom", path: ["mcp", "url"], message: "MCP URL must not contain credentials and must use HTTPS port 443." });
+      }
+    }
+  });
 
 export type OrbitPluginManifestV1 = z.infer<typeof orbitPluginManifestV1Schema>;
 
@@ -74,12 +70,7 @@ export function safeParsePluginManifest(value: unknown) {
   return orbitPluginManifestV1Schema.safeParse(value);
 }
 
-export type PluginInstallStatus =
-  | "installed"
-  | "disabled"
-  | "pending_connections"
-  | "pending_review"
-  | "revoked";
+export type PluginInstallStatus = "installed" | "disabled" | "pending_connections" | "pending_review" | "revoked";
 
 export type PluginCatalogRecord = {
   id: string;
