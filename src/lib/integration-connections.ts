@@ -25,8 +25,16 @@ export type IntegrationState = {
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 function integrationSecret() {
-  const value = process.env.INTEGRATION_SECRET ?? process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY;
-  if (!value || value.length < 24) {
+  const productionSecret =
+    process.env.INTEGRATION_SECRET ??
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const value =
+    productionSecret ??
+    (process.env.NODE_ENV === "production"
+      ? undefined
+      : process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY);
+  if (!value || value.length < 32) {
     throw new Error("Orbit integration secret is not configured.");
   }
   return value;
@@ -117,7 +125,6 @@ export async function registerIntegrationState(
   });
   if (error) throw new Error("Integration state could not be registered.");
 
-  // Best-effort bounded cleanup; failure must not invalidate the newly issued state.
   await admin
     .from("integration_oauth_states")
     .delete()
