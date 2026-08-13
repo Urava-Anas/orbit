@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireFounderFoundry } from "@/lib/foundry";
 import {
+  consumeIntegrationState,
   encryptIntegrationSecret,
   vercelCallbackUrl,
   verifyIntegrationState,
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
     if (state.workspaceId !== workspace.id || state.userId !== user.id) {
       return back(request, "error", "vercel_state_mismatch");
     }
+    await consumeIntegrationState(stateToken, state);
 
     const clientId = process.env.VERCEL_CLIENT_ID;
     const clientSecret = process.env.VERCEL_CLIENT_SECRET;
@@ -65,6 +67,7 @@ export async function GET(request: Request) {
         redirect_uri: vercelCallbackUrl(),
       }),
       cache: "no-store",
+      redirect: "error",
     });
     const token = (await exchange.json()) as TokenResponse;
     if (!exchange.ok || !token.access_token) return back(request, "error", "vercel_oauth_exchange");
@@ -77,14 +80,17 @@ export async function GET(request: Request) {
       fetch(`https://api.vercel.com/v1/integrations/configuration/${encodeURIComponent(configurationId)}${teamQuery}`, {
         headers: authHeaders,
         cache: "no-store",
+        redirect: "error",
       }),
       fetch(`https://api.vercel.com/v9/projects?limit=100${teamId ? `&teamId=${encodeURIComponent(teamId)}` : ""}`, {
         headers: authHeaders,
         cache: "no-store",
+        redirect: "error",
       }),
       fetch(teamId ? `https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}` : "https://api.vercel.com/v2/user", {
         headers: authHeaders,
         cache: "no-store",
+        redirect: "error",
       }),
     ]);
 
