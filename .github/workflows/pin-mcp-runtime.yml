@@ -1,0 +1,50 @@
+name: Pin MCP runtime DNS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/pin-mcp-runtime.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Route MCP transport through pinned HTTPS client
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/plugins/mcp.ts')
+          s = p.read_text()
+          anchor = 'import { parsePluginManifest, type OrbitPluginManifestV1 } from "@/lib/plugins/contracts";\n'
+          addition = anchor + 'import { pinnedFetch as fetch } from "@/lib/plugins/pinned-fetch";\n'
+          if 'pinnedFetch as fetch' not in s:
+              if anchor not in s:
+                  raise SystemExit('MCP import anchor not found')
+              s = s.replace(anchor, addition, 1)
+              p.write_text(s)
+          PY
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Commit pinned transport only after gates pass
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/plugins/mcp.ts
+          if git diff --cached --quiet; then
+            echo "Pinned transport already active."
+            exit 0
+          fi
+          git commit -m "security: pin MCP runtime DNS resolution"
+          git push origin HEAD:main
