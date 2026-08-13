@@ -54,6 +54,8 @@ type LatestArtifactTable =
   | "orbit_delivery_handoffs"
   | "orbit_proof_referral_plans";
 
+// Legacy dynamic artifact rows are intentionally untyped at the database boundary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ArtifactRow = Record<string, any>;
 
 function throwDatabaseError(operation: string, error: { message: string } | null) {
@@ -438,6 +440,8 @@ async function latestRow(
   opportunityId: string,
   select: string,
 ): Promise<ArtifactRow | null> {
+  // Dynamic table selection is narrowed by the local table union above.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await (client as SupabaseClient<any>)
     .from(table)
     .select(select)

@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { z } from "zod";
 import { stageFourAgentCatalog } from "@/lib/agents/stage4-catalog";
 import {
   createAgentRun,
@@ -15,7 +14,6 @@ import {
   stageFourConfigureSchema,
   stageFourControlSchema,
   stageFourExecuteSchema,
-  stageFourFounderOnlyCapabilities,
   stageFourGatewayCapabilities,
   stageFourPolicyEligibleCapabilities,
   stageFourPolicyGrantSchema,
