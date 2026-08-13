@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "id": "example-growth-tool",
+  "name": "Example Growth Tool",
+  "description": "Example plugin manifest for the Orbit v1 marketplace and MCP runtime.",
+  "version": "1.0.0",
+  "category": "Growth",
+  "developer": {
+    "name": "Example Developer",
+    "url": "https://example.com"
+  },
+  "skills": [
+    {
+      "id": "inspect-growth",
+      "name": "Inspect Growth",
+      "description": "Turn approved growth signals into structured observations."
+    }
+  ],
+  "apps": [],
+  "workflows": [
+    {
+      "id": "growth-review",
+      "name": "Growth Review",
+      "description": "Review approved data and return a bounded next-action recommendation."
+    }
+  ],
+  "permissions": ["workspace.read"],
+  "orbit_modules": ["growth"],
+  "mcp": {
+    "transport": "streamable-http",
+    "url": "https://plugins.example.com/mcp"
+  }
+}
