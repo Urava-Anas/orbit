@@ -1,0 +1,48 @@
+name: Fix migration replay and verify isolation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fix-migration-replay-and-verify.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Fix historical fresh-replay ordering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('supabase/migrations/20260802193500_add_foundry_class_learning_notes.sql')
+          s = p.read_text()
+          s = s.replace("check (learning_state in ('introduced', 'practising', 'understood', 'mastered'))", "check (learning_state in ('introduced', 'practising', 'understood', 'applied', 'mastered'))")
+          p.write_text(s)
+          PY
+      - name: Start local Supabase
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector
+      - name: Reset database from migrations
+        run: supabase db reset --local
+      - name: Run tenant-isolation test
+        run: psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
+      - name: Commit passing replay fix and remove one-shot workflows
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/final-tenant-isolation-verify.yml .github/workflows/fix-migration-replay-and-verify.yml
+          git add supabase/migrations/20260802193500_add_foundry_class_learning_notes.sql
+          git commit -m "test: restore clean database replay and tenant isolation"
+          git push origin HEAD:main
