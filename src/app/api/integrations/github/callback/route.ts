@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireFounderFoundry } from "@/lib/foundry";
 import {
+  consumeIntegrationState,
   createGitHubAppJwt,
   verifyIntegrationState,
 } from "@/lib/integration-connections";
@@ -49,11 +50,12 @@ export async function GET(request: Request) {
     if (state.workspaceId !== workspace.id || state.userId !== user.id) {
       return back(request, "error", "github_state_mismatch");
     }
+    await consumeIntegrationState(stateToken, state);
 
     const jwt = createGitHubAppJwt();
     const installationResponse = await fetch(
       `https://api.github.com/app/installations/${encodeURIComponent(installationId)}`,
-      { headers: { ...apiHeaders, Authorization: `Bearer ${jwt}` }, cache: "no-store" },
+      { headers: { ...apiHeaders, Authorization: `Bearer ${jwt}` }, cache: "no-store", redirect: "error" },
     );
     if (!installationResponse.ok) return back(request, "error", "github_installation_unverified");
     const installation = (await installationResponse.json()) as Installation;
@@ -64,6 +66,7 @@ export async function GET(request: Request) {
         method: "POST",
         headers: { ...apiHeaders, Authorization: `Bearer ${jwt}` },
         cache: "no-store",
+        redirect: "error",
       },
     );
     if (!tokenResponse.ok) return back(request, "error", "github_installation_token_failed");
@@ -73,6 +76,7 @@ export async function GET(request: Request) {
     const repositoriesResponse = await fetch("https://api.github.com/installation/repositories?per_page=100", {
       headers: { ...apiHeaders, Authorization: `Bearer ${tokenData.token}` },
       cache: "no-store",
+      redirect: "error",
     });
     const repositoriesData = repositoriesResponse.ok
       ? ((await repositoriesResponse.json()) as RepositoriesResponse)
