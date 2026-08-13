@@ -195,6 +195,8 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   const autopilot = (autopilotResult.data ?? null) as AutopilotConfig | null;
   const projects = projectResult.data ?? [];
   const externalActions = (actionResult.data ?? []) as ExternalAction[];
+  // Server-render snapshot used only to classify time-sensitive records for this render.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   const q = params.q?.trim().toLowerCase() ?? "";

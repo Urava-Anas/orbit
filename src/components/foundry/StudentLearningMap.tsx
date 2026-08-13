@@ -104,6 +104,8 @@ function ResourceIcon({ kind }: { kind: string }) {
 }
 
 export function StudentLearningMap({ student, journey, mode = "student", studentViewHref }: Props) {
+  // Server-render snapshot used only to classify time-sensitive records for this render.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const classLevel = new Map(journey.classes.map((item) => [item.id, item.level_number]));
   const seenLevels = [

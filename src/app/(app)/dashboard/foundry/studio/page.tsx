@@ -94,6 +94,8 @@ export default async function FoundryStudioPage({ searchParams }: Props) {
   const selectedAssignments = selected
     ? assignments.filter((item) => item.student_id === selected.id)
     : [];
+  // Server-render snapshot used only to classify time-sensitive records for this render.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const current = selectedAssignments.filter((item) => bucket(item, now) === "current");
   const upcoming = selectedAssignments.filter((item) => bucket(item, now) === "upcoming");

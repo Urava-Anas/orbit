@@ -159,6 +159,8 @@ export function StudentExperience({
   notice,
   error,
 }: Props) {
+  // Server-render snapshot used only to classify time-sensitive records for this render.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const copy = sectionCopy[section];
   const assignmentJourney = new Map(journey.assignments.map((item) => [item.id, item]));

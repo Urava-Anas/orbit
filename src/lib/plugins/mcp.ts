@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orbitBaseUrl } from "@/lib/integration-connections";
 import { parsePluginManifest, type OrbitPluginManifestV1 } from "@/lib/plugins/contracts";
+import { pinnedFetch } from "@/lib/plugins/pinned-fetch";
 
 const MCP_PROTOCOL_VERSION = "2026-07-28";
 const MCP_CLIENT_INFO = { name: "Orbit Plugin Runtime", version: "1.0.0" } as const;
@@ -245,7 +246,7 @@ async function mcpPost(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(endpoint, {
+    const response = await pinnedFetch(endpoint, {
       method: "POST",
       redirect: "error",
       cache: "no-store",

@@ -1,7 +1,6 @@
 import "server-only";
 
 import { lookup as dnsLookup } from "node:dns/promises";
-import type { LookupOneOptions } from "node:dns";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 
@@ -95,6 +94,7 @@ export async function pinnedFetch(input: string | URL | Request, init?: RequestI
   if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
   const requestHeaders: Record<string, string> = {};
   headers.forEach((value, key) => { requestHeaders[key] = value; });
+  requestHeaders.host = endpoint.host;
   const method = init?.method ?? (input instanceof Request ? input.method : "GET");
   const body = typeof init?.body === "string" || Buffer.isBuffer(init?.body) ? init.body : undefined;
 
@@ -107,18 +107,13 @@ export async function pinnedFetch(input: string | URL | Request, init?: RequestI
     };
     const options = {
       protocol: "https:",
-      hostname,
+      hostname: pinned.address,
       servername: hostname,
       port: 443,
       method,
       path: `${endpoint.pathname}${endpoint.search}`,
       headers: requestHeaders,
       rejectUnauthorized: true,
-      lookup: (
-        _hostname: string,
-        _options: LookupOneOptions,
-        callback: (error: NodeJS.ErrnoException | null, address: string, family: number) => void,
-      ) => callback(null, pinned.address, pinned.family),
     };
 
     const req = httpsRequest(options, (res) => {

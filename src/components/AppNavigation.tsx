@@ -46,18 +46,15 @@ function isActive(pathname: string, href: string) {
 
 export function AppNavigation({ mobile = false }: AppNavigationProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath === pathname;
 
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") setOpenPath(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
@@ -90,7 +87,7 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
         className={`button button-quiet ${styles.menuButton}`}
         aria-label="Open Orbit navigation"
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenPath(pathname)}
       >
         <Menu size={19} aria-hidden="true" />
       </button>
@@ -101,7 +98,7 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
             type="button"
             className={styles.backdrop}
             aria-label="Close Orbit navigation"
-            onClick={() => setOpen(false)}
+            onClick={() => setOpenPath(null)}
           />
           <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label="Orbit navigation">
             <div className={styles.drawerHeader}>
@@ -112,7 +109,7 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
                   <small>Organisation workspace</small>
                 </div>
               </div>
-              <button type="button" className={styles.closeButton} aria-label="Close navigation" onClick={() => setOpen(false)}>
+              <button type="button" className={styles.closeButton} aria-label="Close navigation" onClick={() => setOpenPath(null)}>
                 <X size={17} aria-hidden="true" />
               </button>
             </div>
@@ -124,7 +121,7 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
                   <Link
                     key={href}
                     href={href}
-                    onClick={() => setOpen(false)}
+                    onClick={() => setOpenPath(null)}
                     className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}
                   >
                     <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
