@@ -2,20 +2,25 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
-  BarChart3,
-  Bot,
+  ArrowRight,
   CheckCircle2,
-  Code2,
   ExternalLink,
   KeyRound,
   Link2,
-  MessageCircle,
-  Rocket,
-  Search,
-  Share2,
+  LockKeyhole,
   ShieldCheck,
+  Sparkles,
   Trash2,
 } from "lucide-react";
+import {
+  SiGithub,
+  SiGoogle,
+  SiGoogleanalytics,
+  SiLinkedin,
+  SiMeta,
+  SiOpenai,
+  SiVercel,
+} from "react-icons/si";
 import { OrbitActionKeyManager } from "@/components/foundry/OrbitActionKeyManager";
 import { formatFoundryDate, requireFounderFoundry } from "@/lib/foundry";
 import {
@@ -64,7 +69,8 @@ type Provider = {
   category: string;
   description: string;
   usedBy: string[];
-  icon: ReactNode;
+  logo: ReactNode;
+  logoTone: string;
   connectPath?: string;
   manageUrl?: string;
   platformReady: boolean;
@@ -80,14 +86,14 @@ type PageProps = {
 
 function statusClass(status: ConnectionStatus) {
   if (status === "connected") return styles.connected;
-  if (status === "available") return styles.partial;
-  return styles.notConnected;
+  if (status === "available") return styles.available;
+  return styles.pending;
 }
 
-function dotClass(status: ConnectionStatus) {
-  if (status === "connected") return styles.dotConnected;
-  if (status === "available") return styles.dotPartial;
-  return styles.dotOff;
+function statusLabel(status: ConnectionStatus) {
+  if (status === "connected") return "Connected";
+  if (status === "available") return "Ready";
+  return "Setup required";
 }
 
 function assetList(value: unknown) {
@@ -104,7 +110,7 @@ function assetList(value: unknown) {
             ? "Private repository"
             : item.private === false
               ? "Repository"
-              : "Project",
+              : "Approved project",
       url: typeof item.url === "string" ? item.url : null,
     }));
 }
@@ -162,9 +168,10 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       id: "github",
       name: "GitHub",
       category: "Code & repositories",
-      description: "Install the Orbit GitHub App, choose the repositories Orbit may access, and manage that permission from one place.",
+      description: "Authorize repository access with the Orbit GitHub App. Users choose exactly which repositories Orbit may use.",
       usedBy: ["Website Manager", "Delivery", "Automation"],
-      icon: <Code2 aria-hidden="true" size={18} />,
+      logo: <SiGithub aria-hidden="true" />,
+      logoTone: styles.github,
       connectPath: "/api/integrations/github/start",
       manageUrl: "https://github.com/settings/installations",
       platformReady: githubAppReady(),
@@ -173,9 +180,10 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       id: "vercel",
       name: "Vercel",
       category: "Deployments & projects",
-      description: "Authorize Orbit through Vercel, choose the account/team and project access, then return to Orbit automatically.",
+      description: "Connect a Vercel account or team and approve the projects Orbit may deploy, inspect and operate.",
       usedBy: ["Website Manager", "Delivery", "Production"],
-      icon: <Rocket aria-hidden="true" size={18} />,
+      logo: <SiVercel aria-hidden="true" />,
+      logoTone: styles.vercel,
       connectPath: "/api/integrations/vercel/start",
       manageUrl: "https://vercel.com/dashboard/integrations",
       platformReady: vercelIntegrationReady(),
@@ -184,45 +192,50 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
       id: "google_search_console",
       name: "Search Console",
       category: "SEO & indexing",
-      description: "Choose a Google account and the verified website properties Orbit may read and manage.",
+      description: "Connect verified website properties for indexing health, search visibility and SEO operations.",
       usedBy: ["Website Manager", "SEO", "Growth"],
-      icon: <Search aria-hidden="true" size={18} />,
+      logo: <SiGoogle aria-hidden="true" />,
+      logoTone: styles.google,
       platformReady: false,
     },
     {
       id: "google_analytics",
       name: "Google Analytics",
       category: "Traffic & conversion",
-      description: "Choose the Google Analytics account and properties Orbit may use for traffic and conversion reporting.",
+      description: "Connect Analytics properties for traffic, behaviour, conversion and acquisition reporting inside Orbit.",
       usedBy: ["Website Manager", "Growth", "Evidence"],
-      icon: <BarChart3 aria-hidden="true" size={18} />,
+      logo: <SiGoogleanalytics aria-hidden="true" />,
+      logoTone: styles.analytics,
       platformReady: false,
     },
     {
       id: "meta",
       name: "Meta",
       category: "Facebook & Instagram",
-      description: "Authorize Meta once, then choose the Pages, Instagram accounts and business assets Orbit may use.",
+      description: "Connect Meta Business assets, Facebook Pages and Instagram accounts through one approval flow.",
       usedBy: ["Lead Engine", "Marketing", "Publishing"],
-      icon: <Share2 aria-hidden="true" size={18} />,
+      logo: <SiMeta aria-hidden="true" />,
+      logoTone: styles.meta,
       platformReady: false,
     },
     {
       id: "linkedin",
       name: "LinkedIn",
       category: "Professional network",
-      description: "Authorize LinkedIn and choose the organisation pages and approved account access Orbit may use.",
+      description: "Connect approved LinkedIn organisation assets for publishing, outreach and lead operations.",
       usedBy: ["Lead Engine", "Marketing", "Publishing"],
-      icon: <MessageCircle aria-hidden="true" size={18} />,
+      logo: <SiLinkedin aria-hidden="true" />,
+      logoTone: styles.linkedin,
       platformReady: false,
     },
     {
       id: "operator",
-      name: "Orbit Operator / ChatGPT",
+      name: "ChatGPT / Orbit Operator",
       category: "AI operator",
-      description: "Advanced founder connection for governed AI actions through revocable organisation-scoped action keys.",
+      description: "Founder-governed AI actions through revocable organisation-scoped Orbit credentials.",
       usedBy: ["Founder Command", "Orbit Operator", "Automation"],
-      icon: <Bot aria-hidden="true" size={18} />,
+      logo: <SiOpenai aria-hidden="true" />,
+      logoTone: styles.openai,
       manageUrl: schemaUrl,
       platformReady: true,
     },
@@ -249,183 +262,196 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
   const error = errorFor(query.error);
 
   return (
-    <main className={styles.hub}>
+    <main className={styles.page}>
       <section className={styles.hero}>
-        <div>
-          <span>Organisation connections</span>
-          <h1>Connect</h1>
-          <p>
-            Connect → choose account → choose assets → approve → return to Orbit. Normal users never copy API tokens or see provider secrets.
-          </p>
+        <div className={styles.heroCopy}>
+          <span className={styles.eyebrow}><Sparkles size={13} aria-hidden="true" /> Universal connections</span>
+          <h1>Connect your tools.<br /><span>Orbit handles the complexity.</span></h1>
+          <p>One permission model for every service: choose an account, choose assets, approve access, then manage everything from Orbit.</p>
         </div>
-        <div className={styles.heroActions}>
-          <Link href="/dashboard/connect?integration=github#integrations">Manage integrations</Link>
-          <Link href="/dashboard/security"><ShieldCheck aria-hidden="true" size={14} /> Security</Link>
+        <div className={styles.heroSecurity}>
+          <LockKeyhole size={18} aria-hidden="true" />
+          <div><strong>No manual API tokens</strong><small>Provider secrets stay server-side and are never shown to normal users.</small></div>
         </div>
       </section>
 
-      {notice ? <div className={`${styles.connectionNotice} ${styles.connectionSuccess}`}>{notice}</div> : null}
-      {error ? <div className={`${styles.connectionNotice} ${styles.connectionError}`}>{error}</div> : null}
+      {notice ? <div className={`${styles.notice} ${styles.noticeSuccess}`}>{notice}</div> : null}
+      {error ? <div className={`${styles.notice} ${styles.noticeError}`}>{error}</div> : null}
 
       <section className={styles.summary} aria-label="Connection summary">
-        <article><small>Providers</small><strong>{providers.length}</strong><p>One organisation connection surface</p></article>
-        <article><small>Connected</small><strong>{connectedCount}</strong><p>Authorized and available to Orbit</p></article>
-        <article><small>Ready to connect</small><strong>{availableCount}</strong><p>One click starts provider authorization</p></article>
-        <article><small>Manual API tokens</small><strong>0</strong><p>Normal users never paste secrets</p></article>
+        <div><strong>{providers.length}</strong><span>Services</span></div>
+        <div><strong>{connectedCount}</strong><span>Connected</span></div>
+        <div><strong>{availableCount}</strong><span>Ready now</span></div>
+        <div><strong>0</strong><span>Tokens to paste</span></div>
       </section>
 
-      <section className={styles.workspace} id="integrations">
-        <aside className={styles.rail}>
-          <div className={styles.railHead}>
-            <strong>Integrations</strong>
-            <small>Missing access from any Orbit module opens the exact provider here.</small>
-          </div>
-          <nav className={styles.railNav} aria-label="Integration tabs">
-            {providers.map((item) => {
-              const status = statusFor(item);
-              return (
-                <Link key={item.id} href={`/dashboard/connect?integration=${item.id}#integrations`} data-active={selected.id === item.id}>
-                  <span className={styles.railIdentity}>
-                    <span className={styles.railIcon}>{item.icon}</span>
-                    <span className={styles.railText}><strong>{item.name}</strong><small>{item.category}</small></span>
-                  </span>
-                  <span className={`${styles.railStatus} ${dotClass(status)}`} aria-label={status} />
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
-
-        <div className={styles.content}>
-          <article className={styles.detail}>
-            <header className={styles.detailHead}>
-              <div className={styles.detailIdentity}>
-                <span className={styles.detailIcon}>{selected.icon}</span>
-                <div><h2>{selected.name}</h2><p>{selected.description}</p></div>
-              </div>
-              <span className={`${styles.statusPill} ${statusClass(selectedStatus)}`}>
-                {selectedStatus === "connected" ? "Connected" : selectedStatus === "available" ? "Ready to connect" : "Platform setup required"}
-              </span>
-            </header>
-
-            {selected.id === "operator" ? (
-              <div className={styles.operator}>
-                <section className="foundry-split-layout">
-                  <article className="foundry-card">
-                    <div className="foundry-card-head"><div><span className="foundry-card-eyebrow">Orbit Operator</span><h2>Generate a private key</h2></div><KeyRound aria-hidden="true" size={20} /></div>
-                    <p>This is an advanced founder-only connection. Third-party services use OAuth/App installation instead of manual tokens.</p>
-                    <OrbitActionKeyManager />
-                  </article>
-                  <aside className="foundry-card">
-                    <div className="foundry-card-head"><div><span className="foundry-card-eyebrow">Connection recipe</span><h2>Connect ChatGPT</h2></div><Link2 aria-hidden="true" size={20} /></div>
-                    <ol className={styles.setupList}>
-                      <li><CheckCircle2 aria-hidden="true" size={17} />Create a private Orbit Operator GPT.</li>
-                      <li><CheckCircle2 aria-hidden="true" size={17} />Import the Orbit OpenAPI schema.</li>
-                      <li><CheckCircle2 aria-hidden="true" size={17} />Use the founder-only one-time Orbit action key.</li>
-                      <li><CheckCircle2 aria-hidden="true" size={17} />Test read access before governed writes.</li>
-                    </ol>
-                  </aside>
-                </section>
-
-                <section className={`foundry-card ${styles.keys}`}>
-                  <div className="foundry-card-head"><div><span className="foundry-card-eyebrow">Access control</span><h2>Organisation action keys</h2></div><ShieldCheck aria-hidden="true" size={20} /></div>
-                  {keys.length ? (
-                    <div className="foundry-attention-list">
-                      {keys.map((key) => {
-                        const inactive = !key.is_active;
-                        return (
-                          <article className="foundry-attention-row" key={key.id}>
-                            <span className={`task-state ${inactive ? "task-state-cancelled" : "task-state-completed"}`}>{key.revoked_at ? "revoked" : inactive ? "expired" : "active"}</span>
-                            <div><strong>{key.name}</strong><p>{key.token_prefix}… · Created {formatFoundryDate(key.created_at)}{key.last_used_at ? ` · Last used ${formatFoundryDate(key.last_used_at)}` : " · Not used yet"}</p></div>
-                            {!key.revoked_at ? (
-                              <form action={revokeOrbitActionKeyAction}>
-                                <input name="keyId" type="hidden" value={key.id} />
-                                <button className="foundry-icon-link" title="Revoke this Orbit connection" type="submit"><Trash2 aria-hidden="true" size={16} /></button>
-                              </form>
-                            ) : null}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : <p>No Orbit connection key has been created yet.</p>}
-                </section>
-              </div>
-            ) : (
-              <div className={styles.detailBody}>
-                <section className={styles.block}>
-                  <h3>{selectedStatus === "connected" ? "Connected account" : selectedStatus === "available" ? "Connect account" : "Connector setup"}</h3>
-
-                  {selectedStatus === "connected" && selectedRecord ? (
-                    <>
-                      <div className={styles.accountCard}>
-                        <div><small>Account</small><strong>{selectedRecord.provider_account_name ?? `${selected.name} account`}</strong><span>{selectedRecord.provider_account_type ?? "Authorized installation"}</span></div>
-                        <CheckCircle2 aria-hidden="true" size={19} />
-                      </div>
-                      <p>Orbit stores the provider installation server-side. Secret credentials are never displayed in the browser.</p>
-                      <div className={styles.detailActions}>
-                        {selected.manageUrl ? <a className={styles.primary} href={selected.manageUrl} target="_blank" rel="noreferrer">Manage access <ExternalLink size={11} /></a> : null}
-                        <form action={`/api/integrations/${selected.id}/disconnect`} method="post">
-                          <button className={styles.disconnectButton} type="submit">Disconnect</button>
-                        </form>
-                      </div>
-                    </>
-                  ) : selected.connectPath && selected.platformReady ? (
-                    <>
-                      <p>No credentials are required. Orbit sends you to {selected.name}, where you choose the account and assets to approve.</p>
-                      <div className={styles.flowSteps}>
-                        <span>1. Connect</span><span>2. Choose account</span><span>3. Choose assets</span><span>4. Approve</span><span>5. Return to Orbit</span>
-                      </div>
-                      <div className={styles.detailActions}><a className={styles.primary} href={selected.connectPath}>Connect {selected.name}</a></div>
-                    </>
-                  ) : selected.id === "github" && isOrbitPlatformOwner ? (
-                    <>
-                      <p><strong>Orbit's GitHub App has not been registered yet.</strong> The Installed GitHub Apps page you saw is for apps already installed on your account; it is not the Orbit registration screen.</p>
-                      <p>This is a one-time Urava product-owner setup. After it is completed, normal Orbit users will only see the real Connect GitHub authorization flow.</p>
-                      <ol className={styles.setupList}>
-                        <li><CheckCircle2 aria-hidden="true" size={17} />Open GitHub Developer Settings → GitHub Apps → New GitHub App.</li>
-                        <li><CheckCircle2 aria-hidden="true" size={17} />Name the app <strong>Orbit by Urava</strong> and use <strong>{orbitUrl}</strong> as the homepage.</li>
-                        <li><CheckCircle2 aria-hidden="true" size={17} />Set Setup URL to <strong>{orbitUrl}/api/integrations/github/callback</strong> and enable redirect after installation updates.</li>
-                        <li><CheckCircle2 aria-hidden="true" size={17} />Allow installation on any account and grant only the repository permissions Orbit needs.</li>
-                      </ol>
-                      <div className={styles.detailActions}>
-                        <a className={styles.primary} href={githubSetupUrl} target="_blank" rel="noreferrer">Register Orbit GitHub App <ExternalLink size={11} /></a>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p>The Orbit-side OAuth/App connector for {selected.name} is not enabled at platform level yet. Normal users will not be asked for API keys.</p>
-                      <div className={styles.flowSteps}>
-                        <span>Connect</span><span>Choose account</span><span>Choose assets</span><span>Approve</span><span>Manage</span>
-                      </div>
-                    </>
-                  )}
-                </section>
-
-                <section className={styles.block}>
-                  <h3>{selectedStatus === "connected" ? "Approved assets" : "Permission model"}</h3>
-                  {selectedStatus === "connected" ? (
-                    selectedAssets.length ? (
-                      <div className={styles.assetList}>
-                        {selectedAssets.slice(0, 12).map((asset) => (
-                          <div key={asset.id}>
-                            <CheckCircle2 aria-hidden="true" size={14} />
-                            <span><strong>{asset.name}</strong><small>{asset.detail}</small></span>
-                            {asset.url ? <a href={asset.url} target="_blank" rel="noreferrer"><ExternalLink size={11} /></a> : null}
-                          </div>
-                        ))}
-                      </div>
-                    ) : <p>The provider installation is connected. Orbit will refresh the approved asset list when the provider exposes it.</p>
-                  ) : (
-                    <>
-                      <p>Orbit asks only for permissions needed by these modules. Users can change or revoke provider access later.</p>
-                      <div className={styles.usedBy}>{selected.usedBy.map((label) => <span key={label}>{label}</span>)}</div>
-                    </>
-                  )}
-                </section>
-              </div>
-            )}
-          </article>
+      <section className={styles.catalog} id="integrations">
+        <div className={styles.sectionHeader}>
+          <div><span>Integration library</span><h2>Connected services</h2></div>
+          <p>Select a service to connect it, review approved assets or manage its access.</p>
         </div>
+
+        <div className={styles.providerGrid}>
+          {providers.map((provider) => {
+            const status = statusFor(provider);
+            return (
+              <Link
+                key={provider.id}
+                href={`/dashboard/connect?integration=${provider.id}#integrations`}
+                className={`${styles.providerCard} ${selected.id === provider.id ? styles.providerCardActive : ""}`}
+              >
+                <span className={`${styles.providerLogo} ${provider.logoTone}`}>{provider.logo}</span>
+                <span className={styles.providerIdentity}>
+                  <strong>{provider.name}</strong>
+                  <small>{provider.category}</small>
+                </span>
+                <span className={`${styles.statusBadge} ${statusClass(status)}`}>{statusLabel(status)}</span>
+                <ArrowRight className={styles.cardArrow} size={15} aria-hidden="true" />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className={styles.detailShell}>
+        <header className={styles.detailHeader}>
+          <div className={styles.detailBrand}>
+            <span className={`${styles.detailLogo} ${selected.logoTone}`}>{selected.logo}</span>
+            <div>
+              <span>{selected.category}</span>
+              <h2>{selected.name}</h2>
+              <p>{selected.description}</p>
+            </div>
+          </div>
+          <span className={`${styles.detailStatus} ${statusClass(selectedStatus)}`}>
+            <i aria-hidden="true" /> {statusLabel(selectedStatus)}
+          </span>
+        </header>
+
+        {selected.id === "operator" ? (
+          <div className={styles.operatorArea}>
+            <div className={styles.operatorGrid}>
+              <article className={styles.panel}>
+                <div className={styles.panelTitle}><KeyRound size={17} aria-hidden="true" /><div><strong>Orbit Operator access</strong><small>Founder-only governed AI connection</small></div></div>
+                <p>Generate a revocable organisation-scoped action key for Orbit Operator. Third-party business services continue to use OAuth/App installation instead of manual credentials.</p>
+                <OrbitActionKeyManager />
+              </article>
+              <article className={styles.panel}>
+                <div className={styles.panelTitle}><Link2 size={17} aria-hidden="true" /><div><strong>Connection recipe</strong><small>Private operator setup</small></div></div>
+                <div className={styles.stepStack}>
+                  <span><b>1</b>Create a private Orbit Operator GPT.</span>
+                  <span><b>2</b>Import the Orbit OpenAPI schema.</span>
+                  <span><b>3</b>Use the founder-only one-time action key.</span>
+                  <span><b>4</b>Test read access before governed writes.</span>
+                </div>
+              </article>
+            </div>
+
+            <article className={styles.panel}>
+              <div className={styles.panelTitle}><ShieldCheck size={17} aria-hidden="true" /><div><strong>Organisation action keys</strong><small>Revocable AI access</small></div></div>
+              {keys.length ? (
+                <div className={styles.keyList}>
+                  {keys.map((key) => {
+                    const inactive = !key.is_active;
+                    return (
+                      <div className={styles.keyRow} key={key.id}>
+                        <span className={`${styles.keyState} ${inactive ? styles.keyInactive : styles.keyActive}`}>{key.revoked_at ? "Revoked" : inactive ? "Expired" : "Active"}</span>
+                        <div><strong>{key.name}</strong><small>{key.token_prefix}… · Created {formatFoundryDate(key.created_at)}{key.last_used_at ? ` · Last used ${formatFoundryDate(key.last_used_at)}` : " · Not used yet"}</small></div>
+                        {!key.revoked_at ? (
+                          <form action={revokeOrbitActionKeyAction}>
+                            <input name="keyId" type="hidden" value={key.id} />
+                            <button className={styles.iconButton} title="Revoke this Orbit connection" type="submit"><Trash2 aria-hidden="true" size={15} /></button>
+                          </form>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <p>No Orbit Operator connection key has been created yet.</p>}
+            </article>
+          </div>
+        ) : (
+          <div className={styles.detailGrid}>
+            <article className={styles.panel}>
+              <div className={styles.panelTitle}>
+                <Link2 size={17} aria-hidden="true" />
+                <div><strong>{selectedStatus === "connected" ? "Connected account" : selectedStatus === "available" ? "Connect account" : "Connector setup"}</strong><small>Secure provider authorization</small></div>
+              </div>
+
+              {selectedStatus === "connected" && selectedRecord ? (
+                <>
+                  <div className={styles.accountCard}>
+                    <span className={`${styles.accountLogo} ${selected.logoTone}`}>{selected.logo}</span>
+                    <div><small>Connected as</small><strong>{selectedRecord.provider_account_name ?? `${selected.name} account`}</strong><span>{selectedRecord.provider_account_type ?? "Authorized installation"}</span></div>
+                    <CheckCircle2 size={19} aria-hidden="true" />
+                  </div>
+                  <p className={styles.bodyCopy}>Orbit stores the provider installation securely. Secret credentials never appear in the browser.</p>
+                  <div className={styles.actions}>
+                    {selected.manageUrl ? <a className={styles.primaryAction} href={selected.manageUrl} target="_blank" rel="noreferrer">Manage access <ExternalLink size={12} /></a> : null}
+                    <form action={`/api/integrations/${selected.id}/disconnect`} method="post"><button className={styles.secondaryAction} type="submit">Disconnect</button></form>
+                  </div>
+                </>
+              ) : selected.connectPath && selected.platformReady ? (
+                <>
+                  <p className={styles.bodyCopy}>No credentials to copy. Orbit opens {selected.name}, you approve the account and assets, then you return here automatically.</p>
+                  <div className={styles.flow}>
+                    <span><b>1</b>Connect</span><i />
+                    <span><b>2</b>Account</span><i />
+                    <span><b>3</b>Assets</span><i />
+                    <span><b>4</b>Approve</span><i />
+                    <span><b>5</b>Return</span>
+                  </div>
+                  <div className={styles.actions}><a className={styles.primaryAction} href={selected.connectPath}>Connect {selected.name} <ArrowRight size={13} /></a></div>
+                </>
+              ) : selected.id === "github" && isOrbitPlatformOwner ? (
+                <>
+                  <div className={styles.setupCallout}><strong>One-time Orbit platform setup</strong><span>This is only for Urava as the product owner. Normal Orbit users will never see this step.</span></div>
+                  <div className={styles.setupSteps}>
+                    <span><b>01</b><div><strong>Register the GitHub App</strong><small>Developer Settings → GitHub Apps → New GitHub App</small></div></span>
+                    <span><b>02</b><div><strong>Use Orbit as the app identity</strong><small>Homepage: {orbitUrl}</small></div></span>
+                    <span><b>03</b><div><strong>Set the setup callback</strong><small>{orbitUrl}/api/integrations/github/callback</small></div></span>
+                    <span><b>04</b><div><strong>Choose minimal repository permissions</strong><small>Allow users to install on selected repositories only.</small></div></span>
+                  </div>
+                  <div className={styles.actions}><a className={styles.primaryAction} href={githubSetupUrl} target="_blank" rel="noreferrer">Register Orbit GitHub App <ExternalLink size={12} /></a></div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.setupCallout}><strong>Provider connector not enabled yet</strong><span>Orbit will use the same OAuth/App pattern here. Normal users will not paste API keys.</span></div>
+                  <div className={styles.flow compact}>
+                    <span><b>1</b>Connect</span><i />
+                    <span><b>2</b>Account</span><i />
+                    <span><b>3</b>Assets</span><i />
+                    <span><b>4</b>Approve</span><i />
+                    <span><b>5</b>Manage</span>
+                  </div>
+                </>
+              )}
+            </article>
+
+            <article className={styles.panel}>
+              <div className={styles.panelTitle}><ShieldCheck size={17} aria-hidden="true" /><div><strong>{selectedStatus === "connected" ? "Approved assets" : "Permission boundary"}</strong><small>Least-privilege by design</small></div></div>
+              {selectedStatus === "connected" ? (
+                selectedAssets.length ? (
+                  <div className={styles.assetList}>
+                    {selectedAssets.slice(0, 12).map((asset) => (
+                      <div className={styles.assetRow} key={asset.id}>
+                        <CheckCircle2 size={14} aria-hidden="true" />
+                        <span><strong>{asset.name}</strong><small>{asset.detail}</small></span>
+                        {asset.url ? <a href={asset.url} target="_blank" rel="noreferrer" aria-label={`Open ${asset.name}`}><ExternalLink size={12} /></a> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className={styles.bodyCopy}>The provider installation is connected. Orbit will list approved assets here as soon as the provider exposes them.</p>
+              ) : (
+                <>
+                  <p className={styles.bodyCopy}>Orbit asks only for access required by the modules below. Users can change or revoke provider access later.</p>
+                  <div className={styles.usedBy}>{selected.usedBy.map((label) => <span key={label}>{label}</span>)}</div>
+                  <div className={styles.securityNote}><LockKeyhole size={15} /><span><strong>Secrets stay private</strong><small>Credentials are stored server-side and never rendered to normal users.</small></span></div>
+                </>
+              )}
+            </article>
+          </div>
+        )}
       </section>
     </main>
   );
