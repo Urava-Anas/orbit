@@ -81,7 +81,6 @@ function isPrivateIpv4(address: string) {
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 0) ||
     (a === 192 && b === 168) ||
-    (a === 192 && b === 0 && parts[2] === 2) ||
     (a === 198 && (b === 18 || b === 19)) ||
     (a === 198 && b === 51 && parts[2] === 100) ||
     (a === 203 && b === 0 && parts[2] === 113) ||
@@ -128,7 +127,7 @@ async function assertSafeMcpEndpoint(endpoint: URL) {
     return;
   }
 
-  let addresses: Awaited<ReturnType<typeof lookup>>;
+  let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await lookup(hostname, { all: true, verbatim: true });
   } catch {
@@ -148,7 +147,7 @@ function perRequestMeta() {
 }
 
 function encodeHeaderValue(value: string | number | boolean) {
-  const text = typeof value === "boolean" ? String(value) : String(value);
+  const text = String(value);
   const safe = /^[\x20-\x7E\t]*$/.test(text) && text.trim() === text && !(text.startsWith("=?base64?") && text.endsWith("?="));
   if (safe) return text;
   return `=?base64?${Buffer.from(text, "utf8").toString("base64")}?=`;
@@ -383,9 +382,6 @@ async function fetchTools(context: PluginRuntimeContext) {
   }
   if (listResult.tools.length > MAX_TOOLS) throw new PluginRuntimeError("MCP server exposes too many tools.", "mcp_tool_limit", 502);
   const tools = listResult.tools.map(normalizeTool).filter((tool): tool is RuntimeTool => Boolean(tool));
-  if (tools.length !== listResult.tools.length) {
-    // Invalid or unsafe tool definitions are excluded rather than trusted.
-  }
   return tools.sort((a, b) => a.name.localeCompare(b.name));
 }
 
