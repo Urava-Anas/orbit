@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireFounderFoundry } from "@/lib/foundry";
 import {
   issueIntegrationState,
+  registerIntegrationState,
   vercelInstallUrl,
   vercelIntegrationReady,
 } from "@/lib/integration-connections";
@@ -18,11 +19,21 @@ export async function GET(request: Request) {
     return NextResponse.redirect(fallback);
   }
 
-  const state = issueIntegrationState({
-    workspaceId: workspace.id,
-    userId: user.id,
-    provider: "vercel",
-  });
-
-  return NextResponse.redirect(vercelInstallUrl(state));
+  try {
+    const state = issueIntegrationState({
+      workspaceId: workspace.id,
+      userId: user.id,
+      provider: "vercel",
+    });
+    await registerIntegrationState(state, {
+      workspaceId: workspace.id,
+      userId: user.id,
+      provider: "vercel",
+    });
+    return NextResponse.redirect(vercelInstallUrl(state));
+  } catch (error) {
+    console.error("Vercel integration state issuance failed", error);
+    fallback.searchParams.set("error", "vercel_state_failed");
+    return NextResponse.redirect(fallback);
+  }
 }
