@@ -13,7 +13,7 @@ create table if not exists public.foundry_class_learning_notes (
   student_notes text not null
     check (char_length(student_notes) between 2 and 4000),
   learning_state text not null default 'introduced'
-    check (learning_state in ('introduced', 'practising', 'understood', 'mastered')),
+    check (learning_state in ('introduced', 'practising', 'understood', 'applied', 'mastered')),
   understanding_level smallint
     check (understanding_level is null or understanding_level between 1 and 5),
   student_progress_snapshot smallint

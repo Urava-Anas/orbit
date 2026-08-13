@@ -9,9 +9,7 @@ create table if not exists public.orbit_platform_admins (
 alter table public.orbit_platform_admins enable row level security;
 revoke all on table public.orbit_platform_admins from anon, authenticated;
 
-insert into public.orbit_platform_admins(user_id, role)
-values ('1603309b-da17-403f-8c2b-a8639789567d'::uuid, 'owner')
-on conflict (user_id) do update set role = excluded.role;
+-- Platform reviewers are bootstrapped explicitly after an authenticated user exists.
 
 create table if not exists public.plugin_publishers (
   id uuid primary key default gen_random_uuid(),
@@ -125,12 +123,7 @@ create or replace trigger plugin_submissions_set_updated_at
 before update on public.plugin_submissions
 for each row execute function private.set_updated_at();
 
-insert into public.plugin_publishers(workspace_id,slug,display_name,website,status,verified,created_by)
-select wm.workspace_id,'urava','Urava','https://orbit-two-delta.vercel.app','active',true,wm.user_id
-from public.workspace_members wm
-where wm.user_id = '1603309b-da17-403f-8c2b-a8639789567d'::uuid and wm.role='owner'
-limit 1
-on conflict (slug) do update set verified=true,status='active',updated_at=now();
+-- First-party publishers are bootstrapped explicitly after a workspace owner exists.
 
 create or replace function private.guard_plugin_publisher_write()
 returns trigger
