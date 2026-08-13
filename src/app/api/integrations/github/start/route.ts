@@ -4,6 +4,7 @@ import {
   githubAppReady,
   githubInstallUrl,
   issueIntegrationState,
+  registerIntegrationState,
 } from "@/lib/integration-connections";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +19,21 @@ export async function GET(request: Request) {
     return NextResponse.redirect(fallback);
   }
 
-  const state = issueIntegrationState({
-    workspaceId: workspace.id,
-    userId: user.id,
-    provider: "github",
-  });
-
-  return NextResponse.redirect(githubInstallUrl(state));
+  try {
+    const state = issueIntegrationState({
+      workspaceId: workspace.id,
+      userId: user.id,
+      provider: "github",
+    });
+    await registerIntegrationState(state, {
+      workspaceId: workspace.id,
+      userId: user.id,
+      provider: "github",
+    });
+    return NextResponse.redirect(githubInstallUrl(state));
+  } catch (error) {
+    console.error("GitHub integration state issuance failed", error);
+    fallback.searchParams.set("error", "github_state_failed");
+    return NextResponse.redirect(fallback);
+  }
 }
