@@ -22,13 +22,14 @@ function statusLabel(status: string | null) {
   if (status === "installed") return "Installed";
   if (status === "disabled") return "Disabled";
   if (status === "pending_connections") return "Needs connection";
+  if (status === "pending_review") return "Update approval";
   return "Available";
 }
 
 function statusClass(status: string | null) {
   if (status === "installed") return styles.installed;
   if (status === "disabled") return styles.disabled;
-  if (status === "pending_connections") return styles.pending;
+  if (status === "pending_connections" || status === "pending_review") return styles.pending;
   return styles.disabled;
 }
 
@@ -40,7 +41,6 @@ export default async function PluginsPage() {
   ]);
   const canManage = role === "owner" || role === "admin";
   const active = plugins.filter((plugin) => plugin.installation?.status === "installed").length;
-  const disabled = plugins.filter((plugin) => plugin.installation?.status === "disabled").length;
   const firstParty = plugins.filter((plugin) => plugin.catalog.first_party).length;
   const connectedApps = [...workspaceConnections.values()].filter((connection) => connection.status === "connected").length;
 
@@ -56,7 +56,7 @@ export default async function PluginsPage() {
         <div className={styles.heroMeta}>
           <span><ShieldCheck size={11} /> Permissioned by default</span>
           <span><PlugZap size={11} /> Connect apps once</span>
-          <span><Sparkles size={11} /> Zero extra hosting for plugin logic</span>
+          <span><Sparkles size={11} /> Developer-owned runtime</span>
         </div>
       </section>
 
@@ -64,13 +64,16 @@ export default async function PluginsPage() {
         <article className={styles.stat}><small>Available</small><strong>{plugins.length}</strong><span>Published in Orbit</span></article>
         <article className={styles.stat}><small>Active</small><strong>{active}</strong><span>Ready for {workspace.name}</span></article>
         <article className={styles.stat}><small>Connected apps</small><strong>{connectedApps}</strong><span>Shared through Connect</span></article>
-        <article className={styles.stat}><small>Verified</small><strong>{firstParty}</strong><span>First-party Urava plugins</span></article>
+        <article className={styles.stat}><small>First-party</small><strong>{firstParty}</strong><span>Built by Urava</span></article>
       </section>
 
       <section>
         <div className={styles.sectionHead}>
           <div><h2>Plugin directory</h2><p>Review capabilities, app requirements and permissions before anything enters your organisation.</p></div>
-          <Link href="/dashboard/connect">Manage connected apps <ArrowRight size={11} /></Link>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Link href="/dashboard/plugins/develop">Developer portal <ArrowRight size={11} /></Link>
+            <Link href="/dashboard/connect">Manage connected apps <ArrowRight size={11} /></Link>
+          </div>
         </div>
       </section>
 
@@ -90,7 +93,7 @@ export default async function PluginsPage() {
                   </div>
                 </div>
                 <div className={styles.badges}>
-                  {catalog.verified ? <span className={styles.verified}><BadgeCheck size={10} /> Verified</span> : null}
+                  {catalog.verified ? <span className={styles.verified}><BadgeCheck size={10} /> Reviewed</span> : null}
                   {effectiveStatus ? <span className={statusClass(effectiveStatus)}>{statusLabel(effectiveStatus)}</span> : null}
                 </div>
               </div>
@@ -138,9 +141,8 @@ export default async function PluginsPage() {
                   {canManage && effectiveStatus === "disabled" ? (
                     <form action={enablePlugin}><input type="hidden" name="pluginSlug" value={catalog.slug} /><button className={styles.button} type="submit">Enable</button></form>
                   ) : null}
-                  {effectiveStatus === "pending_connections" ? (
-                    <Link className={styles.button} href={`/dashboard/plugins/${catalog.slug}`}>Connect required apps</Link>
-                  ) : null}
+                  {effectiveStatus === "pending_connections" ? <Link className={styles.button} href={`/dashboard/plugins/${catalog.slug}`}>Connect required apps</Link> : null}
+                  {effectiveStatus === "pending_review" ? <Link className={styles.button} href={`/dashboard/plugins/${catalog.slug}`}>Review update</Link> : null}
                   {canManage && effectiveStatus ? (
                     <form action={uninstallPlugin}><input type="hidden" name="pluginSlug" value={catalog.slug} /><button className={styles.buttonDanger} type="submit">Uninstall</button></form>
                   ) : null}
@@ -155,7 +157,7 @@ export default async function PluginsPage() {
       {!plugins.length ? <div className={styles.empty}>No published plugins are available yet.</div> : null}
 
       <section className={styles.notice}>
-        <CheckCircle2 size={12} /> Universal app access is inherited from Connect. A plugin never asks the user to paste GitHub, Vercel, Google, Meta or LinkedIn secrets.
+        <CheckCircle2 size={12} /> Marketplace versions are reviewed and immutable. New permissions or a changed remote runtime stop existing installations until an organisation admin approves the update.
       </section>
     </main>
   );
