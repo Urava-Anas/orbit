@@ -1,0 +1,38 @@
+name: Final tenant isolation verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/final-tenant-isolation-verify.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  tenant-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase
+        run: supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
+      - name: Reset database from migrations
+        run: supabase db reset --local
+      - name: Run tenant-isolation test
+        run: psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
+      - name: Remove one-shot workflow after pass
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/final-tenant-isolation-verify.yml
+          git commit -m "test: confirm Orbit tenant isolation"
+          git push origin HEAD:main
