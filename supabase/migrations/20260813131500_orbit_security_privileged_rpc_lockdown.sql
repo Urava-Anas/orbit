@@ -2,8 +2,8 @@
 revoke all on function public.consume_stage4_scheduler_invocation(uuid,text) from public, anon, authenticated;
 grant execute on function public.consume_stage4_scheduler_invocation(uuid,text) to service_role;
 
-revoke all on function public.set_stage4_provider_secret(uuid,text,text,text,text) from public, anon, authenticated;
-grant execute on function public.set_stage4_provider_secret(uuid,text,text,text,text) to service_role;
+revoke all on function public.set_stage4_provider_secret(uuid,text,text) from public, anon, authenticated;
+grant execute on function public.set_stage4_provider_secret(uuid,text,text) to service_role;
 
 -- Explicitly keep server-only security tables invisible to user JWTs.
 revoke all on table public.orbit_scheduler_invocations from public, anon, authenticated;
