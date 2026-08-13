@@ -417,7 +417,7 @@ export default async function OrbitConnectPage({ searchParams }: PageProps) {
               ) : (
                 <>
                   <div className={styles.setupCallout}><strong>Provider connector not enabled yet</strong><span>Orbit will use the same OAuth/App pattern here. Normal users will not paste API keys.</span></div>
-                  <div className={styles.flow compact}>
+                  <div className={styles.flow}>
                     <span><b>1</b>Connect</span><i />
                     <span><b>2</b>Account</span><i />
                     <span><b>3</b>Assets</span><i />
