@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Banknote,
+  Blocks,
   Building2,
   Crosshair,
   FileCheck2,
@@ -30,6 +31,7 @@ const links = [
   { href: "/dashboard/proof", label: "Evidence", icon: FileCheck2 },
   { href: "/dashboard/content", label: "Publishing", icon: MessageSquareText },
   { href: "/dashboard/connect", label: "Connect", icon: PlugZap },
+  { href: "/dashboard/plugins", label: "Plugins", icon: Blocks },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
   { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
 ] as const;
