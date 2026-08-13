@@ -11,6 +11,8 @@ export const ORBIT_ACTION_SCOPES = [
   "submissions.write",
   "integrations.write",
   "audit.read",
+  "plugins.read",
+  "plugins.invoke",
 ] as const;
 
 export type OrbitActionKeyRecord = {
