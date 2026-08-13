@@ -1,0 +1,44 @@
+name: Close final Orbit security gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-temp-security-workflows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  close-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Assert MCP DNS pinning is active
+        run: grep -F 'pinnedFetch as fetch' src/lib/plugins/mcp.ts
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run lint
+      - run: npm run build
+      - name: Record gate and remove temporary workflows
+        run: |
+          mkdir -p docs
+          printf 'Orbit final security gate passed for tested source commit %s\n' "$(git rev-parse HEAD)" > docs/.orbit-final-security-gate
+          for f in \
+            .github/workflows/pin-mcp-runtime.yml \
+            .github/workflows/final-cleanup-trigger-2.yml \
+            .github/workflows/final-security-gate.yml \
+            .github/workflows/cleanup-temp-security-workflows.yml; do
+            if [ -f "$f" ]; then git rm "$f"; fi
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/.orbit-final-security-gate
+          git commit -m "security: close Orbit plugin v1 final gate"
+          git push origin HEAD:main
