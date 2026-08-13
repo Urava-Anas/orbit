@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Blocks,
   CheckCircle2,
+  CircleAlert,
   ExternalLink,
   PlugZap,
   ShieldCheck,
@@ -13,6 +14,11 @@ import {
 } from "lucide-react";
 import { requireWorkspace } from "@/lib/workspace";
 import { getPluginBySlug, getPluginEvents } from "@/lib/plugins/catalog";
+import {
+  getWorkspacePluginConnections,
+  providerLabel,
+  resolvePluginAppConnections,
+} from "@/lib/plugins/connections";
 import { disablePlugin, enablePlugin, installPlugin, uninstallPlugin } from "../actions";
 import styles from "../plugins.module.css";
 
@@ -24,7 +30,12 @@ export default async function PluginDetailPage({ params }: PageProps) {
   const plugin = await getPluginBySlug(supabase, workspace.id, slug);
   if (!plugin) notFound();
 
-  const events = await getPluginEvents(supabase, workspace.id, plugin.catalog.id, 12);
+  const [events, workspaceConnections] = await Promise.all([
+    getPluginEvents(supabase, workspace.id, plugin.catalog.id, 12),
+    getWorkspacePluginConnections(supabase, workspace.id),
+  ]);
+  const appConnections = resolvePluginAppConnections(plugin.manifest, workspaceConnections);
+  const requiredMissing = appConnections.filter((app) => app.required && !app.connected);
   const canManage = role === "owner" || role === "admin";
   const installation = plugin.installation?.status === "revoked" ? null : plugin.installation;
 
@@ -44,6 +55,7 @@ export default async function PluginDetailPage({ params }: PageProps) {
               <span>{plugin.manifest.category}</span>
               <span>Version {plugin.catalog.current_version}</span>
               <span>{plugin.catalog.first_party ? "First-party" : "Third-party"}</span>
+              {installation ? <span>{installation.status.replaceAll("_", " ")}</span> : null}
             </div>
           </div>
         </div>
@@ -55,7 +67,7 @@ export default async function PluginDetailPage({ params }: PageProps) {
             {canManage && installation?.status === "installed" ? (
               <form action={disablePlugin}><input type="hidden" name="pluginSlug" value={slug} /><button className={styles.buttonQuiet} type="submit">Disable</button></form>
             ) : null}
-            {canManage && (installation?.status === "disabled" || installation?.status === "pending_connections") ? (
+            {canManage && installation?.status === "disabled" ? (
               <form action={enablePlugin}><input type="hidden" name="pluginSlug" value={slug} /><button className={styles.button} type="submit">Enable</button></form>
             ) : null}
             {canManage && installation ? (
@@ -64,6 +76,12 @@ export default async function PluginDetailPage({ params }: PageProps) {
           </div>
         </div>
       </section>
+
+      {installation?.status === "pending_connections" && requiredMissing.length ? (
+        <section className={styles.notice}>
+          <CircleAlert size={13} /> Installed safely, but execution stays blocked until {requiredMissing.map((app) => providerLabel(app.provider)).join(", ")} {requiredMissing.length === 1 ? "is" : "are"} connected.
+        </section>
+      ) : null}
 
       <section className={styles.detailColumns}>
         <article className={styles.panel}>
@@ -90,14 +108,25 @@ export default async function PluginDetailPage({ params }: PageProps) {
 
       <section className={styles.detailColumns}>
         <article className={styles.panel}>
-          <h2>Required apps</h2>
-          <p>Stage 2 binds these requirements to Orbit Connect so users never paste provider secrets into a plugin.</p>
+          <h2>Connected apps</h2>
+          <p>Apps are authorised once in Connect and inherited here. The plugin never receives a secret pasted by the user.</p>
           <div className={styles.list}>
-            {plugin.manifest.apps.length ? plugin.manifest.apps.map((app) => (
-              <div className={styles.listItem} key={app.provider}><PlugZap size={15} /><span><strong>{app.provider.replaceAll("_", " ")}</strong><small>{app.required ? "Required connection" : "Optional connection"}</small></span></div>
+            {appConnections.length ? appConnections.map((app) => (
+              <div className={styles.listItem} key={app.provider}>
+                {app.connected ? <CheckCircle2 size={15} /> : <PlugZap size={15} />}
+                <span>
+                  <strong>{providerLabel(app.provider)}</strong>
+                  <small>
+                    {app.connected
+                      ? `${app.accountName ?? "Connected account"}${app.assetCount ? ` · ${app.assetCount} approved assets` : ""}`
+                      : `${app.required ? "Required" : "Optional"} · not connected`}
+                  </small>
+                </span>
+                {!app.connected ? <Link className={styles.detailLink} href={app.connectHref}>Connect <ExternalLink size={10} /></Link> : null}
+              </div>
             )) : <div className={styles.listItem}><ShieldCheck size={15} /><span><strong>No external app required</strong><small>This plugin stays inside Orbit.</small></span></div>}
           </div>
-          <div className={styles.actions}><div><Link className={styles.buttonQuiet} href="/dashboard/connect">Open Connect <ExternalLink size={11} /></Link></div></div>
+          <div className={styles.actions}><div><Link className={styles.buttonQuiet} href="/dashboard/connect">Manage all apps <ExternalLink size={11} /></Link></div></div>
         </article>
 
         <article className={styles.panel}>
