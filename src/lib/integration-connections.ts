@@ -9,6 +9,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type OAuthProvider = "github" | "vercel";
 
@@ -39,6 +40,10 @@ function fromB64url(value: string) {
   return Buffer.from(value, "base64url");
 }
 
+function integrationStateHash(token: string) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
 export function issueIntegrationState(input: Omit<IntegrationState, "v" | "issuedAt" | "nonce">) {
   const payload: IntegrationState = {
     v: 1,
@@ -52,22 +57,37 @@ export function issueIntegrationState(input: Omit<IntegrationState, "v" | "issue
 }
 
 export function verifyIntegrationState(token: string, expectedProvider: OAuthProvider) {
-  const [encoded, signature] = token.split(".");
+  if (token.length > 4096) throw new Error("Invalid integration state.");
+  const parts = token.split(".");
+  if (parts.length !== 2) throw new Error("Invalid integration state.");
+  const [encoded, signature] = parts;
   if (!encoded || !signature) throw new Error("Invalid integration state.");
 
   const expected = createHmac("sha256", integrationSecret()).update(encoded).digest();
-  const supplied = fromB64url(signature);
+  let supplied: Buffer;
+  try {
+    supplied = fromB64url(signature);
+  } catch {
+    throw new Error("Integration state signature is invalid.");
+  }
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
     throw new Error("Integration state signature is invalid.");
   }
 
-  const payload = JSON.parse(fromB64url(encoded).toString("utf8")) as IntegrationState;
+  let payload: IntegrationState;
+  try {
+    payload = JSON.parse(fromB64url(encoded).toString("utf8")) as IntegrationState;
+  } catch {
+    throw new Error("Integration state payload is invalid.");
+  }
   if (
     payload.v !== 1 ||
     payload.provider !== expectedProvider ||
-    !payload.workspaceId ||
-    !payload.userId ||
-    !payload.issuedAt ||
+    typeof payload.workspaceId !== "string" ||
+    typeof payload.userId !== "string" ||
+    typeof payload.nonce !== "string" ||
+    payload.nonce.length < 20 ||
+    typeof payload.issuedAt !== "number" ||
     Date.now() - payload.issuedAt > STATE_TTL_MS ||
     payload.issuedAt - Date.now() > 60_000
   ) {
@@ -75,6 +95,54 @@ export function verifyIntegrationState(token: string, expectedProvider: OAuthPro
   }
 
   return payload;
+}
+
+export async function registerIntegrationState(
+  token: string,
+  input: { workspaceId: string; userId: string; provider: OAuthProvider },
+) {
+  const state = verifyIntegrationState(token, input.provider);
+  if (state.workspaceId !== input.workspaceId || state.userId !== input.userId) {
+    throw new Error("Integration state identity mismatch.");
+  }
+  const admin = createAdminClient();
+  if (!admin) throw new Error("Orbit integration state service is unavailable.");
+
+  const { error } = await admin.from("integration_oauth_states").insert({
+    state_hash: integrationStateHash(token),
+    workspace_id: input.workspaceId,
+    user_id: input.userId,
+    provider: input.provider,
+    expires_at: new Date(state.issuedAt + STATE_TTL_MS).toISOString(),
+  });
+  if (error) throw new Error("Integration state could not be registered.");
+
+  // Best-effort bounded cleanup; failure must not invalidate the newly issued state.
+  await admin
+    .from("integration_oauth_states")
+    .delete()
+    .lt("expires_at", new Date(Date.now() - STATE_TTL_MS).toISOString());
+}
+
+export async function consumeIntegrationState(token: string, state: IntegrationState) {
+  const admin = createAdminClient();
+  if (!admin) throw new Error("Orbit integration state service is unavailable.");
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("integration_oauth_states")
+    .update({ consumed_at: now })
+    .eq("state_hash", integrationStateHash(token))
+    .eq("workspace_id", state.workspaceId)
+    .eq("user_id", state.userId)
+    .eq("provider", state.provider)
+    .is("consumed_at", null)
+    .gt("expires_at", now)
+    .select("state_hash")
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error("Integration state was already used, expired, or was not issued by Orbit.");
+  }
 }
 
 function encryptionKey() {
