@@ -118,7 +118,7 @@ export default async function PluginDetailPage({ params }: PageProps) {
       <section className={styles.detailColumns}>
         <article className={styles.panel}>
           <h2>Connected apps</h2>
-          <p>Apps are authorised once in Connect and inherited here. The plugin never receives a secret pasted by the user.</p>
+          <p>Apps are authorised once in Plugins and inherited here. The plugin never receives a secret pasted by the user.</p>
           <div className={styles.list}>
             {appConnections.length ? appConnections.map((app) => (
               <div className={styles.listItem} key={app.provider}>
@@ -140,7 +140,7 @@ export default async function PluginDetailPage({ params }: PageProps) {
               <div className={styles.listItem}><ShieldCheck size={15} /><span><strong>Remote runtime</strong><small>{plugin.manifest.mcp.url}</small></span></div>
             </div>
           ) : null}
-          <div className={styles.actions}><div><Link className={styles.buttonQuiet} href="/dashboard/connect">Manage all apps <ExternalLink size={11} /></Link></div></div>
+          <div className={styles.actions}><div><Link className={styles.buttonQuiet} href="/dashboard/plugins">Manage all apps <ExternalLink size={11} /></Link></div></div>
         </article>
 
         <article className={styles.panel}>
