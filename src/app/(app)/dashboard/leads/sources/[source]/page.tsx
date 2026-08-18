@@ -33,7 +33,7 @@ import { WebsitePreview } from "./WebsitePreview";
 
 const sources = {
   website: { label: "Website", aliases: ["website"], description: "Website enquiries, forms and conversion-originated opportunities.", defaultType: "website" },
-  google: { label: "Google Search", aliases: ["google"], description: "Organic search, Maps and Google-discovered opportunities.", defaultType: "business_profile" },
+  google: { label: "Local Search", aliases: ["google", "local_search"], description: "Geoapify, Maps and legacy Google-discovered local business opportunities.", defaultType: "business_profile" },
   instagram: { label: "Instagram", aliases: ["instagram"], description: "Instagram DMs, profile actions and campaign-originated opportunities.", defaultType: "profile" },
   linkedin: { label: "LinkedIn", aliases: ["linkedin"], description: "LinkedIn prospecting, inbound messages and professional-network leads.", defaultType: "profile" },
   facebook: { label: "Facebook", aliases: ["facebook"], description: "Facebook page, message and campaign-originated opportunities.", defaultType: "page" },
