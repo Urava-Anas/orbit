@@ -18,9 +18,8 @@ import {
   UploadCloud,
   UsersRound,
 } from "lucide-react";
-import { createLead } from "@/app/(app)/dashboard/lead-actions";
 import { Notice } from "@/components/Notice";
-import { formatRelativeDate, humanize } from "@/lib/format";
+import { humanize } from "@/lib/format";
 import type { Lead } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 import styles from "./leads.module.css";
@@ -29,30 +28,6 @@ export const metadata: Metadata = {
   title: "Lead Engine",
   robots: { index: false, follow: false },
 };
-
-const stages = [
-  "new",
-  "raw",
-  "scored",
-  "qualified",
-  "contacted",
-  "interested",
-  "demo_booked",
-  "proposal",
-  "won",
-  "lost",
-] as const;
-
-const activeStages = new Set([
-  "new",
-  "raw",
-  "scored",
-  "qualified",
-  "contacted",
-  "interested",
-  "demo_booked",
-  "proposal",
-]);
 
 const sourceCards = [
   { slug: "website", label: "Website", aliases: ["website"], icon: Globe2, tone: "purple" },
@@ -69,9 +44,6 @@ type PageProps = {
   searchParams: Promise<{
     error?: string;
     notice?: string;
-    q?: string;
-    stage?: string;
-    priority?: string;
   }>;
 };
 
@@ -95,50 +67,6 @@ type ExternalAction = {
   status: string | null;
   created_at: string;
 };
-
-function isActive(lead: Lead) {
-  return activeStages.has(lead.stage);
-}
-
-function isOverdue(lead: Lead, now: number) {
-  if (!isActive(lead) || !lead.next_action_at) return false;
-  const timestamp = new Date(lead.next_action_at).getTime();
-  return Number.isFinite(timestamp) && timestamp < now;
-}
-
-function stageTone(stage: string) {
-  if (stage === "won") return "green";
-  if (["proposal", "demo_booked", "interested"].includes(stage)) return "amber";
-  if (["contacted", "qualified"].includes(stage)) return "blue";
-  if (stage === "lost") return "red";
-  return "neutral";
-}
-
-function sourceCard(source: string) {
-  return sourceCards.find((card) => card.aliases.includes(source as never));
-}
-
-function sourceLabel(source: string) {
-  return sourceCard(source)?.label ?? humanize(source);
-}
-
-function sourceWorkspaceHref(source: string) {
-  const card = sourceCard(source);
-  return card ? `/dashboard/leads/sources/${card.slug}` : "/dashboard/leads";
-}
-
-function initials(lead: Lead) {
-  return (lead.company ?? lead.name)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "L";
-}
-
-function normaliseStage(value: string | undefined) {
-  return stages.includes(value as (typeof stages)[number]) ? value : "all";
-}
 
 function countFlow(leads: Lead[]) {
   const notLost = leads.filter((lead) => lead.stage !== "lost");
@@ -195,24 +123,6 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   const autopilot = (autopilotResult.data ?? null) as AutopilotConfig | null;
   const projects = projectResult.data ?? [];
   const externalActions = (actionResult.data ?? []) as ExternalAction[];
-  // Server-render snapshot used only to classify time-sensitive records for this render.
-  // eslint-disable-next-line react-hooks/purity
-  const now = Date.now();
-
-  const q = params.q?.trim().toLowerCase() ?? "";
-  const stage = normaliseStage(params.stage);
-  const priority = params.priority ?? "all";
-  const visibleLeads = leads.filter((lead) => {
-    const searchText = [lead.company, lead.name, lead.niche, lead.pain_point, lead.next_action]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    if (q && !searchText.includes(q)) return false;
-    if (stage !== "all" && lead.stage !== stage) return false;
-    if (priority === "hot" && (lead.lead_score ?? 0) < 85) return false;
-    if (priority === "overdue" && !isOverdue(lead, now)) return false;
-    return true;
-  });
 
   const totalLeadCount = Math.max(leads.length, 1);
   const flowCounts = countFlow(leads);
@@ -234,9 +144,9 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           <h1>Lead Engine</h1>
           <p>Find leads, nurture them and turn opportunities into clients.</p>
         </div>
-        <a className={styles.primaryButton} href="#add-lead">
+        <Link className={styles.primaryButton} href="/dashboard/leads/add">
           <Plus size={16} aria-hidden="true" /> Add lead
-        </a>
+        </Link>
       </header>
 
       <Notice error={params.error} notice={params.notice} />
@@ -247,7 +157,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
             <h2 id="lead-sources-title">Lead Sources</h2>
             <p>All your lead sources in one place. Click any source to view and manage leads.</p>
           </div>
-          <Link href="/dashboard/connect">Manage sources</Link>
+          <Link href="/dashboard/plugins">Manage sources</Link>
         </div>
         <div className={styles.sourceGrid}>
           {sourceCards.map(({ slug, label, aliases, icon: Icon, tone }) => {
@@ -267,7 +177,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
               </Link>
             );
           })}
-          <Link className={`${styles.sourceCard} ${styles.addSourceCard}`} href="/dashboard/connect">
+          <Link className={`${styles.sourceCard} ${styles.addSourceCard}`} href="/dashboard/plugins">
             <Plus size={22} aria-hidden="true" />
             <span>Add source</span>
           </Link>
@@ -311,106 +221,6 @@ export default async function LeadsPage({ searchParams }: PageProps) {
               <span>Orbit can run approved acquisition work automatically. Founder attention stays on exceptions and red-authority decisions.</span>
             </div>
           </section>
-
-          <section className={styles.leadsPanel} aria-labelledby="lead-list-title">
-            <div className={styles.tabs}>
-              <span className={styles.activeTab}>All Leads</span>
-              <Link href="/dashboard/leads?priority=hot">Hot Leads</Link>
-              <Link href="/dashboard/leads?stage=contacted">Outreach</Link>
-              <Link href="/dashboard/leads?stage=interested">Responses</Link>
-              <Link href="/dashboard/leads?stage=proposal">Opportunities</Link>
-              <Link href="/dashboard/sales">Won → Sales Desk</Link>
-            </div>
-
-            <form className={styles.filterBar} action="/dashboard/leads" method="get">
-              <label className={styles.searchBox}>
-                <Search size={15} aria-hidden="true" />
-                <input name="q" defaultValue={params.q ?? ""} placeholder="Search business, niche, pain or next action" />
-              </label>
-              <select name="stage" defaultValue={stage} aria-label="Filter by stage">
-                <option value="all">All stages</option>
-                {stages.map((value) => <option value={value} key={value}>{humanize(value)}</option>)}
-              </select>
-              <select name="priority" defaultValue={priority} aria-label="Filter by priority">
-                <option value="all">All priorities</option>
-                <option value="hot">Hot leads</option>
-                <option value="overdue">Overdue</option>
-              </select>
-              <button type="submit">Apply</button>
-              <Link href="/dashboard/leads">Clear</Link>
-            </form>
-
-            <div className={styles.tableWrap}>
-              <table className={styles.leadTable}>
-                <thead>
-                  <tr>
-                    <th id="lead-list-title">Lead</th>
-                    <th>Source</th>
-                    <th>Score</th>
-                    <th>Status</th>
-                    <th>Last contact</th>
-                    <th>Next action</th>
-                    <th>Owner</th>
-                    <th>Priority</th>
-                    <th aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleLeads.slice(0, 10).map((lead) => {
-                    const overdue = isOverdue(lead, now);
-                    const score = lead.lead_score ?? 0;
-                    const sourceLinkStyle = {
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      color: "#d8e2ee",
-                      textDecoration: "underline",
-                      textUnderlineOffset: "3px",
-                    } as const;
-                    return (
-                      <tr key={lead.id}>
-                        <td>
-                          <div className={styles.leadIdentity}>
-                            <span>{initials(lead)}</span>
-                            <div><strong>{lead.company ?? lead.name}</strong><small>{lead.niche ?? "Niche not set"}</small></div>
-                          </div>
-                        </td>
-                        <td>
-                          {lead.google_maps_url ? (
-                            <a
-                              href={lead.google_maps_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={sourceLinkStyle}
-                              title="Open the original source where this lead was found"
-                            >
-                              {sourceLabel(lead.source)} <ArrowRight size={12} aria-hidden="true" />
-                            </a>
-                          ) : (
-                            <Link
-                              href={sourceWorkspaceHref(lead.source)}
-                              style={sourceLinkStyle}
-                              title="Open this lead source workspace"
-                            >
-                              {sourceLabel(lead.source)} <ArrowRight size={12} aria-hidden="true" />
-                            </Link>
-                          )}
-                        </td>
-                        <td><span className={styles.scorePill}>{lead.lead_score ?? "—"}</span></td>
-                        <td><span className={`${styles.statusPill} ${styles[`status_${stageTone(lead.stage)}`]}`}>{humanize(lead.stage)}</span></td>
-                        <td>{formatRelativeDate(lead.created_at)}</td>
-                        <td><strong className={styles.nextActionText}>{lead.next_action ?? "Set next action"}</strong>{lead.next_action_at ? <small>{formatRelativeDate(lead.next_action_at)}</small> : null}</td>
-                        <td><span>AI Agent</span><small>Orbit Outbound</small></td>
-                        <td><span className={`${styles.priorityPill} ${overdue || score >= 90 ? styles.priorityHigh : score >= 75 ? styles.priorityMedium : ""}`}>{overdue || score >= 90 ? "High" : score >= 75 ? "Medium" : "Normal"}</span></td>
-                        <td><Link className={styles.rowAction} href={lead.stage === "won" ? "/dashboard/sales" : `/dashboard/leads?q=${encodeURIComponent(lead.company ?? lead.name)}`} aria-label={`Open ${lead.company ?? lead.name}`}><ArrowRight size={15} /></Link></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {!visibleLeads.length ? <div className={styles.emptyState}>No leads match these filters.</div> : null}
-            </div>
-          </section>
         </div>
 
         <aside className={styles.sideColumn}>
@@ -432,7 +242,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
                 <div key={activity.id}>
                   <span className={styles.activityDot} />
                   <p><strong>{humanize(activity.outcome)}</strong><small>{activity.summary}</small></p>
-                  <time>{formatRelativeDate(activity.occurred_at)}</time>
+                  <time>{new Date(activity.occurred_at).toLocaleDateString("en-PK", { timeZone: "Asia/Karachi" })}</time>
                 </div>
               )) : <div className={styles.emptyMini}>No lead activity yet.</div>}
             </div>
@@ -448,31 +258,6 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           </section>
         </aside>
       </div>
-
-      <section className={styles.addPanel} id="add-lead" aria-label="Add lead">
-        <div className={styles.addPanelCard}>
-          <div className={styles.addPanelHeader}><div><h2>Add lead</h2><p>Create a controlled acquisition record.</p></div><Link href="/dashboard/leads">×</Link></div>
-          <form action={createLead} className={styles.addForm}>
-            <label><span>Business name</span><input name="businessName" required minLength={2} /></label>
-            <label><span>Owner or contact</span><input name="ownerName" /></label>
-            <label><span>Email</span><input name="email" type="email" /></label>
-            <label><span>Phone</span><input name="phone" type="tel" /></label>
-            <label><span>WhatsApp</span><input name="whatsapp" type="tel" /></label>
-            <label><span>Niche</span><input name="niche" /></label>
-            <label><span>Source</span><select name="source" defaultValue="direct"><option value="direct">Direct</option><option value="website">Website</option><option value="google">Google</option><option value="instagram">Instagram</option><option value="linkedin">LinkedIn</option><option value="facebook">Facebook</option><option value="referral">Referral</option><option value="other">Other</option></select></label>
-            <label><span>Stage</span><select name="stage" defaultValue="raw"><option value="raw">Raw</option><option value="scored">Scored</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="demo_booked">Demo booked</option><option value="won">Won</option><option value="lost">Lost</option></select></label>
-            <label><span>Lead score</span><input name="leadScore" type="number" min="0" max="100" /></label>
-            <label><span>Estimated value</span><input name="estimatedValue" type="number" min="0" defaultValue="0" /></label>
-            <label><span>Currency</span><select name="currency" defaultValue="PKR"><option>PKR</option><option>USD</option><option>GBP</option><option>EUR</option><option>AED</option><option>SAR</option></select></label>
-            <label className={styles.wideField}><span>Pain point</span><textarea name="painPoint" /></label>
-            <label className={styles.wideField}><span>Next action</span><input name="nextAction" /></label>
-            <label><span>Follow-up date</span><input name="nextActionAt" type="datetime-local" /></label>
-            <label className={styles.wideField}><span>Source link</span><input name="googleMapsUrl" type="url" placeholder="Paste the exact page, profile or listing URL where this lead was found" /></label>
-            <label className={styles.wideField}><span>Notes</span><textarea name="notes" /></label>
-            <div className={styles.formActions}><Link href="/dashboard/leads">Cancel</Link><button type="submit">Save lead</button></div>
-          </form>
-        </div>
-      </section>
     </main>
   );
 }

@@ -9,10 +9,8 @@ type PageProps = {
 
 export default async function LeadFinderRedirect({ searchParams }: PageProps) {
   const params = await searchParams;
-  const query = new URLSearchParams();
+  const query = new URLSearchParams({ mode: "google" });
   if (params.error) query.set("error", params.error);
   if (params.notice) query.set("notice", params.notice);
-  const serialized = query.toString();
-  const suffix = serialized ? `?${serialized}` : "";
-  redirect(`/dashboard/leads${suffix}#lead-finder`);
+  redirect(`/dashboard/leads/add?${query.toString()}#review-results`);
 }
