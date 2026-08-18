@@ -17,6 +17,7 @@ import {
 import { createLead } from "@/app/(app)/dashboard/lead-actions";
 import { Notice } from "@/components/Notice";
 import { formatRelativeDate, humanize } from "@/lib/format";
+import { getGeoapifyRuntimeStatus } from "@/lib/geoapify";
 import type { Lead } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 import {
@@ -57,8 +58,7 @@ type FinderResult = {
   google_maps_url: string | null;
   website_url: string | null;
   phone: string | null;
-  rating: number | null;
-  review_count: number | null;
+  email: string | null;
   niche: string;
   total_score: number | null;
   detected_weakness: string | null;
@@ -110,6 +110,7 @@ function initials(lead: Lead) {
 function sourceLabel(source: string) {
   const labels: Record<string, string> = {
     google: "Google Search",
+    local_search: "Local Search",
     referral: "Referral",
     referrals: "Referrals",
     cold_list: "Cold List",
@@ -118,7 +119,7 @@ function sourceLabel(source: string) {
 }
 
 function sourceHref(source: string) {
-  const slug = source === "referral" ? "referrals" : source === "other" ? "cold-list" : source;
+  const slug = source === "referral" ? "referrals" : source === "other" ? "cold-list" : source === "local_search" ? "local-search" : source;
   return `/dashboard/leads/sources/${slug}`;
 }
 
@@ -133,7 +134,8 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
   const { supabase, workspace } = await requireWorkspace();
   const params = await searchParams;
   const mode = modeOf(params.mode);
-  const apiReady = Boolean(process.env.GOOGLE_PLACES_API_KEY?.trim());
+  const geoapify = await getGeoapifyRuntimeStatus(workspace.id);
+  const apiReady = geoapify.ready;
   const nowIso = new Date().toISOString();
 
   const [leadResult, resultQuery, searchQuery] = await Promise.all([
@@ -145,7 +147,7 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
       .order("created_at", { ascending: false }),
     supabase
       .from("lead_finder_results")
-      .select("id,business_name,formatted_address,primary_type,business_status,google_maps_url,website_url,phone,rating,review_count,niche,total_score,detected_weakness,recommended_offer,status,lead_id,created_at")
+      .select("id,business_name,formatted_address,primary_type,business_status,google_maps_url,website_url,phone,email,niche,total_score,detected_weakness,recommended_offer,status,lead_id,created_at")
       .eq("workspace_id", workspace.id)
       .gt("expires_at", nowIso)
       .order("created_at", { ascending: false })
@@ -197,8 +199,8 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
         <div className={styles.methodGrid}>
           <Link className={`${styles.methodCard} ${mode === "google" ? styles.activeMethod : ""}`} href="/dashboard/leads/add?mode=google">
             <span className={styles.methodIcon}><Search size={21} /></span>
-            <strong>Find by Google Profile</strong>
-            <small>Search businesses by niche and place, then review before adding.</small>
+            <strong>Find Local Businesses</strong>
+            <small>Search Geoapify Places by niche and location, then review before adding.</small>
             {mode === "google" ? <CheckCircle2 className={styles.methodCheck} size={18} /> : null}
           </Link>
           <Link className={`${styles.methodCard} ${mode === "manual" ? styles.activeMethod : ""}`} href="/dashboard/leads/add?mode=manual">
@@ -222,19 +224,19 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
             <section className={styles.panel}>
               <div className={styles.panelTitle}>
                 <span className={styles.methodIcon}><Sparkles size={20} /></span>
-                <div><h2>Find by Google Profile</h2><p>Discover businesses from Google Places using a focused search brief.</p></div>
+                <div><h2>Find Local Businesses</h2><p>Discover local businesses through Geoapify Places using a focused niche + location search brief.</p></div>
               </div>
 
               {!apiReady ? (
-                <div className={styles.setupBanner}><ShieldCheck size={18} /><div><strong>Google Places connection required</strong><p>Add the server-only GOOGLE_PLACES_API_KEY in Vercel to enable live search.</p></div></div>
+                <div className={styles.setupBanner}><ShieldCheck size={18} /><div><strong>Geoapify plugin required</strong><p>{geoapify.installed ? "Plugin installed, but the Geoapify API key is not connected yet." : "Install Geoapify Lead Discovery and connect its API key before generating local leads."} <Link href="/dashboard/plugins/geoapify-lead-discovery">Open Geoapify plugin →</Link></p></div></div>
               ) : null}
 
               <form action={searchPlaces} className={styles.finderForm}>
                 <fieldset className={styles.stepBlock}>
                   <legend><span>1</span> Select niches</legend>
                   <p>Enter one or more business types, separated by commas.</p>
-                  <input name="niches" minLength={2} maxLength={500} placeholder="Restaurant, Cafe, Fast Food" required />
-                  <small>Up to 8 niches per generation run.</small>
+                  <input name="niches" minLength={2} maxLength={500} placeholder="Restaurant, Immigration Consultant, Real Estate" required />
+                  <small>Up to 8 niches per generation run. Orbit maps each niche to the closest Geoapify place category.</small>
                 </fieldset>
 
                 <fieldset className={styles.stepBlock}>
@@ -245,32 +247,29 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
 
                 <fieldset className={styles.stepBlock}>
                   <legend><span>3</span> Search settings</legend>
-                  <p>Control how many leads Orbit finds and what quality signals are required.</p>
+                  <p>Control volume, radius and the contact data required for a result to survive review.</p>
                   <div className={styles.inputGrid}>
                     <label><span>Amount of leads</span><select name="requestedCount" defaultValue="50"><option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="75">75</option><option value="100">100</option></select></label>
                     <label><span>Search radius</span><select name="radiusKm" defaultValue="25"><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
-                    <label><span>Minimum rating</span><select name="minRating" defaultValue="0"><option value="0">Any rating</option><option value="3.5">3.5+</option><option value="4">4.0+</option><option value="4.5">4.5+</option></select></label>
-                    <label><span>Minimum reviews</span><select name="minReviews" defaultValue="10"><option value="0">Any</option><option value="5">5+</option><option value="10">10+</option><option value="25">25+</option><option value="50">50+</option><option value="100">100+</option></select></label>
-                    <label><span>Sort results</span><select name="sortBy" defaultValue="relevance"><option value="relevance">Relevance</option><option value="rating">Highest rating</option><option value="reviews">Most reviews</option></select></label>
+                    <label><span>Sort results</span><select name="sortBy" defaultValue="relevance"><option value="relevance">Geo relevance</option><option value="contactability">Best contactability</option><option value="name">Business name A–Z</option></select></label>
                   </div>
                   <div className={styles.toggleGrid}>
-                    <label><input type="checkbox" name="hasPhone" defaultChecked /><span>Has phone number</span></label>
-                    <label><input type="checkbox" name="hasWebsite" /><span>Has website</span></label>
-                    <label><input type="checkbox" name="openNow" /><span>Open now</span></label>
-                    <label><input type="checkbox" name="operationalOnly" defaultChecked /><span>Operational businesses</span></label>
+                    <label><input type="checkbox" name="hasPhone" /><span>Require phone</span></label>
+                    <label><input type="checkbox" name="hasWebsite" /><span>Require website</span></label>
+                    <label><input type="checkbox" name="hasEmail" /><span>Require email</span></label>
                     <label className={styles.lockedToggle}><input type="checkbox" defaultChecked disabled /><span>Exclude duplicates</span></label>
                   </div>
                   <label className={styles.fullField}><span>Problem to look for <small>Optional</small></span><textarea name="targetProblem" maxLength={500} placeholder="Weak website, poor conversion flow, missing proof..." /></label>
                 </fieldset>
 
                 <button className={styles.findButton} type="submit" disabled={!apiReady}><Search size={17} /> Find Businesses</button>
-                <p className={styles.buttonNote}>Results are staged for review first. Nothing enters the Lead Engine automatically.</p>
+                <p className={styles.buttonNote}>Geoapify results are enriched and staged for review first. Nothing enters the Lead Engine automatically.</p>
               </form>
             </section>
 
             <section className={styles.reviewSection} id="review-results">
               <div className={styles.reviewHeading}>
-                <div><span className={styles.eyebrow}>Review before adding</span><h2>Google results</h2><p>Verify the business, score and visible opportunity before approving it.</p></div>
+                <div><span className={styles.eyebrow}>Review before adding</span><h2>Local search results</h2><p>Verify the business, contactability, score and visible opportunity before approving it.</p></div>
                 <span className={styles.reviewCount}>{reviewResults.length} awaiting review</span>
               </div>
 
@@ -286,16 +285,17 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
                           <div className={styles.resultTitle}><div><h3>{result.business_name}</h3><p>{result.formatted_address ?? "Address not returned"}</p></div><span className={styles.status}>{humanize(result.status)}</span></div>
                           <div className={styles.resultMeta}>
                             <span>{result.niche}</span>
-                            <span>{result.rating !== null ? `${result.rating.toFixed(1)} ★ · ${result.review_count ?? 0} reviews` : "No rating"}</span>
                             <span>{result.phone ? "Phone found" : "No phone"}</span>
+                            <span>{result.email ? "Email found" : "No email"}</span>
                             <span>{result.website_url ? "Website found" : "No website"}</span>
                           </div>
                           <p className={styles.weakness}>{result.detected_weakness ?? "Analyze this result to calculate fit and opportunity."}</p>
                           {result.recommended_offer ? <strong className={styles.offer}>{result.recommended_offer}</strong> : null}
                           <div className={styles.resultLinks}>
-                            {result.google_maps_url ? <a href={result.google_maps_url} target="_blank" rel="noreferrer"><MapPin size={13} /> Maps</a> : null}
+                            {result.google_maps_url ? <a href={result.google_maps_url} target="_blank" rel="noreferrer"><MapPin size={13} /> Map</a> : null}
                             {result.website_url ? <a href={result.website_url} target="_blank" rel="noreferrer"><Globe2 size={13} /> Website</a> : null}
                             {result.phone ? <a href={`tel:${result.phone}`}><Phone size={13} /> Call</a> : null}
+                            {result.email ? <a href={`mailto:${result.email}`}>Email</a> : null}
                           </div>
                         </div>
                         <aside className={styles.resultScore}>
@@ -321,9 +321,9 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
           </div>
 
           <aside className={styles.sideColumn}>
-            <section className={styles.sideCard}><h2>What happens next?</h2><ol><li><span>1</span><div><strong>Find Businesses</strong><p>Orbit searches Google profiles using your niche, place and filters.</p></div></li><li><span>2</span><div><strong>Verify & Score</strong><p>Duplicates are removed and quality/contact signals are scored.</p></div></li><li><span>3</span><div><strong>Review Results</strong><p>You choose which businesses are worth keeping.</p></div></li><li><span>4</span><div><strong>Add to Lead Engine</strong><p>Only approved records move into the active pipeline.</p></div></li></ol></section>
-            <section className={styles.sideCard}><h2>Recent generations</h2>{searches.length ? <div className={styles.historyList}>{searches.map((search) => <div key={search.id}><strong>{search.query_text}</strong><span>{search.result_count} results · {humanize(search.status)}</span><small>{formatRelativeDate(search.created_at)}</small></div>)}</div> : <p className={styles.muted}>No Google generation history yet.</p>}</section>
-            <section className={styles.sideCard}><h2>Built-in guardrails</h2><div className={styles.guardList}><p><ShieldCheck size={15} /> Place-ID duplicate prevention</p><p><ShieldCheck size={15} /> Founder review before pipeline entry</p><p><ShieldCheck size={15} /> Workspace-isolated records</p><p><ShieldCheck size={15} /> Rejected businesses are remembered</p></div></section>
+            <section className={styles.sideCard}><h2>What happens next?</h2><ol><li><span>1</span><div><strong>Find Businesses</strong><p>Orbit searches Geoapify Places using your niche, location and radius.</p></div></li><li><span>2</span><div><strong>Enrich & Score</strong><p>Public phone, email, website and place data are enriched when available.</p></div></li><li><span>3</span><div><strong>Review Results</strong><p>Duplicates are removed and you choose which businesses are worth keeping.</p></div></li><li><span>4</span><div><strong>Add to Lead Engine</strong><p>Only approved records move into the active pipeline.</p></div></li></ol></section>
+            <section className={styles.sideCard}><h2>Recent generations</h2>{searches.length ? <div className={styles.historyList}>{searches.map((search) => <div key={search.id}><strong>{search.query_text}</strong><span>{search.result_count} results · {humanize(search.status)}</span><small>{formatRelativeDate(search.created_at)}</small></div>)}</div> : <p className={styles.muted}>No local generation history yet.</p>}</section>
+            <section className={styles.sideCard}><h2>Built-in guardrails</h2><div className={styles.guardList}><p><ShieldCheck size={15} /> Provider Place-ID duplicate prevention</p><p><ShieldCheck size={15} /> Founder review before pipeline entry</p><p><ShieldCheck size={15} /> Workspace-isolated records</p><p><ShieldCheck size={15} /> Rejected businesses are remembered</p></div></section>
           </aside>
         </div>
       ) : null}
@@ -338,7 +338,7 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
             <label><span>Phone</span><input name="phone" type="tel" /></label>
             <label><span>WhatsApp</span><input name="whatsapp" type="tel" /></label>
             <label><span>Niche</span><input name="niche" /></label>
-            <label><span>Source</span><select name="source" defaultValue="direct"><option value="direct">Direct</option><option value="referral">Referral</option><option value="website">Website</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="linkedin">LinkedIn</option><option value="facebook">Facebook</option><option value="other">Other</option></select></label>
+            <label><span>Source</span><select name="source" defaultValue="direct"><option value="direct">Direct</option><option value="referral">Referral</option><option value="website">Website</option><option value="google">Google</option><option value="local_search">Local Search</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="linkedin">LinkedIn</option><option value="facebook">Facebook</option><option value="other">Other</option></select></label>
             <label><span>Stage</span><select name="stage" defaultValue="raw"><option value="raw">Raw</option><option value="scored">Scored</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="demo_booked">Demo booked</option><option value="won">Won</option><option value="lost">Lost</option></select></label>
             <label><span>Lead score</span><input name="leadScore" type="number" min="0" max="100" /></label>
             <label><span>Estimated value</span><input name="estimatedValue" type="number" min="0" defaultValue="0" /></label>
