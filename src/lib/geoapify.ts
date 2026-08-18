@@ -1,7 +1,7 @@
 import "server-only";
 
 import { decryptIntegrationSecret } from "@/lib/integration-connections";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const GEOAPIFY_PROVIDER = "geoapify" as const;
 export const GEOAPIFY_PLUGIN_SLUG = "geoapify-lead-discovery" as const;
@@ -13,31 +13,33 @@ type GeoapifyRuntimeStatus = {
   accountName: string | null;
 };
 
-async function adminClient() {
-  const admin = createAdminClient();
-  if (!admin) throw new Error("Orbit integration service is unavailable.");
-  return admin;
+async function workspaceClient() {
+  return createClient();
 }
 
 export async function getGeoapifyRuntimeStatus(workspaceId: string): Promise<GeoapifyRuntimeStatus> {
-  const admin = await adminClient();
-  const { data: catalog } = await admin
+  const supabase = await workspaceClient();
+  const { data: catalog, error: catalogError } = await supabase
     .from("plugin_catalog")
     .select("id")
     .eq("slug", GEOAPIFY_PLUGIN_SLUG)
     .eq("status", "published")
     .maybeSingle();
 
+  if (catalogError) {
+    return { installed: false, connected: false, ready: false, accountName: null };
+  }
+
   const [installationResult, connectionResult] = await Promise.all([
     catalog
-      ? admin
+      ? supabase
           .from("plugin_installations")
           .select("status")
           .eq("workspace_id", workspaceId)
           .eq("plugin_id", catalog.id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    admin
+    supabase
       .from("integration_connections")
       .select("status,provider_account_name,access_token_ciphertext")
       .eq("workspace_id", workspaceId)
@@ -47,6 +49,7 @@ export async function getGeoapifyRuntimeStatus(workspaceId: string): Promise<Geo
 
   const installed = installationResult.data?.status === "installed";
   const connected =
+    !connectionResult.error &&
     connectionResult.data?.status === "connected" &&
     Boolean(connectionResult.data?.access_token_ciphertext);
 
@@ -59,7 +62,7 @@ export async function getGeoapifyRuntimeStatus(workspaceId: string): Promise<Geo
 }
 
 export async function getGeoapifyApiKey(workspaceId: string) {
-  const admin = await adminClient();
+  const supabase = await workspaceClient();
   const runtime = await getGeoapifyRuntimeStatus(workspaceId);
   if (!runtime.installed) {
     throw new Error("Geoapify Lead Discovery plugin is not installed.");
@@ -68,7 +71,7 @@ export async function getGeoapifyApiKey(workspaceId: string) {
     throw new Error("Geoapify is not connected in Plugins.");
   }
 
-  const { data, error } = await admin
+  const { data, error } = await supabase
     .from("integration_connections")
     .select("access_token_ciphertext")
     .eq("workspace_id", workspaceId)
