@@ -47,7 +47,8 @@ export async function getGeoapifyRuntimeStatus(workspaceId: string): Promise<Geo
       .maybeSingle(),
   ]);
 
-  const installed = installationResult.data?.status === "installed";
+  const installationStatus = installationResult.data?.status ?? null;
+  const installed = installationStatus === "installed" || installationStatus === "pending_connections";
   const connected =
     !connectionResult.error &&
     connectionResult.data?.status === "connected" &&
