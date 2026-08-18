@@ -15,6 +15,7 @@ const leadSources = [
   "instagram",
   "linkedin",
   "google",
+  "local_search",
   "other",
 ] as const;
 const leadStages = [
