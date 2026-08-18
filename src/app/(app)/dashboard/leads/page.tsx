@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 
 const sourceCards = [
   { slug: "website", label: "Website", aliases: ["website"], icon: Globe2, tone: "purple" },
-  { slug: "google", label: "Google Search", aliases: ["google"], icon: Search, tone: "google" },
+  { slug: "google", label: "Local Search", aliases: ["google", "local_search"], icon: Search, tone: "google" },
   { slug: "instagram", label: "Instagram", aliases: ["instagram"], icon: MessageSquareText, tone: "instagram" },
   { slug: "linkedin", label: "LinkedIn", aliases: ["linkedin"], icon: UsersRound, tone: "linkedin" },
   { slug: "facebook", label: "Facebook", aliases: ["facebook"], icon: MessageSquareText, tone: "facebook" },
