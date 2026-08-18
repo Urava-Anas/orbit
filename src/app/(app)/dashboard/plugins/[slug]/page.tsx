@@ -7,12 +7,12 @@ import {
   CheckCircle2,
   CircleAlert,
   ExternalLink,
-  KeyRound,
   PlugZap,
   ShieldCheck,
   Sparkles,
   Workflow,
 } from "lucide-react";
+import { GeoapifyConnectionFlow } from "@/components/plugins/GeoapifyConnectionFlow";
 import { getGeoapifyRuntimeStatus } from "@/lib/geoapify";
 import { requireWorkspace } from "@/lib/workspace";
 import { getPluginBySlug, getPluginEvents } from "@/lib/plugins/catalog";
@@ -22,12 +22,11 @@ import {
   resolvePluginAppConnections,
 } from "@/lib/plugins/connections";
 import { approvePluginUpdate, disablePlugin, enablePlugin, installPlugin, uninstallPlugin } from "../actions";
-import { connectGeoapify, disconnectGeoapify } from "../geoapify-actions";
 import styles from "../plugins.module.css";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ notice?: string; error?: string }>;
+  searchParams: Promise<{ notice?: string; error?: string; connect?: string }>;
 };
 
 export default async function PluginDetailPage({ params, searchParams }: PageProps) {
@@ -46,6 +45,7 @@ export default async function PluginDetailPage({ params, searchParams }: PagePro
   const installation = plugin.installation?.status === "revoked" ? null : plugin.installation;
   const isGeoapify = slug === "geoapify-lead-discovery";
   const geoapify = isGeoapify ? await getGeoapifyRuntimeStatus(workspace.id) : null;
+  const geoapifyFlowOpen = Boolean(isGeoapify && (query.connect === "1" || query.error || query.notice));
 
   return (
     <main className={styles.detailPage}>
@@ -88,8 +88,8 @@ export default async function PluginDetailPage({ params, searchParams }: PagePro
         </div>
       </section>
 
-      {query.notice ? <section className={styles.notice}><CheckCircle2 size={13} /> {query.notice}</section> : null}
-      {query.error ? <section className={`${styles.notice} ${styles.noticeError}`}><CircleAlert size={13} /> {query.error}</section> : null}
+      {query.notice && !geoapifyFlowOpen ? <section className={styles.notice}><CheckCircle2 size={13} /> {query.notice}</section> : null}
+      {query.error && !geoapifyFlowOpen ? <section className={`${styles.notice} ${styles.noticeError}`}><CircleAlert size={13} /> {query.error}</section> : null}
 
       {installation?.status === "pending_review" ? (
         <section className={styles.notice}>
@@ -105,24 +105,22 @@ export default async function PluginDetailPage({ params, searchParams }: PagePro
 
       {isGeoapify && geoapify ? (
         <section className={styles.panel} id="geoapify-connection">
-          <h2>Geoapify connection</h2>
-          <p>Lead discovery stays disabled until this plugin is installed and a valid Geoapify API key is connected.</p>
-          {!installation ? (
-            <div className={styles.connectionCallout}><PlugZap size={16} /><span><strong>Install the plugin first</strong><small>Installation grants the reviewed Lead Engine permissions. The API key is connected separately.</small></span></div>
-          ) : geoapify.connected ? (
-            <>
-              <div className={styles.connectionCallout}><CheckCircle2 size={16} /><span><strong>{geoapify.accountName ?? "Geoapify Places"} connected</strong><small>Geocoding, Places and Place Details are available to the Lead Finder. The encrypted key is never shown back to the browser.</small></span></div>
-              {canManage ? <form className={styles.secretForm} action={disconnectGeoapify}><button className={styles.buttonDanger} type="submit">Disconnect Geoapify</button></form> : null}
-            </>
-          ) : canManage ? (
-            <form className={styles.secretForm} action={connectGeoapify}>
-              <label htmlFor="geoapify-api-key"><span><KeyRound size={13} /> Geoapify API key</span><input id="geoapify-api-key" name="apiKey" type="password" minLength={20} maxLength={240} autoComplete="off" required placeholder="Paste the new Geoapify key" /></label>
-              <small>Orbit validates the key against Geoapify before saving it, then stores it encrypted with the existing integration secret.</small>
-              <button className={styles.button} type="submit">Connect & validate</button>
-            </form>
-          ) : (
-            <div className={styles.connectionCallout}><ShieldCheck size={16} /><span><strong>Owner/admin connection required</strong><small>An authorised workspace admin must connect the Geoapify API key once.</small></span></div>
-          )}
+          <div className={styles.sectionHead}>
+            <div>
+              <h2>Geoapify connection</h2>
+              <p>Connection is a guided setup. Orbit walks from installation through validation and only unlocks Lead Finder after completion.</p>
+            </div>
+            <Link className={geoapify.connected ? styles.buttonQuiet : styles.button} href="/dashboard/plugins/geoapify-lead-discovery?connect=1">
+              {geoapify.connected ? "Manage connection" : "Connect Geoapify"}
+            </Link>
+          </div>
+          <div className={styles.connectionCallout}>
+            {geoapify.connected ? <CheckCircle2 size={16} /> : <PlugZap size={16} />}
+            <span>
+              <strong>{geoapify.connected ? `${geoapify.accountName ?? "Geoapify Places"} connected` : installation ? "Ready for connection onboarding" : "Install to begin"}</strong>
+              <small>{geoapify.connected ? "Lead Finder can use the approved Geoapify capabilities." : "Open the guided setup to install, connect, validate, approve and complete the integration."}</small>
+            </span>
+          </div>
         </section>
       ) : null}
 
@@ -187,6 +185,18 @@ export default async function PluginDetailPage({ params, searchParams }: PagePro
           </div>
         </article>
       </section>
+
+      {isGeoapify && geoapify ? (
+        <GeoapifyConnectionFlow
+          open={geoapifyFlowOpen}
+          installed={geoapify.installed}
+          connected={geoapify.connected}
+          canManage={canManage}
+          accountName={geoapify.accountName}
+          notice={query.notice ?? null}
+          error={query.error ?? null}
+        />
+      ) : null}
     </main>
   );
 }
