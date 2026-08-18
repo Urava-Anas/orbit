@@ -16,7 +16,7 @@ function requireAdmin(role: string) {
 }
 
 function pluginUrl(kind: "notice" | "error", message: string) {
-  return `/dashboard/plugins/geoapify-lead-discovery?${kind}=${encodeURIComponent(message)}`;
+  return `/dashboard/plugins/geoapify-lead-discovery?connect=1&${kind}=${encodeURIComponent(message)}`;
 }
 
 function refresh() {
@@ -70,10 +70,16 @@ export async function connectGeoapify(formData: FormData) {
     valid = false;
   }
   if (!valid) {
-    redirect(pluginUrl("error", "Geoapify rejected this key. Check the key and try again."));
+    redirect(pluginUrl("error", "Geoapify rejected this key. Confirm the regenerated key is active and try again."));
   }
 
-  const encrypted = encryptIntegrationSecret(parsed.data);
+  let encrypted: string;
+  try {
+    encrypted = encryptIntegrationSecret(parsed.data);
+  } catch {
+    redirect(pluginUrl("error", "Orbit's secure credential vault is not configured in production. The key was not stored."));
+  }
+
   const now = new Date().toISOString();
   const { error } = await supabase.from("integration_connections").upsert(
     {
@@ -105,11 +111,11 @@ export async function connectGeoapify(formData: FormData) {
     { onConflict: "workspace_id,provider" },
   );
 
-  if (error) redirect(pluginUrl("error", "Orbit could not save the Geoapify connection."));
+  if (error) redirect(pluginUrl("error", "Orbit validated the key but could not save the encrypted connection."));
 
   await setGeoapifyInstallationState(supabase, workspace.id, "pending_connections", "installed");
   refresh();
-  redirect(pluginUrl("notice", "Geoapify connected. Local lead discovery is enabled."));
+  redirect(pluginUrl("notice", "Geoapify connected and validated. Local lead discovery is now enabled."));
 }
 
 export async function disconnectGeoapify() {
@@ -134,5 +140,5 @@ export async function disconnectGeoapify() {
 
   await setGeoapifyInstallationState(supabase, workspace.id, "installed", "pending_connections");
   refresh();
-  redirect(pluginUrl("notice", "Geoapify disconnected. Local lead discovery is disabled."));
+  redirect(pluginUrl("notice", "Geoapify disconnected. Lead discovery is locked until you reconnect."));
 }
