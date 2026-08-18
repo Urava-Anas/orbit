@@ -30,6 +30,7 @@ export const pluginProviderLabels: Record<string, string> = {
   meta: "Meta",
   instagram: "Instagram",
   linkedin: "LinkedIn",
+  geoapify: "Geoapify",
 };
 
 export function providerLabel(provider: string) {
@@ -37,6 +38,9 @@ export function providerLabel(provider: string) {
 }
 
 export function providerConnectHref(provider: string) {
+  if (provider === "geoapify") {
+    return "/dashboard/plugins/geoapify-lead-discovery#geoapify-connection";
+  }
   return `/dashboard/connect?integration=${encodeURIComponent(provider)}#integrations`;
 }
 
