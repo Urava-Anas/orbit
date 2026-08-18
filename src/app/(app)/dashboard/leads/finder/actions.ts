@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getGeoapifyApiKey } from "@/lib/geoapify";
 import { requireWorkspace } from "@/lib/workspace";
 
+const PROVIDER = "geoapify" as const;
 const idSchema = z.string().uuid();
 const searchSchema = z.object({
   niches: z.string().trim().min(2).max(500),
@@ -12,27 +14,55 @@ const searchSchema = z.object({
   targetProblem: z.string().trim().max(500),
   requestedCount: z.coerce.number().int().min(1).max(100),
   radiusKm: z.coerce.number().int().min(1).max(50),
-  minRating: z.coerce.number().min(0).max(5),
-  minReviews: z.coerce.number().int().min(0).max(1_000_000),
-  sortBy: z.enum(["relevance", "rating", "reviews"]),
+  sortBy: z.enum(["relevance", "contactability", "name"]),
 });
 
-type GooglePlace = {
-  id?: string;
-  displayName?: { text?: string };
-  formattedAddress?: string;
-  primaryType?: string;
-  businessStatus?: string;
-  googleMapsUri?: string;
-  nationalPhoneNumber?: string;
-  websiteUri?: string;
-  rating?: number;
-  userRatingCount?: number;
-  location?: { latitude?: number; longitude?: number };
+type GeoapifyFeature = {
+  properties?: {
+    place_id?: string;
+    name?: string;
+    formatted?: string;
+    categories?: string[];
+    lat?: number;
+    lon?: number;
+  };
+  geometry?: { coordinates?: [number, number] };
+};
+
+type GeoapifyDetails = {
+  feature_type?: string;
+  place_id?: string;
+  name?: string;
+  formatted?: string;
+  categories?: string[];
+  lat?: number;
+  lon?: number;
+  website?: string;
+  opening_hours?: string;
+  brand?: string;
+  contact?: { phone?: string; email?: string };
+  operator_details?: { website?: string };
+  brand_details?: { website?: string };
+};
+
+type LeadPlace = {
+  id: string;
+  name: string;
+  formattedAddress: string | null;
+  primaryType: string | null;
+  mapUrl: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  openingHours: string | null;
+  brand: string | null;
+  lat: number | null;
+  lon: number | null;
 };
 
 type FinderResult = {
   id: string;
+  provider: string;
   provider_place_id: string;
   business_name: string;
   formatted_address: string | null;
@@ -44,7 +74,7 @@ type FinderResult = {
 };
 
 type WorkspaceContext = Awaited<ReturnType<typeof requireWorkspace>>;
-type PlaceCandidate = { place: GooglePlace; niche: string };
+type PlaceCandidate = { place: LeadPlace; niche: string };
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -86,84 +116,166 @@ function done(message: string): never {
   finderRedirect("notice", message);
 }
 
-function apiKey() {
-  const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
-  if (!key) {
-    finderRedirect("error", "Google Places is not connected yet. Add GOOGLE_PLACES_API_KEY in Vercel.");
-  }
-  return key;
+function categoryKeys(niche: string) {
+  const text = niche.toLowerCase();
+  if (/restaurant|fast food|food court|dining|pizza|burger|biryani|bbq/.test(text)) return ["catering.restaurant", "catering.fast_food"];
+  if (/cafe|coffee|tea shop/.test(text)) return ["catering.cafe"];
+  if (/hotel|guest house|motel|lodging/.test(text)) return ["accommodation"];
+  if (/real estate|property|estate agent|realtor/.test(text)) return ["office.estate_agent"];
+  if (/immigration|visa|consultant|consultancy|business consultant/.test(text)) return ["office.consulting"];
+  if (/lawyer|law firm|legal|attorney/.test(text)) return ["office.lawyer"];
+  if (/accountant|accounting|tax advisor/.test(text)) return ["office.accountant"];
+  if (/marketing|advertising|creative agency|media agency/.test(text)) return ["office.advertising_agency"];
+  if (/software|web development|it company|technology|tech company/.test(text)) return ["office.it"];
+  if (/travel|tour operator|tour agency/.test(text)) return ["office.travel_agent"];
+  if (/school|college|university|academy|education|training institute/.test(text)) return ["education"];
+  if (/hospital|clinic|doctor|dentist|pharmacy|medical|healthcare/.test(text)) return ["healthcare"];
+  if (/gym|fitness|sports club|yoga/.test(text)) return ["sport"];
+  if (/shop|store|retail|supermarket|grocery|clothing|electronics|salon|barber|beauty/.test(text)) return ["commercial"];
+  return ["office", "commercial", "service"];
 }
 
-function calculateScore(place: GooglePlace, niche: string, targetProblem: string | null) {
+function osmUrl(lat: number | null, lon: number | null) {
+  if (lat === null || lon === null) return null;
+  return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(String(lat))}&mlon=${encodeURIComponent(String(lon))}#map=18/${lat}/${lon}`;
+}
+
+function basePlace(feature: GeoapifyFeature): LeadPlace | null {
+  const properties = feature.properties;
+  const id = properties?.place_id;
+  const name = properties?.name;
+  if (!id || !name) return null;
+  const lon = typeof properties.lon === "number" ? properties.lon : feature.geometry?.coordinates?.[0] ?? null;
+  const lat = typeof properties.lat === "number" ? properties.lat : feature.geometry?.coordinates?.[1] ?? null;
+  return {
+    id,
+    name,
+    formattedAddress: optional(properties.formatted),
+    primaryType: properties.categories?.[0] ?? null,
+    mapUrl: osmUrl(lat, lon),
+    phone: null,
+    email: null,
+    website: null,
+    openingHours: null,
+    brand: null,
+    lat,
+    lon,
+  };
+}
+
+function mergeDetails(place: LeadPlace, details: GeoapifyDetails | null): LeadPlace {
+  if (!details) return place;
+  const lat = typeof details.lat === "number" ? details.lat : place.lat;
+  const lon = typeof details.lon === "number" ? details.lon : place.lon;
+  return {
+    ...place,
+    name: details.name?.trim() || place.name,
+    formattedAddress: optional(details.formatted) ?? place.formattedAddress,
+    primaryType: details.categories?.[0] ?? place.primaryType,
+    mapUrl: osmUrl(lat, lon) ?? place.mapUrl,
+    phone: optional(details.contact?.phone),
+    email: optional(details.contact?.email),
+    website: optional(details.website) ?? optional(details.operator_details?.website) ?? optional(details.brand_details?.website),
+    openingHours: optional(details.opening_hours),
+    brand: optional(details.brand),
+    lat,
+    lon,
+  };
+}
+
+function calculateScore(place: LeadPlace, niche: string, targetProblem: string | null) {
   const fit = 30;
-  const hasWebsite = Boolean(place.websiteUri);
-  const hasPhone = Boolean(place.nationalPhoneNumber);
-  const reviews = place.userRatingCount ?? 0;
-  const rating = place.rating ?? 0;
-  const problem = hasWebsite ? 10 : 30;
-  const contactability = Math.min(20, (hasPhone ? 15 : 0) + (hasWebsite ? 5 : 0));
-  let commercial = reviews >= 100 ? 18 : reviews >= 50 ? 16 : reviews >= 20 ? 13 : reviews >= 5 ? 9 : reviews > 0 ? 6 : 3;
-  if (rating >= 4.2) commercial = Math.min(20, commercial + 2);
+  const hasWebsite = Boolean(place.website);
+  const hasPhone = Boolean(place.phone);
+  const hasEmail = Boolean(place.email);
+  const problem = hasWebsite ? 12 : 30;
+  const contactability = Math.min(20, (hasPhone ? 10 : 0) + (hasEmail ? 6 : 0) + (hasWebsite ? 4 : 0));
+  const commercial = Math.min(20, 6 + (place.openingHours ? 4 : 0) + (place.brand ? 4 : 0) + (hasWebsite ? 3 : 0) + (hasPhone || hasEmail ? 3 : 0));
   const total = fit + problem + contactability + commercial;
   const weakness = hasWebsite
     ? `A public website exists, but conversion quality, proof, mobile UX and enquiry flow still need a manual audit${targetProblem ? ` against the target problem: ${targetProblem}` : ""}.`
-    : `No public website was returned by Google Places. The business is likely dependent on Maps, social pages or direct messaging${targetProblem ? ` while the target problem is: ${targetProblem}` : ""}.`;
+    : `No public website was returned by Geoapify. The business may depend on listings, social pages or direct messaging${targetProblem ? ` while the target problem is: ${targetProblem}` : ""}.`;
   const offer = hasWebsite
     ? "Conversion audit, proof system and enquiry-flow upgrade"
-    : "Launch website, Google proof layer and enquiry system";
-  const nextAction = hasPhone
-    ? "Review the Google profile, verify the weakness, then prepare one concise personalised outreach message."
-    : "Review the Google profile and website, verify the weakness, then identify a lawful public contact channel.";
-  const reason = `${niche} fit ${fit}/30; visible problem ${problem}/30; contactability ${contactability}/20; commercial signal ${commercial}/20. Google shows ${reviews} reviews${rating ? ` at ${rating.toFixed(1)}` : ""}.`;
+    : "Launch website, local proof layer and enquiry system";
+  const nextAction = hasPhone || hasEmail
+    ? "Verify the visible opportunity, then prepare one concise personalised outreach message using an approved public contact channel."
+    : "Review the business profile, verify the opportunity, then identify a lawful public contact channel.";
+  const signals = [hasPhone ? "phone" : null, hasEmail ? "email" : null, hasWebsite ? "website" : null, place.openingHours ? "hours" : null].filter(Boolean);
+  const reason = `${niche} fit ${fit}/30; visible problem ${problem}/30; contactability ${contactability}/20; commercial signal ${commercial}/20. Geoapify returned ${signals.length ? signals.join(", ") : "basic place data only"}.`;
   return { fit, problem, contactability, commercial, total, weakness, offer, nextAction, reason };
 }
 
 async function resolveLocation(key: string, location: string) {
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": "places.location",
-    },
-    body: JSON.stringify({ textQuery: location, pageSize: 1, languageCode: "en" }),
-    cache: "no-store",
-  });
-  if (!response.ok) return null;
-  const payload = (await response.json()) as { places?: GooglePlace[] };
-  const center = payload.places?.[0]?.location;
-  if (typeof center?.latitude !== "number" || typeof center?.longitude !== "number") return null;
-  return { latitude: center.latitude, longitude: center.longitude };
+  const url = new URL("https://api.geoapify.com/v1/geocode/search");
+  url.searchParams.set("text", location);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("apiKey", key);
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
+  if (!response.ok) throw new Error(`Geoapify geocoding ${response.status}`);
+  const payload = (await response.json()) as { results?: Array<{ lat?: number; lon?: number }> };
+  const center = payload.results?.[0];
+  if (typeof center?.lat !== "number" || typeof center?.lon !== "number") return null;
+  return { lat: center.lat, lon: center.lon };
 }
 
-function locationRectangle(center: { latitude: number; longitude: number } | null, radiusKm: number) {
-  if (!center) return undefined;
-  const latDelta = radiusKm / 111;
-  const cosine = Math.max(0.2, Math.cos((center.latitude * Math.PI) / 180));
-  const lonDelta = radiusKm / (111 * cosine);
-  return {
-    rectangle: {
-      low: {
-        latitude: Math.max(-90, center.latitude - latDelta),
-        longitude: Math.max(-180, center.longitude - lonDelta),
-      },
-      high: {
-        latitude: Math.min(90, center.latitude + latDelta),
-        longitude: Math.min(180, center.longitude + lonDelta),
-      },
-    },
-  };
+async function searchCategory(key: string, categories: string[], center: { lat: number; lon: number }, radiusKm: number, limit: number) {
+  const url = new URL("https://api.geoapify.com/v2/places");
+  url.searchParams.set("categories", categories.join(","));
+  url.searchParams.set("filter", `circle:${center.lon},${center.lat},${Math.round(radiusKm * 1000)}`);
+  url.searchParams.set("bias", `proximity:${center.lon},${center.lat}`);
+  url.searchParams.set("limit", String(Math.max(1, Math.min(500, limit))));
+  url.searchParams.set("lang", "en");
+  url.searchParams.set("apiKey", key);
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`Geoapify Places ${response.status}: ${(await response.text()).slice(0, 500)}`);
+  const payload = (await response.json()) as { features?: GeoapifyFeature[] };
+  return payload.features ?? [];
+}
+
+async function placeDetails(key: string, placeId: string) {
+  const url = new URL("https://api.geoapify.com/v2/place-details");
+  url.searchParams.set("id", placeId);
+  url.searchParams.set("features", "details");
+  url.searchParams.set("lang", "en");
+  url.searchParams.set("apiKey", key);
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { features?: Array<{ properties?: GeoapifyDetails }> };
+  return payload.features?.find((feature) => feature.properties?.feature_type === "details")?.properties ?? payload.features?.[0]?.properties ?? null;
+}
+
+async function enrichCandidates(key: string, candidates: PlaceCandidate[]) {
+  const enriched: PlaceCandidate[] = [];
+  for (let index = 0; index < candidates.length; index += 10) {
+    const batch = candidates.slice(index, index + 10);
+    const values = await Promise.all(batch.map(async (candidate) => {
+      try {
+        return { ...candidate, place: mergeDetails(candidate.place, await placeDetails(key, candidate.place.id)) };
+      } catch {
+        return candidate;
+      }
+    }));
+    enriched.push(...values);
+  }
+  return enriched;
+}
+
+function contactability(place: LeadPlace) {
+  return (place.phone ? 3 : 0) + (place.email ? 2 : 0) + (place.website ? 1 : 0);
 }
 
 function sortCandidates(candidates: PlaceCandidate[], sortBy: string) {
-  if (sortBy === "rating") return [...candidates].sort((a, b) => (b.place.rating ?? 0) - (a.place.rating ?? 0));
-  if (sortBy === "reviews") return [...candidates].sort((a, b) => (b.place.userRatingCount ?? 0) - (a.place.userRatingCount ?? 0));
+  if (sortBy === "contactability") return [...candidates].sort((a, b) => contactability(b.place) - contactability(a.place));
+  if (sortBy === "name") return [...candidates].sort((a, b) => a.place.name.localeCompare(b.place.name));
   return candidates;
 }
 
-async function rememberDecision({ supabase, workspaceId, placeId, decision, leadId, userId }: {
+async function rememberDecision({ supabase, workspaceId, provider, placeId, decision, leadId, userId }: {
   supabase: WorkspaceContext["supabase"];
   workspaceId: string;
+  provider: string;
   placeId: string;
   decision: "approved" | "rejected" | "duplicate";
   leadId: string | null;
@@ -172,7 +284,7 @@ async function rememberDecision({ supabase, workspaceId, placeId, decision, lead
   const { error } = await supabase.from("lead_finder_place_memory").upsert(
     {
       workspace_id: workspaceId,
-      provider: "google_places",
+      provider,
       provider_place_id: placeId,
       decision,
       lead_id: leadId,
@@ -191,8 +303,6 @@ export async function searchPlaces(formData: FormData) {
     targetProblem: value(formData, "targetProblem"),
     requestedCount: value(formData, "requestedCount") || "20",
     radiusKm: value(formData, "radiusKm") || "25",
-    minRating: value(formData, "minRating") || "0",
-    minReviews: value(formData, "minReviews") || "0",
     sortBy: value(formData, "sortBy") || "relevance",
   });
   if (!parsed.success) finderRedirect("error", "Check the search brief and try again.");
@@ -202,10 +312,14 @@ export async function searchPlaces(formData: FormData) {
 
   const hasWebsite = checked(formData, "hasWebsite");
   const hasPhone = checked(formData, "hasPhone");
-  const openNow = checked(formData, "openNow");
-  const operationalOnly = checked(formData, "operationalOnly");
+  const hasEmail = checked(formData, "hasEmail");
   const { supabase, user, workspace } = await requireWorkspace();
-  const key = apiKey();
+  let key: string;
+  try {
+    key = await getGeoapifyApiKey(workspace.id);
+  } catch (error) {
+    finderRedirect("error", error instanceof Error ? error.message : "Connect Geoapify in Plugins first.");
+  }
   const targetProblem = optional(parsed.data.targetProblem);
   const queryText = `${niches.join(", ")} in ${parsed.data.location}`;
 
@@ -219,6 +333,7 @@ export async function searchPlaces(formData: FormData) {
       niche: niches.join(", "),
       location: parsed.data.location,
       target_problem: targetProblem,
+      provider: PROVIDER,
       requested_count: parsed.data.requestedCount,
       status: "running",
       created_by: user.id,
@@ -229,67 +344,37 @@ export async function searchPlaces(formData: FormData) {
 
   try {
     const center = await resolveLocation(key, parsed.data.location);
-    const restriction = locationRectangle(center, parsed.data.radiusKm);
+    if (!center) throw new Error("Geoapify could not resolve the requested place.");
+
+    const candidateTarget = Math.min(250, Math.max(parsed.data.requestedCount, parsed.data.requestedCount * 2));
     const candidates: PlaceCandidate[] = [];
     const seenInSearch = new Set<string>();
 
     for (const niche of niches) {
-      if (candidates.length >= parsed.data.requestedCount) break;
-      let pageToken: string | undefined;
-      let page = 0;
-      do {
-        const remaining = parsed.data.requestedCount - candidates.length;
-        const requestBody: Record<string, unknown> = {
-          textQuery: niche,
-          pageSize: Math.max(1, Math.min(20, remaining)),
-          languageCode: "en",
-        };
-        if (restriction) requestBody.locationRestriction = restriction;
-        if (openNow) requestBody.openNow = true;
-        if (parsed.data.minRating > 0) requestBody.minRating = parsed.data.minRating;
-        if (pageToken) requestBody.pageToken = pageToken;
-
-        const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": key,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.primaryType,places.businessStatus,places.googleMapsUri,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,nextPageToken",
-          },
-          body: JSON.stringify(requestBody),
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error(`Google Places ${response.status}: ${(await response.text()).slice(0, 700)}`);
-
-        const payload = (await response.json()) as { places?: GooglePlace[]; nextPageToken?: string };
-        for (const place of payload.places ?? []) {
-          if (!place.id || !place.displayName?.text || seenInSearch.has(place.id)) continue;
-          if (operationalOnly && place.businessStatus && place.businessStatus !== "OPERATIONAL") continue;
-          if (hasWebsite && !place.websiteUri) continue;
-          if (hasPhone && !place.nationalPhoneNumber) continue;
-          if ((place.userRatingCount ?? 0) < parsed.data.minReviews) continue;
-          if ((place.rating ?? 0) < parsed.data.minRating) continue;
-          seenInSearch.add(place.id);
-          candidates.push({ place, niche });
-          if (candidates.length >= parsed.data.requestedCount) break;
-        }
-        pageToken = payload.nextPageToken;
-        page += 1;
-      } while (pageToken && page < 3 && candidates.length < parsed.data.requestedCount);
+      if (candidates.length >= candidateTarget) break;
+      const remaining = candidateTarget - candidates.length;
+      const features = await searchCategory(key, categoryKeys(niche), center, parsed.data.radiusKm, Math.min(150, remaining));
+      for (const feature of features) {
+        const place = basePlace(feature);
+        if (!place || seenInSearch.has(place.id)) continue;
+        seenInSearch.add(place.id);
+        candidates.push({ place, niche });
+        if (candidates.length >= candidateTarget) break;
+      }
     }
 
-    const placeIds = candidates.map((item) => item.place.id).filter((id): id is string => Boolean(id));
+    const placeIds = candidates.map((item) => item.place.id);
     let existingResults: { provider_place_id: string }[] = [];
-    let existingLeads: { google_place_id: string | null }[] = [];
+    let existingLeads: { provider_place_id: string | null }[] = [];
     let rememberedPlaces: { provider_place_id: string }[] = [];
 
     if (placeIds.length) {
       const [resultsQuery, leadsQuery, memoryQuery] = await Promise.all([
-        supabase.from("lead_finder_results").select("provider_place_id").eq("workspace_id", workspace.id).in("provider_place_id", placeIds),
-        supabase.from("leads").select("google_place_id").eq("workspace_id", workspace.id).in("google_place_id", placeIds),
-        supabase.from("lead_finder_place_memory").select("provider_place_id").eq("workspace_id", workspace.id).in("provider_place_id", placeIds),
+        supabase.from("lead_finder_results").select("provider_place_id").eq("workspace_id", workspace.id).eq("provider", PROVIDER).in("provider_place_id", placeIds),
+        supabase.from("leads").select("provider_place_id").eq("workspace_id", workspace.id).eq("lead_provider", PROVIDER).in("provider_place_id", placeIds),
+        supabase.from("lead_finder_place_memory").select("provider_place_id").eq("workspace_id", workspace.id).eq("provider", PROVIDER).in("provider_place_id", placeIds),
       ]);
-      if (resultsQuery.error || leadsQuery.error || memoryQuery.error) throw new Error("Orbit could not check duplicate Place IDs.");
+      if (resultsQuery.error || leadsQuery.error || memoryQuery.error) throw new Error("Orbit could not check duplicate Geoapify Place IDs.");
       existingResults = resultsQuery.data ?? [];
       existingLeads = leadsQuery.data ?? [];
       rememberedPlaces = memoryQuery.data ?? [];
@@ -297,14 +382,19 @@ export async function searchPlaces(formData: FormData) {
 
     const known = new Set([
       ...existingResults.map((item) => item.provider_place_id),
-      ...existingLeads.map((item) => item.google_place_id).filter((id): id is string => Boolean(id)),
+      ...existingLeads.map((item) => item.provider_place_id).filter((id): id is string => Boolean(id)),
       ...rememberedPlaces.map((item) => item.provider_place_id),
     ]);
 
-    const freshCandidates = sortCandidates(
-      candidates.filter((item) => !known.has(item.place.id as string)),
-      parsed.data.sortBy,
-    ).slice(0, parsed.data.requestedCount);
+    const freshBase = candidates.filter((item) => !known.has(item.place.id));
+    const enriched = await enrichCandidates(key, freshBase);
+    const filtered = enriched.filter(({ place }) => {
+      if (hasWebsite && !place.website) return false;
+      if (hasPhone && !place.phone) return false;
+      if (hasEmail && !place.email) return false;
+      return true;
+    });
+    const freshCandidates = sortCandidates(filtered, parsed.data.sortBy).slice(0, parsed.data.requestedCount);
 
     if (freshCandidates.length) {
       const rows = freshCandidates.map(({ place, niche }) => {
@@ -312,16 +402,18 @@ export async function searchPlaces(formData: FormData) {
         return {
           workspace_id: workspace.id,
           search_id: search.id,
+          provider: PROVIDER,
           provider_place_id: place.id,
-          business_name: place.displayName?.text?.slice(0, 200),
+          business_name: place.name.slice(0, 200),
           formatted_address: clip(place.formattedAddress, 500),
           primary_type: clip(place.primaryType, 120),
-          business_status: clip(place.businessStatus, 80),
-          google_maps_url: clip(place.googleMapsUri, 1000),
-          website_url: clip(place.websiteUri, 1000),
-          phone: clip(place.nationalPhoneNumber, 60),
-          rating: place.rating ?? null,
-          review_count: place.userRatingCount ?? null,
+          business_status: "listed",
+          google_maps_url: clip(place.mapUrl, 1000),
+          website_url: clip(place.website, 1000),
+          phone: clip(place.phone, 60),
+          email: clip(place.email, 254),
+          rating: null,
+          review_count: null,
           niche,
           target_problem: targetProblem,
           fit_score: score.fit,
@@ -351,8 +443,7 @@ export async function searchPlaces(formData: FormData) {
     if (completionError) throw completionError;
 
     const skipped = candidates.length - freshCandidates.length;
-    const placeNote = center ? ` within about ${parsed.data.radiusKm} km of ${parsed.data.location}` : ` around ${parsed.data.location}`;
-    done(`${freshCandidates.length} review-ready leads found${placeNote}. ${skipped} known or filtered businesses skipped.`);
+    done(`${freshCandidates.length} review-ready local leads found within about ${parsed.data.radiusKm} km of ${parsed.data.location}. ${skipped} known or filtered businesses skipped.`);
   } catch (error) {
     await supabase
       .from("lead_finder_searches")
@@ -363,7 +454,7 @@ export async function searchPlaces(formData: FormData) {
       })
       .eq("id", search.id)
       .eq("workspace_id", workspace.id);
-    finderRedirect("error", "Lead Finder could not complete the search. Check the Google Places key, billing and API access.");
+    finderRedirect("error", "Lead Finder could not complete the Geoapify search. Check the plugin connection and try again.");
   }
 }
 
@@ -371,45 +462,50 @@ export async function analyzeFinderResult(formData: FormData) {
   const id = idSchema.safeParse(value(formData, "id"));
   if (!id.success) finderRedirect("error", "Invalid discovery result.");
   const { supabase, workspace } = await requireWorkspace();
-  const key = apiKey();
   const { data, error } = await supabase
     .from("lead_finder_results")
-    .select("id,provider_place_id,business_name,formatted_address,primary_type,google_maps_url,niche,target_problem,status")
+    .select("id,provider,provider_place_id,business_name,formatted_address,primary_type,google_maps_url,niche,target_problem,status")
     .eq("id", id.data)
     .eq("workspace_id", workspace.id)
     .single();
   if (error || !data) finderRedirect("error", "Discovery result not found.");
   const result = data as FinderResult;
   if (["approved", "rejected", "duplicate"].includes(result.status)) finderRedirect("error", "This opportunity has already been decided.");
+  if (result.provider !== PROVIDER) finderRedirect("error", "This is a legacy provider result and cannot be refreshed through Geoapify.");
 
-  let place: GooglePlace;
+  let key: string;
   try {
-    const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(result.provider_place_id)}`, {
-      headers: {
-        "X-Goog-Api-Key": key,
-        "X-Goog-FieldMask": "id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,rating,userRatingCount,businessStatus,googleMapsUri,primaryType",
-      },
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(String(response.status));
-    place = (await response.json()) as GooglePlace;
+    key = await getGeoapifyApiKey(workspace.id);
   } catch {
-    finderRedirect("error", "Google Places could not enrich this business. Check the provider connection and try again.");
+    finderRedirect("error", "Connect and enable Geoapify in Plugins first.");
   }
 
-  const score = calculateScore(place, result.niche, result.target_problem);
+  const details = await placeDetails(key, result.provider_place_id);
+  const merged = mergeDetails({
+    id: result.provider_place_id,
+    name: result.business_name,
+    formattedAddress: result.formatted_address,
+    primaryType: result.primary_type,
+    mapUrl: result.google_maps_url,
+    phone: null,
+    email: null,
+    website: null,
+    openingHours: null,
+    brand: null,
+    lat: null,
+    lon: null,
+  }, details);
+  const score = calculateScore(merged, result.niche, result.target_problem);
   const { error: updateError } = await supabase
     .from("lead_finder_results")
     .update({
-      business_name: place.displayName?.text?.slice(0, 200) ?? result.business_name,
-      formatted_address: clip(place.formattedAddress, 500) ?? result.formatted_address,
-      primary_type: clip(place.primaryType, 120) ?? result.primary_type,
-      business_status: clip(place.businessStatus, 80),
-      google_maps_url: clip(place.googleMapsUri, 1000) ?? result.google_maps_url,
-      phone: clip(place.nationalPhoneNumber, 60),
-      website_url: clip(place.websiteUri, 1000),
-      rating: place.rating ?? null,
-      review_count: place.userRatingCount ?? null,
+      business_name: merged.name.slice(0, 200),
+      formatted_address: clip(merged.formattedAddress, 500),
+      primary_type: clip(merged.primaryType, 120),
+      google_maps_url: clip(merged.mapUrl, 1000),
+      phone: clip(merged.phone, 60),
+      email: clip(merged.email, 254),
+      website_url: clip(merged.website, 1000),
       fit_score: score.fit,
       problem_score: score.problem,
       contactability_score: score.contactability,
@@ -436,27 +532,40 @@ async function approveResult(context: WorkspaceContext, id: string) {
   if (data.status === "approved") return { outcome: "approved" as const, businessName: data.business_name };
   if (data.status !== "analyzed") return { outcome: "not_ready" as const, businessName: data.business_name };
 
-  const { data: duplicate } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("workspace_id", workspace.id)
-    .eq("google_place_id", data.provider_place_id)
-    .maybeSingle();
+  let duplicate: { id: string } | null = null;
+  if (data.provider === "google_places") {
+    const result = await supabase
+      .from("leads")
+      .select("id")
+      .eq("workspace_id", workspace.id)
+      .eq("google_place_id", data.provider_place_id)
+      .maybeSingle();
+    duplicate = result.data;
+  } else {
+    const result = await supabase
+      .from("leads")
+      .select("id")
+      .eq("workspace_id", workspace.id)
+      .eq("lead_provider", data.provider)
+      .eq("provider_place_id", data.provider_place_id)
+      .maybeSingle();
+    duplicate = result.data;
+  }
 
   if (duplicate) {
     await Promise.all([
       supabase.from("lead_finder_results").update({ status: "duplicate", lead_id: duplicate.id, decided_at: new Date().toISOString() }).eq("id", data.id).eq("workspace_id", workspace.id),
-      rememberDecision({ supabase, workspaceId: workspace.id, placeId: data.provider_place_id, decision: "duplicate", leadId: duplicate.id, userId: user.id }),
+      rememberDecision({ supabase, workspaceId: workspace.id, provider: data.provider, placeId: data.provider_place_id, decision: "duplicate", leadId: duplicate.id, userId: user.id }),
     ]);
     return { outcome: "duplicate" as const, businessName: data.business_name };
   }
 
   const businessName = String(data.business_name).slice(0, 160);
+  const providerLabel = data.provider === "google_places" ? "Google Places" : "Geoapify";
   const notes = [
     data.score_reason,
     data.formatted_address ? `Address: ${data.formatted_address}` : null,
-    data.rating !== null ? `Google Maps rating signal: ${data.rating} from ${data.review_count ?? 0} reviews.` : null,
-    `Discovered through Orbit Lead Finder. Google Place ID: ${data.provider_place_id}`,
+    `Discovered through Orbit Lead Finder. ${providerLabel} Place ID: ${data.provider_place_id}`,
   ].filter(Boolean).join("\n\n").slice(0, 4000);
 
   const { data: lead, error: insertError } = await supabase
@@ -465,9 +574,10 @@ async function approveResult(context: WorkspaceContext, id: string) {
       workspace_id: workspace.id,
       name: businessName,
       company: businessName,
+      email: clip(data.email, 254),
       phone: clip(data.phone, 40),
       whatsapp: clip(data.phone, 40),
-      source: "google",
+      source: data.provider === "google_places" ? "google" : "local_search",
       stage: "scored",
       niche: clip(data.niche, 100),
       lead_score: data.total_score,
@@ -476,7 +586,9 @@ async function approveResult(context: WorkspaceContext, id: string) {
       pain_point: clip(data.detected_weakness ?? data.target_problem, 4000),
       next_action: clip(data.suggested_next_action, 240),
       google_maps_url: clip(data.google_maps_url, 500),
-      google_place_id: data.provider_place_id,
+      google_place_id: data.provider === "google_places" ? data.provider_place_id : null,
+      lead_provider: data.provider,
+      provider_place_id: data.provider_place_id,
       notes,
       owner_id: user.id,
       created_by: user.id,
@@ -486,7 +598,7 @@ async function approveResult(context: WorkspaceContext, id: string) {
   if (insertError || !lead) return { outcome: "failed" as const, businessName };
 
   try {
-    await rememberDecision({ supabase, workspaceId: workspace.id, placeId: data.provider_place_id, decision: "approved", leadId: lead.id, userId: user.id });
+    await rememberDecision({ supabase, workspaceId: workspace.id, provider: data.provider, placeId: data.provider_place_id, decision: "approved", leadId: lead.id, userId: user.id });
   } catch {
     await supabase.from("leads").delete().eq("id", lead.id).eq("workspace_id", workspace.id);
     return { outcome: "failed" as const, businessName };
@@ -533,18 +645,18 @@ export async function rejectFinderResult(formData: FormData) {
   const { supabase, user, workspace } = await requireWorkspace();
   const { data, error: fetchError } = await supabase
     .from("lead_finder_results")
-    .select("id,provider_place_id,status")
+    .select("id,provider,provider_place_id,status")
     .eq("id", id.data)
     .eq("workspace_id", workspace.id)
     .single();
   if (fetchError || !data) finderRedirect("error", "Discovery result not found.");
   if (data.status === "approved") finderRedirect("error", "An approved opportunity cannot be rejected here.");
   try {
-    await rememberDecision({ supabase, workspaceId: workspace.id, placeId: data.provider_place_id, decision: "rejected", leadId: null, userId: user.id });
+    await rememberDecision({ supabase, workspaceId: workspace.id, provider: data.provider, placeId: data.provider_place_id, decision: "rejected", leadId: null, userId: user.id });
   } catch {
     finderRedirect("error", "Orbit could not preserve this rejection decision.");
   }
   const { error } = await supabase.from("lead_finder_results").update({ status: "rejected", decided_at: new Date().toISOString() }).eq("id", data.id).eq("workspace_id", workspace.id);
   if (error) finderRedirect("error", "Orbit could not reject this opportunity.");
-  done("Opportunity rejected. Orbit will remember the Google Place ID.");
+  done(`Opportunity rejected. Orbit will remember the ${data.provider === "google_places" ? "Google" : "Geoapify"} Place ID.`);
 }
