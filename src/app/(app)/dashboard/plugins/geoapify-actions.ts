@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { getGeoapifyRuntimeStatus, validateGeoapifyApiKey } from "@/lib/geoapify";
+import { GEOAPIFY_PLUGIN_SLUG, getGeoapifyRuntimeStatus, validateGeoapifyApiKey } from "@/lib/geoapify";
 import { encryptIntegrationSecret } from "@/lib/integration-connections";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -24,6 +24,31 @@ function refresh() {
   revalidatePath("/dashboard/plugins/geoapify-lead-discovery");
   revalidatePath("/dashboard/leads");
   revalidatePath("/dashboard/leads/add");
+}
+
+async function setGeoapifyInstallationState(
+  supabase: Awaited<ReturnType<typeof requireWorkspace>>["supabase"],
+  workspaceId: string,
+  fromStatus: "installed" | "pending_connections",
+  toStatus: "installed" | "pending_connections",
+) {
+  const { data: catalog, error: catalogError } = await supabase
+    .from("plugin_catalog")
+    .select("id")
+    .eq("slug", GEOAPIFY_PLUGIN_SLUG)
+    .eq("status", "published")
+    .maybeSingle();
+
+  if (catalogError || !catalog) return false;
+
+  const { error } = await supabase
+    .from("plugin_installations")
+    .update({ status: toStatus })
+    .eq("workspace_id", workspaceId)
+    .eq("plugin_id", catalog.id)
+    .eq("status", fromStatus);
+
+  return !error;
 }
 
 export async function connectGeoapify(formData: FormData) {
@@ -81,6 +106,8 @@ export async function connectGeoapify(formData: FormData) {
   );
 
   if (error) redirect(pluginUrl("error", "Orbit could not save the Geoapify connection."));
+
+  await setGeoapifyInstallationState(supabase, workspace.id, "pending_connections", "installed");
   refresh();
   redirect(pluginUrl("notice", "Geoapify connected. Local lead discovery is enabled."));
 }
@@ -104,6 +131,8 @@ export async function disconnectGeoapify() {
     .eq("provider", "geoapify");
 
   if (error) redirect(pluginUrl("error", "Orbit could not disconnect Geoapify."));
+
+  await setGeoapifyInstallationState(supabase, workspace.id, "installed", "pending_connections");
   refresh();
   redirect(pluginUrl("notice", "Geoapify disconnected. Local lead discovery is disabled."));
 }
