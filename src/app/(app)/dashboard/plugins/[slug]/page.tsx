@@ -7,11 +7,13 @@ import {
   CheckCircle2,
   CircleAlert,
   ExternalLink,
+  KeyRound,
   PlugZap,
   ShieldCheck,
   Sparkles,
   Workflow,
 } from "lucide-react";
+import { getGeoapifyRuntimeStatus } from "@/lib/geoapify";
 import { requireWorkspace } from "@/lib/workspace";
 import { getPluginBySlug, getPluginEvents } from "@/lib/plugins/catalog";
 import {
@@ -20,12 +22,16 @@ import {
   resolvePluginAppConnections,
 } from "@/lib/plugins/connections";
 import { approvePluginUpdate, disablePlugin, enablePlugin, installPlugin, uninstallPlugin } from "../actions";
+import { connectGeoapify, disconnectGeoapify } from "../geoapify-actions";
 import styles from "../plugins.module.css";
 
-type PageProps = { params: Promise<{ slug: string }> };
+type PageProps = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ notice?: string; error?: string }>;
+};
 
-export default async function PluginDetailPage({ params }: PageProps) {
-  const { slug } = await params;
+export default async function PluginDetailPage({ params, searchParams }: PageProps) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
   const { supabase, workspace, role } = await requireWorkspace();
   const plugin = await getPluginBySlug(supabase, workspace.id, slug);
   if (!plugin) notFound();
@@ -38,6 +44,8 @@ export default async function PluginDetailPage({ params }: PageProps) {
   const requiredMissing = appConnections.filter((app) => app.required && !app.connected);
   const canManage = role === "owner" || role === "admin";
   const installation = plugin.installation?.status === "revoked" ? null : plugin.installation;
+  const isGeoapify = slug === "geoapify-lead-discovery";
+  const geoapify = isGeoapify ? await getGeoapifyRuntimeStatus(workspace.id) : null;
 
   return (
     <main className={styles.detailPage}>
@@ -80,6 +88,9 @@ export default async function PluginDetailPage({ params }: PageProps) {
         </div>
       </section>
 
+      {query.notice ? <section className={styles.notice}><CheckCircle2 size={13} /> {query.notice}</section> : null}
+      {query.error ? <section className={`${styles.notice} ${styles.noticeError}`}><CircleAlert size={13} /> {query.error}</section> : null}
+
       {installation?.status === "pending_review" ? (
         <section className={styles.notice}>
           <CircleAlert size={13} /> Execution is blocked. This marketplace version changed its permission or remote-runtime boundary. Review the permissions and endpoint below, then explicitly approve the update.
@@ -89,6 +100,29 @@ export default async function PluginDetailPage({ params }: PageProps) {
       {installation?.status === "pending_connections" && requiredMissing.length ? (
         <section className={styles.notice}>
           <CircleAlert size={13} /> Installed safely, but execution stays blocked until {requiredMissing.map((app) => providerLabel(app.provider)).join(", ")} {requiredMissing.length === 1 ? "is" : "are"} connected.
+        </section>
+      ) : null}
+
+      {isGeoapify && geoapify ? (
+        <section className={styles.panel} id="geoapify-connection">
+          <h2>Geoapify connection</h2>
+          <p>Lead discovery stays disabled until this plugin is installed and a valid Geoapify API key is connected.</p>
+          {!installation ? (
+            <div className={styles.connectionCallout}><PlugZap size={16} /><span><strong>Install the plugin first</strong><small>Installation grants the reviewed Lead Engine permissions. The API key is connected separately.</small></span></div>
+          ) : geoapify.connected ? (
+            <>
+              <div className={styles.connectionCallout}><CheckCircle2 size={16} /><span><strong>{geoapify.accountName ?? "Geoapify Places"} connected</strong><small>Geocoding, Places and Place Details are available to the Lead Finder. The encrypted key is never shown back to the browser.</small></span></div>
+              {canManage ? <form className={styles.secretForm} action={disconnectGeoapify}><button className={styles.buttonDanger} type="submit">Disconnect Geoapify</button></form> : null}
+            </>
+          ) : canManage ? (
+            <form className={styles.secretForm} action={connectGeoapify}>
+              <label htmlFor="geoapify-api-key"><span><KeyRound size={13} /> Geoapify API key</span><input id="geoapify-api-key" name="apiKey" type="password" minLength={20} maxLength={240} autoComplete="off" required placeholder="Paste the new Geoapify key" /></label>
+              <small>Orbit validates the key against Geoapify before saving it, then stores it encrypted with the existing integration secret.</small>
+              <button className={styles.button} type="submit">Connect & validate</button>
+            </form>
+          ) : (
+            <div className={styles.connectionCallout}><ShieldCheck size={16} /><span><strong>Owner/admin connection required</strong><small>An authorised workspace admin must connect the Geoapify API key once.</small></span></div>
+          )}
         </section>
       ) : null}
 
@@ -118,7 +152,7 @@ export default async function PluginDetailPage({ params }: PageProps) {
       <section className={styles.detailColumns}>
         <article className={styles.panel}>
           <h2>Connected apps</h2>
-          <p>Apps are authorised once in Plugins and inherited here. The plugin never receives a secret pasted by the user.</p>
+          <p>Apps are authorised once in Plugins and inherited here. Secrets are stored server-side and are never returned to the client.</p>
           <div className={styles.list}>
             {appConnections.length ? appConnections.map((app) => (
               <div className={styles.listItem} key={app.provider}>
