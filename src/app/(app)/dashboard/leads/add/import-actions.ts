@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireWorkspace } from "@/lib/workspace";
 
-const allowedSources = new Set(["direct", "referral", "website", "whatsapp", "facebook", "instagram", "linkedin", "google", "other"]);
+const allowedSources = new Set(["direct", "referral", "website", "whatsapp", "facebook", "instagram", "linkedin", "google", "local_search", "other"]);
 const allowedStages = new Set(["raw", "scored", "contacted", "interested", "demo_booked", "won", "lost"]);
 const allowedCurrencies = new Set(["PKR", "USD", "GBP", "EUR", "AED", "SAR"]);
 
