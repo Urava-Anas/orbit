@@ -6,6 +6,7 @@ import {
   registerIntegrationState,
   type OAuthProvider,
 } from "@/lib/integration-connections";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { requireWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +76,7 @@ function authorizationUrl(provider: SupportedProvider, state: string) {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
+  // Identity only. Organisation/publishing permissions are not claimed until separately reviewed.
   url.searchParams.set("scope", "openid profile email");
   url.searchParams.set("state", state);
   return url;
@@ -86,6 +88,14 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   const { workspace, user, role } = await requireWorkspace();
   if (role !== "owner" && role !== "admin") return back(request, provider, "integration_permission_required");
+
+  const quota = await consumeRateLimit({
+    scope: "integration.oauth.start",
+    subject: `${workspace.id}:${user.id}:${provider}`,
+    limit: 10,
+    windowSeconds: 600,
+  });
+  if (!quota.allowed) return back(request, provider, "oauth_rate_limited");
   if (!oauthProviderReady(provider)) return back(request, provider, `${provider}_auth_config`);
 
   try {
