@@ -5,6 +5,7 @@ declare
   missing integer;
   dangerous integer;
   anon_tables integer;
+  lead_summary_definer boolean;
 begin
   select count(*) into missing
   from (values
@@ -23,6 +24,13 @@ begin
     select 1 from pg_indexes where schemaname='public' and indexname=required.index_name
   );
   if missing <> 0 then raise exception 'production scale indexes missing: %', missing; end if;
+
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname='private' and indexname='orbit_rate_limit_buckets_window_idx'
+  ) then
+    raise exception 'rate-limit retention index is missing';
+  end if;
 
   select count(*) into dangerous
   from information_schema.role_table_grants
@@ -54,6 +62,16 @@ begin
   end if;
   if not has_function_privilege('authenticated', 'public.get_lead_engine_summary(uuid)', 'EXECUTE') then
     raise exception 'authenticated members cannot execute lead engine summary';
+  end if;
+
+  select p.prosecdef into lead_summary_definer
+  from pg_proc p
+  join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public'
+    and p.proname='get_lead_engine_summary'
+    and pg_get_function_identity_arguments(p.oid)='p_workspace_id uuid';
+  if coalesce(lead_summary_definer, true) then
+    raise exception 'lead engine summary must run as SECURITY INVOKER';
   end if;
 end
 $$;
