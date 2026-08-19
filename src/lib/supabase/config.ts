@@ -13,8 +13,15 @@ export const supabasePublishableKey = requiredPublicEnv(
 
 try {
   const url = new URL(supabaseUrl);
-  if (url.protocol !== "https:" || !url.hostname.endsWith(".supabase.co")) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL must be a reviewed HTTPS Supabase project URL.");
+  const reviewedCloud = url.protocol === "https:" && url.hostname.endsWith(".supabase.co");
+  const isolatedCi =
+    process.env.CI === "true" &&
+    url.protocol === "http:" &&
+    (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+  if (!reviewedCloud && !isolatedCi) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL must be a reviewed HTTPS Supabase project URL; loopback HTTP is accepted only in CI.",
+    );
   }
 } catch (error) {
   if (error instanceof Error && error.message.includes("reviewed HTTPS")) throw error;
