@@ -17,6 +17,15 @@ function back(request: Request, key: "error" | "notice", value: string) {
   return NextResponse.redirect(url);
 }
 
+async function vercelFetch(url: string, init: RequestInit = {}) {
+  return fetch(url, {
+    ...init,
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(12_000),
+  });
+}
+
 type TokenResponse = {
   access_token?: string;
   team_id?: string | null;
@@ -57,7 +66,7 @@ export async function GET(request: Request) {
     const clientSecret = process.env.VERCEL_CLIENT_SECRET;
     if (!clientId || !clientSecret) return back(request, "error", "vercel_platform_setup");
 
-    const exchange = await fetch("https://api.vercel.com/v2/oauth/access_token", {
+    const exchange = await vercelFetch("https://api.vercel.com/v2/oauth/access_token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -66,10 +75,8 @@ export async function GET(request: Request) {
         code,
         redirect_uri: vercelCallbackUrl(),
       }),
-      cache: "no-store",
-      redirect: "error",
     });
-    const token = (await exchange.json()) as TokenResponse;
+    const token = (await exchange.json().catch(() => ({}))) as TokenResponse;
     if (!exchange.ok || !token.access_token) return back(request, "error", "vercel_oauth_exchange");
 
     const teamId = token.team_id ?? callbackTeamId ?? null;
@@ -77,38 +84,31 @@ export async function GET(request: Request) {
     const teamQuery = teamId ? `?teamId=${encodeURIComponent(teamId)}` : "";
 
     const [configurationResponse, projectsResponse, accountResponse] = await Promise.all([
-      fetch(`https://api.vercel.com/v1/integrations/configuration/${encodeURIComponent(configurationId)}${teamQuery}`, {
+      vercelFetch(`https://api.vercel.com/v1/integrations/configuration/${encodeURIComponent(configurationId)}${teamQuery}`, {
         headers: authHeaders,
-        cache: "no-store",
-        redirect: "error",
       }),
-      fetch(`https://api.vercel.com/v9/projects?limit=100${teamId ? `&teamId=${encodeURIComponent(teamId)}` : ""}`, {
+      vercelFetch(`https://api.vercel.com/v9/projects?limit=100${teamId ? `&teamId=${encodeURIComponent(teamId)}` : ""}`, {
         headers: authHeaders,
-        cache: "no-store",
-        redirect: "error",
       }),
-      fetch(teamId ? `https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}` : "https://api.vercel.com/v2/user", {
+      vercelFetch(teamId ? `https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}` : "https://api.vercel.com/v2/user", {
         headers: authHeaders,
-        cache: "no-store",
-        redirect: "error",
       }),
     ]);
 
-    const configuration = configurationResponse.ok
-      ? ((await configurationResponse.json()) as Record<string, unknown>)
-      : {};
-    const projectsData = projectsResponse.ok
-      ? ((await projectsResponse.json()) as ProjectsResponse)
-      : { projects: [] };
-    const account = accountResponse.ok
-      ? ((await accountResponse.json()) as Record<string, unknown>)
-      : {};
+    if (!configurationResponse.ok || !projectsResponse.ok || !accountResponse.ok) {
+      return back(request, "error", "vercel_capability_verification_failed");
+    }
+
+    const configuration = (await configurationResponse.json()) as Record<string, unknown>;
+    const projectsData = (await projectsResponse.json()) as ProjectsResponse;
+    const account = (await accountResponse.json()) as Record<string, unknown>;
     const projects = projectsData.projects ?? [];
     const accountName =
       (typeof account.name === "string" && account.name) ||
       (typeof account.username === "string" && account.username) ||
       (typeof account.slug === "string" && account.slug) ||
       (teamId ? "Vercel team" : "Vercel account");
+    const now = new Date().toISOString();
 
     const { error } = await supabase.from("integration_connections").upsert(
       {
@@ -132,11 +132,13 @@ export async function GET(request: Request) {
         metadata: {
           configuration,
           credentialModel: "vercel_external_integration",
+          verifiedCapabilities: ["configuration.read", "account.read", "projects.list"],
+          capabilitiesVerifiedAt: now,
         },
         connected_by: user.id,
-        connected_at: new Date().toISOString(),
+        connected_at: now,
         disconnected_at: null,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       },
       { onConflict: "workspace_id,provider" },
     );
