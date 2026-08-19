@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOrbitAccess } from "@/lib/access";
 import { invokePluginTool, PluginRuntimeError } from "@/lib/plugins/mcp";
+import { consumeRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,19 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
   }
 
+  const quota = await consumeRateLimit({
+    scope: "plugin.invoke",
+    subject: `${access.workspace.id}:${user.id}`,
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "plugin_rate_limited", message: "Plugin invocation rate limit reached." },
+      { status: 429, headers: { "Cache-Control": "no-store", ...rateLimitHeaders(quota) } },
+    );
+  }
+
   try {
     const body = bodySchema.parse(await request.json());
     const { slug, tool } = await context.params;
@@ -75,7 +89,7 @@ export async function POST(request: Request, context: RouteContext) {
     });
     return NextResponse.json(
       { ok: true, ...result },
-      { headers: { "Cache-Control": "no-store" } },
+      { headers: { "Cache-Control": "no-store", ...rateLimitHeaders(quota) } },
     );
   } catch (error) {
     return runtimeFailure(error);
