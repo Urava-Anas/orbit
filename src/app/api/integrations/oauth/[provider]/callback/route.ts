@@ -21,6 +21,14 @@ type TokenResponse = {
   token_type?: string;
 };
 
+type ProviderIdentity = {
+  accountName: string;
+  accountId: string | null;
+  accountType: string;
+  assets: Array<Record<string, unknown>>;
+  verifiedCapabilities: string[];
+};
+
 const supported = new Set<SupportedProvider>([
   "google_search_console",
   "google_analytics",
@@ -44,6 +52,15 @@ function callbackUrl(provider: SupportedProvider) {
   return `${orbitBaseUrl()}/api/integrations/oauth/${provider}/callback`;
 }
 
+async function providerFetch(url: string, init: RequestInit = {}) {
+  return fetch(url, {
+    ...init,
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(12_000),
+  });
+}
+
 async function exchangeCode(provider: SupportedProvider, code: string) {
   const redirectUri = callbackUrl(provider);
 
@@ -51,7 +68,7 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) throw new Error("Google OAuth credentials are missing.");
-    const response = await fetch("https://oauth2.googleapis.com/token", {
+    const response = await providerFetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -61,7 +78,6 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
         client_secret: clientSecret,
         redirect_uri: redirectUri,
       }),
-      cache: "no-store",
     });
     if (!response.ok) throw new Error("Google token exchange failed.");
     return (await response.json()) as TokenResponse;
@@ -71,7 +87,7 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
     const clientId = process.env.META_APP_ID;
     const clientSecret = process.env.META_APP_SECRET;
     if (!clientId || !clientSecret) throw new Error("Meta OAuth credentials are missing.");
-    const response = await fetch("https://graph.facebook.com/oauth/access_token", {
+    const response = await providerFetch("https://graph.facebook.com/oauth/access_token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -80,7 +96,6 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
         redirect_uri: redirectUri,
         code,
       }),
-      cache: "no-store",
     });
     if (!response.ok) throw new Error("Meta token exchange failed.");
     return (await response.json()) as TokenResponse;
@@ -89,7 +104,7 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
   const clientId = process.env.LINKEDIN_CLIENT_ID;
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
   if (!clientId || !clientSecret) throw new Error("LinkedIn OAuth credentials are missing.");
-  const response = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+  const response = await providerFetch("https://www.linkedin.com/oauth/v2/accessToken", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -99,41 +114,53 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
       client_secret: clientSecret,
       redirect_uri: redirectUri,
     }),
-    cache: "no-store",
   });
   if (!response.ok) throw new Error("LinkedIn token exchange failed.");
   return (await response.json()) as TokenResponse;
 }
 
-async function providerIdentity(provider: SupportedProvider, token: string) {
+async function providerIdentity(provider: SupportedProvider, token: string): Promise<ProviderIdentity> {
   if (provider === "google_search_console" || provider === "google_analytics") {
-    const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    const response = await providerFetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
     });
-    const profile = response.ok ? ((await response.json()) as Record<string, unknown>) : {};
+    if (!response.ok) throw new Error("Google identity verification failed.");
+    const profile = (await response.json()) as Record<string, unknown>;
     const accountName = String(profile.name ?? profile.email ?? "Google account");
     const accountId = typeof profile.sub === "string" ? profile.sub : null;
+    if (!accountId) throw new Error("Google account identity is incomplete.");
 
     if (provider === "google_search_console") {
-      const sitesResponse = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
+      const sitesResponse = await providerFetch("https://www.googleapis.com/webmasters/v3/sites", {
         headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
       });
-      const sitesJson = sitesResponse.ok ? ((await sitesResponse.json()) as { siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }> }) : {};
+      if (!sitesResponse.ok) throw new Error("Search Console capability verification failed.");
+      const sitesJson = (await sitesResponse.json()) as { siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }> };
       const assets = (sitesJson.siteEntry ?? []).map((item) => ({
         id: item.siteUrl ?? "site",
         name: item.siteUrl ?? "Search Console property",
         permission: item.permissionLevel ?? null,
       }));
-      return { accountName, accountId, accountType: "google", assets };
+      return {
+        accountName,
+        accountId,
+        accountType: "google",
+        assets,
+        verifiedCapabilities: ["identity", "search_console.read"],
+      };
     }
 
-    const summariesResponse = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200", {
+    const summariesResponse = await providerFetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200", {
       headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
     });
-    const summariesJson = summariesResponse.ok ? ((await summariesResponse.json()) as { accountSummaries?: Array<{ account?: string; displayName?: string; propertySummaries?: Array<{ property?: string; displayName?: string }> }> }) : {};
+    if (!summariesResponse.ok) throw new Error("Google Analytics capability verification failed.");
+    const summariesJson = (await summariesResponse.json()) as {
+      accountSummaries?: Array<{
+        account?: string;
+        displayName?: string;
+        propertySummaries?: Array<{ property?: string; displayName?: string }>;
+      }>;
+    };
     const assets = (summariesJson.accountSummaries ?? []).flatMap((account) =>
       (account.propertySummaries ?? []).map((property) => ({
         id: property.property ?? account.account ?? "property",
@@ -141,34 +168,53 @@ async function providerIdentity(provider: SupportedProvider, token: string) {
         account: account.displayName ?? null,
       })),
     );
-    return { accountName, accountId, accountType: "google", assets };
+    return {
+      accountName,
+      accountId,
+      accountType: "google",
+      assets,
+      verifiedCapabilities: ["identity", "analytics.read"],
+    };
   }
 
   if (provider === "meta") {
     const [profileResponse, pagesResponse] = await Promise.all([
-      fetch("https://graph.facebook.com/me?fields=id,name", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
-      fetch("https://graph.facebook.com/me/accounts?fields=id,name&limit=100", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
+      providerFetch("https://graph.facebook.com/me?fields=id,name", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      providerFetch("https://graph.facebook.com/me/accounts?fields=id,name&limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
     ]);
-    const profile = profileResponse.ok ? ((await profileResponse.json()) as Record<string, unknown>) : {};
-    const pages = pagesResponse.ok ? ((await pagesResponse.json()) as { data?: Array<{ id?: string; name?: string }> }) : {};
+    if (!profileResponse.ok || !pagesResponse.ok) {
+      throw new Error("Meta Page capability verification failed.");
+    }
+    const profile = (await profileResponse.json()) as Record<string, unknown>;
+    const pages = (await pagesResponse.json()) as { data?: Array<{ id?: string; name?: string }> };
+    const accountId = typeof profile.id === "string" ? profile.id : null;
+    if (!accountId) throw new Error("Meta account identity is incomplete.");
     return {
       accountName: String(profile.name ?? "Meta account"),
-      accountId: typeof profile.id === "string" ? profile.id : null,
+      accountId,
       accountType: "meta",
       assets: (pages.data ?? []).map((page) => ({ id: page.id ?? "page", name: page.name ?? "Meta Page" })),
+      verifiedCapabilities: ["identity", "pages.list", "pages.engagement.read"],
     };
   }
 
-  const response = await fetch("https://api.linkedin.com/v2/userinfo", {
+  const response = await providerFetch("https://api.linkedin.com/v2/userinfo", {
     headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
   });
-  const profile = response.ok ? ((await response.json()) as Record<string, unknown>) : {};
+  if (!response.ok) throw new Error("LinkedIn identity verification failed.");
+  const profile = (await response.json()) as Record<string, unknown>;
+  const accountId = typeof profile.sub === "string" ? profile.sub : null;
+  if (!accountId) throw new Error("LinkedIn account identity is incomplete.");
   return {
     accountName: String(profile.name ?? profile.email ?? "LinkedIn account"),
-    accountId: typeof profile.sub === "string" ? profile.sub : null,
+    accountId,
     accountType: "linkedin",
     assets: [],
+    verifiedCapabilities: ["identity"],
   };
 }
 
@@ -198,7 +244,13 @@ export async function GET(request: Request, { params }: RouteContext) {
     }
     if (!token.access_token) return back(request, provider, "error", "oauth_exchange_failed");
 
-    const identity = await providerIdentity(provider, token.access_token);
+    let identity: ProviderIdentity;
+    try {
+      identity = await providerIdentity(provider, token.access_token);
+    } catch {
+      return back(request, provider, "error", "oauth_capability_verification_failed");
+    }
+
     const now = new Date().toISOString();
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null;
     const scopes = (token.scope ?? "").split(/[ ,]+/).filter(Boolean);
@@ -217,7 +269,11 @@ export async function GET(request: Request, { params }: RouteContext) {
         token_expires_at: expiresAt,
         scopes,
         selected_assets: identity.assets,
-        metadata: { credentialModel: "oauth2_authorization_code" },
+        metadata: {
+          credentialModel: "oauth2_authorization_code",
+          verifiedCapabilities: identity.verifiedCapabilities,
+          capabilitiesVerifiedAt: now,
+        },
         connected_by: user.id,
         connected_at: now,
         disconnected_at: null,
