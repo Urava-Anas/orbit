@@ -6,6 +6,7 @@ import {
   vercelIntegrationReady,
   type OAuthProvider,
 } from "@/lib/integration-connections";
+import { getFreshIntegrationAccessToken } from "@/lib/integration-token-lifecycle";
 import { requireWorkspace } from "@/lib/workspace";
 
 const supported = new Set([
@@ -62,6 +63,16 @@ export async function GET(request: Request) {
       },
       { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } },
     );
+  }
+
+  if (provider === "google_search_console" || provider === "google_analytics") {
+    // Refresh server-side if the access token is near expiry. No token value is returned
+    // to the browser; this only keeps the stored connection lifecycle healthy.
+    await getFreshIntegrationAccessToken({
+      supabase,
+      workspaceId: workspace.id,
+      provider,
+    });
   }
 
   const { data, error } = await supabase
