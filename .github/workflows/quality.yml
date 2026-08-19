@@ -47,6 +47,11 @@ jobs:
       - name: Reset database from repository migrations
         run: supabase db reset --local
 
+      - name: Seed isolated acceptance-test tenant
+        run: |
+          psql postgresql://postgres:postgres@127.0.0.1:54322/postgres \
+            -v ON_ERROR_STOP=1 -f supabase/ci/production_test_fixture.sql
+
       - name: Export isolated application environment
         shell: bash
         run: |
