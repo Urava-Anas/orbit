@@ -11,7 +11,13 @@ import {
 } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type OAuthProvider = "github" | "vercel";
+export type OAuthProvider =
+  | "github"
+  | "vercel"
+  | "google_search_console"
+  | "google_analytics"
+  | "meta"
+  | "linkedin";
 
 export type IntegrationState = {
   v: 1;
@@ -201,6 +207,18 @@ export function vercelIntegrationReady() {
       process.env.VERCEL_CLIENT_ID &&
       process.env.VERCEL_CLIENT_SECRET,
   );
+}
+
+export function oauthProviderReady(provider: Exclude<OAuthProvider, "github" | "vercel">) {
+  if (provider === "google_search_console" || provider === "google_analytics") {
+    return Boolean(
+      (process.env.GOOGLE_OAUTH_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID) &&
+        (process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET),
+    );
+  }
+  if (provider === "meta") return Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET);
+  if (provider === "linkedin") return Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET);
+  return false;
 }
 
 export function githubInstallUrl(state: string) {
