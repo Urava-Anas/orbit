@@ -31,17 +31,11 @@ export type IntegrationState = {
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 function integrationSecret() {
-  const productionSecret =
-    process.env.INTEGRATION_SECRET ??
-    process.env.SUPABASE_SECRET_KEY ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const value =
-    productionSecret ??
-    (process.env.NODE_ENV === "production"
-      ? undefined
-      : process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY);
+  const value = process.env.INTEGRATION_SECRET?.trim();
   if (!value || value.length < 32) {
-    throw new Error("Orbit integration secret is not configured.");
+    throw new Error(
+      "INTEGRATION_SECRET must be an independent 32+ character secret. Database admin credentials are never used as encryption keys.",
+    );
   }
   return value;
 }
@@ -184,11 +178,24 @@ export function decryptIntegrationSecret(value: string) {
 }
 
 export function orbitBaseUrl() {
-  return (
-    process.env.FOUNDRY_APP_URL ??
+  const configured = (
     process.env.NEXT_PUBLIC_APP_URL ??
-    "https://orbit-two-delta.vercel.app"
-  ).replace(/\/$/, "");
+    process.env.FOUNDRY_APP_URL ??
+    ""
+  ).trim();
+  if (!configured) {
+    if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+    throw new Error("NEXT_PUBLIC_APP_URL is required in production.");
+  }
+
+  const url = new URL(configured);
+  if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+    throw new Error("Production Orbit origin must use HTTPS.");
+  }
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("NEXT_PUBLIC_APP_URL must be a credential-free origin without a path.");
+  }
+  return url.origin;
 }
 
 export function githubAppReady() {
