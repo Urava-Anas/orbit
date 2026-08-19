@@ -21,6 +21,10 @@ function safeJson(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function platformCredentialMode() {
+  return process.env.ORBIT_PROVIDER_CREDENTIAL_MODE?.trim().toLowerCase() === "platform";
+}
+
 const templateKeys: Record<string, { vault: string; env: string }> = {
   "growth.outreach_send": {
     vault: "whatsapp_template_outreach",
@@ -63,9 +67,13 @@ async function providerSetting(
   vaultKey: string,
   envKey: string,
 ) {
-  const envValue = process.env[envKey]?.trim();
-  if (envValue) return envValue;
-  return vaultSecret(workspaceId, vaultKey);
+  const workspaceValue = await vaultSecret(workspaceId, vaultKey);
+  if (workspaceValue) return workspaceValue;
+
+  // Shared Urava/platform credentials are opt-in. A tenant that has not configured
+  // its own provider must never silently send through another organisation's identity.
+  if (!platformCredentialMode()) return null;
+  return process.env[envKey]?.trim() || null;
 }
 
 async function whatsappTemplateName(workspaceId: string, capabilityKey: string) {
@@ -75,6 +83,21 @@ async function whatsappTemplateName(workspaceId: string, capabilityKey: string) 
 }
 
 export function stageFourProviderReadiness(): ProviderReadiness {
+  if (!platformCredentialMode()) {
+    return {
+      email: {
+        configured: false,
+        provider: "resend",
+        reason: "Platform provider credentials are disabled; each workspace must use its own Vault credentials.",
+      },
+      whatsapp: {
+        configured: false,
+        provider: "meta_whatsapp_cloud",
+        reason: "Platform provider credentials are disabled; each workspace must use its own Vault credentials.",
+      },
+    };
+  }
+
   const emailConfigured = Boolean(
     process.env.RESEND_API_KEY?.trim() && process.env.ORBIT_EMAIL_FROM?.trim(),
   );
@@ -92,16 +115,16 @@ export function stageFourProviderReadiness(): ProviderReadiness {
       configured: emailConfigured,
       provider: "resend",
       reason: emailConfigured
-        ? "Resend API key and verified Orbit sender are configured in the runtime environment."
-        : "No runtime Resend credentials detected; workspace Vault credentials may still be available.",
+        ? "Explicit platform Resend credentials are configured."
+        : "Platform Resend credentials are incomplete.",
     },
     whatsapp: {
       configured: whatsappCore && whatsappHasTemplate,
       provider: "meta_whatsapp_cloud",
       reason:
         whatsappCore && whatsappHasTemplate
-          ? "WhatsApp Cloud runtime credentials and at least one approved capability template are configured."
-          : "No complete runtime WhatsApp configuration detected; workspace Vault credentials may still be available.",
+          ? "Explicit platform WhatsApp credentials and a capability template are configured."
+          : "Platform WhatsApp credentials are incomplete.",
     },
   };
 }
@@ -138,15 +161,19 @@ export async function stageFourProviderReadinessForWorkspace(
       configured: emailConfigured,
       provider: "resend",
       reason: emailConfigured
-        ? "Resend API key and verified sender are available for this workspace."
-        : "Resend API key and verified sender are not configured for this workspace.",
+        ? "A verified sender is available for this workspace."
+        : platformCredentialMode()
+          ? "Neither workspace Vault nor explicit platform Resend credentials are complete."
+          : "Workspace Resend credentials are not configured.",
     },
     whatsapp: {
       configured: whatsappConfigured,
       provider: "meta_whatsapp_cloud",
       reason: whatsappConfigured
-        ? "WhatsApp Cloud credentials and at least one approved capability template are available for this workspace."
-        : "WhatsApp Cloud token, phone-number ID, Graph API version, and approved templates are required for this workspace.",
+        ? "WhatsApp Cloud credentials and an approved capability template are available for this workspace."
+        : platformCredentialMode()
+          ? "Neither workspace Vault nor explicit platform WhatsApp credentials are complete."
+          : "Workspace WhatsApp Cloud credentials and approved templates are required.",
     },
   };
 }
@@ -217,6 +244,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
       },
     }),
     cache: "no-store",
+    redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -300,6 +328,7 @@ async function sendWhatsApp(envelope: StageFourGatewayEnvelope): Promise<StageFo
       },
     }),
     cache: "no-store",
+    redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
 
