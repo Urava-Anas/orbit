@@ -16,7 +16,11 @@ function requireAdmin(role: string) {
 }
 
 function pluginUrl(kind: "notice" | "error", message: string) {
-  return `/dashboard/plugins/geoapify-lead-discovery?connect=1&${kind}=${encodeURIComponent(message)}`;
+  const params = new URLSearchParams();
+  params.set("plugin", "plugin:geoapify-lead-discovery");
+  params.set("connect", "geoapify");
+  params.set(kind, message);
+  return `/dashboard/plugins?${params.toString()}`;
 }
 
 function refresh() {
