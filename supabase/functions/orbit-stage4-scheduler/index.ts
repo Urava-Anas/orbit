@@ -24,6 +24,21 @@ async function sha256(value: string) {
   return toHex(digest);
 }
 
+async function loadWorkerUrl(supabaseUrl: string, serviceRole: string) {
+  const url = new URL(`${supabaseUrl}/rest/v1/orbit_runtime_config`);
+  url.searchParams.set("key", "eq.stage4_worker_url");
+  url.searchParams.set("select", "value");
+  url.searchParams.set("limit", "1");
+  const response = await fetch(url, {
+    headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const rows = (await response.json().catch(() => [])) as Array<{ value?: string }>;
+  const value = rows[0]?.value?.trim();
+  if (!response.ok || !value) throw new Error("Stage 4 worker endpoint is not configured for this environment.");
+  return value;
+}
+
 async function mintInvocation(supabaseUrl: string, serviceRole: string) {
   const token = randomToken();
   const tokenHash = await sha256(token);
@@ -41,9 +56,7 @@ async function mintInvocation(supabaseUrl: string, serviceRole: string) {
   });
   const rows = (await response.json().catch(() => [])) as Array<{ id?: string }>;
   const id = rows[0]?.id;
-  if (!response.ok || !id) {
-    throw new Error(`Scheduler invocation mint failed with HTTP ${response.status}.`);
-  }
+  if (!response.ok || !id) throw new Error(`Scheduler invocation mint failed with HTTP ${response.status}.`);
   return { id, token };
 }
 
@@ -57,39 +70,25 @@ Deno.serve(async (request: Request) => {
 
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
-  const workerUrl = Deno.env.get("ORBIT_STAGE4_WORKER_URL")?.trim();
-  if (!serviceRole || !supabaseUrl || !workerUrl) {
-    return new Response(
-      JSON.stringify({ error: "Scheduler service identity or worker endpoint is unavailable." }),
-      {
-        status: 503,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-      },
-    );
-  }
-
-  let parsedWorkerUrl: URL;
-  try {
-    parsedWorkerUrl = new URL(workerUrl);
-  } catch {
-    return new Response(JSON.stringify({ error: "Worker URL is invalid." }), {
-      status: 503,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
-  }
-  if (
-    parsedWorkerUrl.protocol !== "https:" ||
-    parsedWorkerUrl.username ||
-    parsedWorkerUrl.password ||
-    parsedWorkerUrl.pathname !== "/api/internal/autopilot-worker"
-  ) {
-    return new Response(JSON.stringify({ error: "Worker URL must be the reviewed HTTPS worker endpoint." }), {
+  if (!serviceRole || !supabaseUrl) {
+    return new Response(JSON.stringify({ error: "Scheduler service identity is unavailable." }), {
       status: 503,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   }
 
   try {
+    const workerUrl = await loadWorkerUrl(supabaseUrl, serviceRole);
+    const parsedWorkerUrl = new URL(workerUrl);
+    if (
+      parsedWorkerUrl.protocol !== "https:" ||
+      parsedWorkerUrl.username ||
+      parsedWorkerUrl.password ||
+      parsedWorkerUrl.pathname !== "/api/internal/autopilot-worker"
+    ) {
+      throw new Error("Worker URL must be the reviewed HTTPS worker endpoint.");
+    }
+
     const invocation = await mintInvocation(supabaseUrl, serviceRole);
     const response = await fetch(parsedWorkerUrl, {
       method: "POST",
@@ -111,17 +110,10 @@ Deno.serve(async (request: Request) => {
       payload = { upstreamStatus: response.status };
     }
 
-    return new Response(
-      JSON.stringify({
-        ok: response.ok,
-        workerStatus: response.status,
-        worker: payload,
-      }),
-      {
-        status: response.ok ? 200 : 502,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-      },
-    );
+    return new Response(JSON.stringify({ ok: response.ok, workerStatus: response.status, worker: payload }), {
+      status: response.ok ? 200 : 502,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
   } catch (error) {
     return new Response(
       JSON.stringify({
