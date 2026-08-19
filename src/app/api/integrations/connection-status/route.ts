@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getGeoapifyRuntimeStatus } from "@/lib/geoapify";
-import { githubAppReady, vercelIntegrationReady } from "@/lib/integration-connections";
+import {
+  githubAppReady,
+  oauthProviderReady,
+  vercelIntegrationReady,
+  type OAuthProvider,
+} from "@/lib/integration-connections";
 import { requireWorkspace } from "@/lib/workspace";
 
 const supported = new Set([
@@ -16,6 +21,14 @@ const supported = new Set([
 function platformReady(provider: string) {
   if (provider === "github") return githubAppReady();
   if (provider === "vercel") return vercelIntegrationReady();
+  if (
+    provider === "google_search_console" ||
+    provider === "google_analytics" ||
+    provider === "meta" ||
+    provider === "linkedin"
+  ) {
+    return oauthProviderReady(provider as Exclude<OAuthProvider, "github" | "vercel">);
+  }
   return false;
 }
 
