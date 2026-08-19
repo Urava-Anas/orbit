@@ -21,6 +21,15 @@ function back(request: Request, key: "error" | "notice", value: string) {
   return NextResponse.redirect(url);
 }
 
+async function githubFetch(url: string, init: RequestInit = {}) {
+  return fetch(url, {
+    ...init,
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(12_000),
+  });
+}
+
 type Installation = {
   id: number;
   repository_selection?: string;
@@ -53,35 +62,31 @@ export async function GET(request: Request) {
     await consumeIntegrationState(stateToken, state);
 
     const jwt = createGitHubAppJwt();
-    const installationResponse = await fetch(
+    const installationResponse = await githubFetch(
       `https://api.github.com/app/installations/${encodeURIComponent(installationId)}`,
-      { headers: { ...apiHeaders, Authorization: `Bearer ${jwt}` }, cache: "no-store", redirect: "error" },
+      { headers: { ...apiHeaders, Authorization: `Bearer ${jwt}` } },
     );
     if (!installationResponse.ok) return back(request, "error", "github_installation_unverified");
     const installation = (await installationResponse.json()) as Installation;
 
-    const tokenResponse = await fetch(
+    const tokenResponse = await githubFetch(
       `https://api.github.com/app/installations/${encodeURIComponent(installationId)}/access_tokens`,
       {
         method: "POST",
         headers: { ...apiHeaders, Authorization: `Bearer ${jwt}` },
-        cache: "no-store",
-        redirect: "error",
       },
     );
     if (!tokenResponse.ok) return back(request, "error", "github_installation_token_failed");
     const tokenData = (await tokenResponse.json()) as { token?: string };
     if (!tokenData.token) return back(request, "error", "github_installation_token_failed");
 
-    const repositoriesResponse = await fetch("https://api.github.com/installation/repositories?per_page=100", {
+    const repositoriesResponse = await githubFetch("https://api.github.com/installation/repositories?per_page=100", {
       headers: { ...apiHeaders, Authorization: `Bearer ${tokenData.token}` },
-      cache: "no-store",
-      redirect: "error",
     });
-    const repositoriesData = repositoriesResponse.ok
-      ? ((await repositoriesResponse.json()) as RepositoriesResponse)
-      : { repositories: [] };
+    if (!repositoriesResponse.ok) return back(request, "error", "github_repository_capability_unverified");
+    const repositoriesData = (await repositoriesResponse.json()) as RepositoriesResponse;
     const repositories = repositoriesData.repositories ?? [];
+    const now = new Date().toISOString();
 
     const { error } = await supabase.from("integration_connections").upsert(
       {
@@ -108,11 +113,13 @@ export async function GET(request: Request) {
           permissions: installation.permissions ?? {},
           avatarUrl: installation.account?.avatar_url ?? null,
           credentialModel: "github_app_installation",
+          verifiedCapabilities: ["installation.read", "repositories.list"],
+          capabilitiesVerifiedAt: now,
         },
         connected_by: user.id,
-        connected_at: new Date().toISOString(),
+        connected_at: now,
         disconnected_at: null,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       },
       { onConflict: "workspace_id,provider" },
     );
