@@ -17,9 +17,7 @@ export async function GET() {
         (process.env.INTEGRATION_SECRET?.trim().length ?? 0) >= 32,
     ),
     canonicalOrigin: Boolean(
-      process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-        process.env.FOUNDRY_APP_URL?.trim() ||
-        process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim(),
+      process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.FOUNDRY_APP_URL?.trim(),
     ),
     tenantProviderMode: ["workspace", "platform"].includes(
       process.env.ORBIT_PROVIDER_CREDENTIAL_MODE?.trim().toLowerCase() || "workspace",
