@@ -46,6 +46,16 @@ test("integration encryption is independent from database admin keys", async () 
   assert.doesNotMatch(secretFunction, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
 });
 
+test("canonical Orbit origin is available only in explicit Vercel production", async () => {
+  const integration = await source("src/lib/integration-connections.ts");
+  const baseUrlFunction = integration.match(/export function orbitBaseUrl\(\)[\s\S]*?\n}/)?.[0] ?? "";
+  assert.match(integration, /REVIEWED_ORBIT_PRODUCTION_ORIGIN/);
+  assert.match(baseUrlFunction, /VERCEL\s*===\s*"1"/);
+  assert.match(baseUrlFunction, /VERCEL_ENV\s*===\s*"production"/);
+  assert.match(baseUrlFunction, /NEXT_PUBLIC_APP_URL/);
+  assert.match(baseUrlFunction, /reviewed Orbit Vercel production environment/);
+});
+
 test("internal signing domains do not reuse cron or worker credentials", async () => {
   const gateway = await source("src/lib/agents/stage4-gateway.ts");
   const inbound = await source("src/app/api/internal/autopilot-events/route.ts");
