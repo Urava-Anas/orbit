@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getGeoapifyApiKey } from "@/lib/geoapify";
+import { consumeRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { requireWorkspace } from "@/lib/workspace";
 
 type GeoapifyAutocompleteResult = {
@@ -42,14 +43,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ suggestions: [] }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
-  const { workspace } = await requireWorkspace();
+  const { workspace, user } = await requireWorkspace();
+  const quota = await consumeRateLimit({
+    scope: "lead.autocomplete",
+    subject: `${workspace.id}:${user.id}`,
+    limit: 60,
+    windowSeconds: 60,
+  });
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { suggestions: [], error: "Too many place searches. Try again shortly." },
+      { status: 429, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
+    );
+  }
+
   let apiKey: string;
   try {
     apiKey = await getGeoapifyApiKey(workspace.id);
   } catch {
     return NextResponse.json(
       { suggestions: [], error: "Geoapify plugin connection required." },
-      { status: 409, headers: { "Cache-Control": "private, no-store" } },
+      { status: 409, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
     );
   }
 
@@ -65,12 +79,13 @@ export async function GET(request: Request) {
     const response = await fetch(geoUrl, {
       method: "GET",
       cache: "no-store",
+      redirect: "error",
       signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) {
       return NextResponse.json(
         { suggestions: [], error: "Place search provider unavailable." },
-        { status: 502, headers: { "Cache-Control": "private, no-store" } },
+        { status: 502, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
       );
     }
 
@@ -97,12 +112,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { suggestions },
-      { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } },
+      { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", ...rateLimitHeaders(quota) } },
     );
   } catch {
     return NextResponse.json(
       { suggestions: [], error: "Place suggestions timed out." },
-      { status: 504, headers: { "Cache-Control": "private, no-store" } },
+      { status: 504, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
     );
   }
 }

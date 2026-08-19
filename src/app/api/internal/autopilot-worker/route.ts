@@ -1,18 +1,12 @@
-import {
-  createDecipheriv,
-  createHash,
-  createHmac,
-  timingSafeEqual,
-} from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { runStageFourCompletionPlanner } from "@/lib/agents/stage4-completion-planner";
 import { runWithStageFourExecutionClient } from "@/lib/agents/stage4-execution-context";
 import { isStageFourGatewayConfigured } from "@/lib/agents/stage4-gateway";
 import { stageFourProviderReadinessForWorkspace } from "@/lib/agents/stage4-providers";
 import { runStageFourAutopilotWorker } from "@/lib/agents/stage4-worker";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { supabaseUrl } from "@/lib/supabase/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -30,6 +24,7 @@ function safeMatch(received: string, expected: string) {
 }
 
 function schedulerInvocationHeaders(request: Request) {
+  if (request.method !== "POST") return null;
   const invocationId = request.headers.get("x-orbit-scheduler-invocation")?.trim();
   const token = request.headers.get("x-orbit-scheduler-token")?.trim();
   if (
@@ -43,45 +38,16 @@ function schedulerInvocationHeaders(request: Request) {
   return { invocationId, token };
 }
 
-function decryptSchedulerServiceRole(request: Request, token: string) {
-  const encodedIv = request.headers.get("x-orbit-supabase-iv")?.trim() ?? "";
-  const encodedCiphertext = request.headers.get("x-orbit-supabase-ciphertext")?.trim() ?? "";
-  if (!encodedIv || !encodedCiphertext) return null;
-
-  try {
-    const iv = Buffer.from(encodedIv, "base64");
-    const encrypted = Buffer.from(encodedCiphertext, "base64");
-    if (iv.length !== 12 || encrypted.length <= 16 || encrypted.length > 4096) return null;
-
-    const key = createHash("sha256").update(token).digest();
-    const ciphertext = encrypted.subarray(0, encrypted.length - 16);
-    const authTag = encrypted.subarray(encrypted.length - 16);
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
-    const plaintext = Buffer.concat([
-      decipher.update(ciphertext),
-      decipher.final(),
-    ]).toString("utf8").trim();
-    return plaintext.length >= 32 && plaintext.length <= 2048 ? plaintext : null;
-  } catch {
-    return null;
-  }
-}
-
-function ephemeralAdmin(secret: string) {
-  return createClient(supabaseUrl, secret, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
-async function consumeSchedulerInvocation(admin: SupabaseClient, invocationId: string, token: string) {
+async function consumeSchedulerInvocation(
+  admin: SupabaseClient,
+  invocationId: string,
+  token: string,
+) {
   try {
     const { data, error } = await admin.rpc("consume_stage4_scheduler_invocation", {
       p_id: invocationId,
       p_token: token,
+      p_purpose: "autopilot_worker",
     });
     return !error && data === true;
   } catch {
@@ -90,54 +56,39 @@ async function consumeSchedulerInvocation(admin: SupabaseClient, invocationId: s
 }
 
 async function authorisedContext(request: Request): Promise<AuthorisedContext> {
+  const admin = createAdminClient();
+  if (!admin) return { authorised: false, admin: null };
+
   const received = request.headers.get("authorization");
   if (received) {
     const secrets = [
       process.env.CRON_SECRET,
       process.env.ORBIT_AUTOPILOT_WORKER_SECRET,
-    ].filter((secret): secret is string => Boolean(secret));
-    if (secrets.some((secret) => safeMatch(received, `Bearer ${secret}`))) {
-      return { authorised: true, admin: createAdminClient() };
+    ].filter((secret): secret is string => Boolean(secret?.trim()));
+    if (secrets.some((secret) => safeMatch(received, `Bearer ${secret.trim()}`))) {
+      return { authorised: true, admin };
     }
   }
 
-  const serviceAuth = request.headers.get("x-orbit-service-auth");
-  if (serviceAuth) {
-    const serviceIdentities = [
-      process.env.SUPABASE_SECRET_KEY,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-    ].filter((secret): secret is string => Boolean(secret));
-    const matchedSecret = serviceIdentities.find((serviceSecret) => {
-      const expected = createHmac("sha256", serviceSecret)
-        .update("orbit-stage4-worker:v1")
-        .digest("hex");
-      return safeMatch(serviceAuth, expected);
-    });
-    if (matchedSecret) {
-      return { authorised: true, admin: createAdminClient() ?? ephemeralAdmin(matchedSecret) };
-    }
-  }
-
-  // The scheduler path is intentionally service-role-first: the one-time token RPC is no longer public.
-  // The service-role credential is AES-GCM encrypted by the scheduler with the one-time token as key material.
   const scheduler = schedulerInvocationHeaders(request);
   if (!scheduler) return { authorised: false, admin: null };
-  const encryptedServiceRole = decryptSchedulerServiceRole(request, scheduler.token);
-  if (!encryptedServiceRole) return { authorised: false, admin: null };
-  const schedulerAdmin = ephemeralAdmin(encryptedServiceRole);
   const consumed = await consumeSchedulerInvocation(
-    schedulerAdmin,
+    admin,
     scheduler.invocationId,
     scheduler.token,
   );
-  if (!consumed) return { authorised: false, admin: null };
-  return { authorised: true, admin: schedulerAdmin };
+  return consumed
+    ? { authorised: true, admin }
+    : { authorised: false, admin: null };
 }
 
 async function handle(request: Request) {
   const context = await authorisedContext(request);
-  if (!context.authorised) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!context.authorised || !context.admin) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: { "Cache-Control": "no-store" } },
+    );
   }
 
   const runWorker = async () => {
@@ -193,9 +144,7 @@ async function handle(request: Request) {
     }
   };
 
-  return context.admin
-    ? runWithStageFourExecutionClient(context.admin, runWorker)
-    : runWorker();
+  return runWithStageFourExecutionClient(context.admin, runWorker);
 }
 
 export const GET = handle;

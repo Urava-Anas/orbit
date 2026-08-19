@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { Notice } from "@/components/Notice";
 import { humanize } from "@/lib/format";
-import type { Lead } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 import styles from "./leads.module.css";
 
@@ -30,21 +29,18 @@ export const metadata: Metadata = {
 };
 
 const sourceCards = [
-  { slug: "website", label: "Website", aliases: ["website"], icon: Globe2, tone: "purple" },
-  { slug: "google", label: "Local Search", aliases: ["google", "local_search"], icon: Search, tone: "google" },
-  { slug: "instagram", label: "Instagram", aliases: ["instagram"], icon: MessageSquareText, tone: "instagram" },
-  { slug: "linkedin", label: "LinkedIn", aliases: ["linkedin"], icon: UsersRound, tone: "linkedin" },
-  { slug: "facebook", label: "Facebook", aliases: ["facebook"], icon: MessageSquareText, tone: "facebook" },
-  { slug: "youtube", label: "YouTube", aliases: ["youtube"], icon: Globe2, tone: "youtube" },
-  { slug: "referrals", label: "Referrals", aliases: ["referral", "referrals"], icon: UsersRound, tone: "purple" },
-  { slug: "cold-list", label: "Cold List Upload", aliases: ["other", "cold_list", "upload"], icon: UploadCloud, tone: "purple" },
+  { slug: "website", label: "Website", icon: Globe2, tone: "purple" },
+  { slug: "google", label: "Local Search", icon: Search, tone: "google" },
+  { slug: "instagram", label: "Instagram", icon: MessageSquareText, tone: "instagram" },
+  { slug: "linkedin", label: "LinkedIn", icon: UsersRound, tone: "linkedin" },
+  { slug: "facebook", label: "Facebook", icon: MessageSquareText, tone: "facebook" },
+  { slug: "youtube", label: "YouTube", icon: Globe2, tone: "youtube" },
+  { slug: "referrals", label: "Referrals", icon: UsersRound, tone: "purple" },
+  { slug: "cold-list", label: "Cold List Upload", icon: UploadCloud, tone: "purple" },
 ] as const;
 
 type PageProps = {
-  searchParams: Promise<{
-    error?: string;
-    notice?: string;
-  }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 };
 
 type LeadActivity = {
@@ -61,23 +57,33 @@ type AutopilotConfig = {
   blocked_reason: string | null;
 };
 
-type ExternalAction = {
-  id: string;
-  channel: string | null;
-  status: string | null;
-  created_at: string;
+type LeadEngineSummary = {
+  total: number;
+  sources: Record<string, number>;
+  flow: number[];
 };
 
-function countFlow(leads: Lead[]) {
-  const notLost = leads.filter((lead) => lead.stage !== "lost");
-  const verified = notLost.filter((lead) => lead.lead_score !== null || !["new", "raw"].includes(lead.stage));
-  const scored = notLost.filter((lead) => lead.lead_score !== null || ["scored", "qualified", "contacted", "interested", "demo_booked", "proposal", "won"].includes(lead.stage));
-  const outreach = notLost.filter((lead) => ["contacted", "interested", "demo_booked", "proposal", "won"].includes(lead.stage));
-  const followup = notLost.filter((lead) => Boolean(lead.next_action));
-  const qualified = notLost.filter((lead) => ["qualified", "interested", "demo_booked", "proposal", "won"].includes(lead.stage));
-  const proposal = notLost.filter((lead) => ["proposal", "won"].includes(lead.stage));
-  const won = notLost.filter((lead) => lead.stage === "won");
-  return [notLost.length, verified.length, scored.length, outreach.length, followup.length, qualified.length, proposal.length, won.length];
+const emptySummary: LeadEngineSummary = {
+  total: 0,
+  sources: {},
+  flow: [0, 0, 0, 0, 0, 0, 0, 0],
+};
+
+function asSummary(value: unknown): LeadEngineSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return emptySummary;
+  const row = value as Record<string, unknown>;
+  const rawSources = row.sources && typeof row.sources === "object" && !Array.isArray(row.sources)
+    ? (row.sources as Record<string, unknown>)
+    : {};
+  const sources = Object.fromEntries(
+    Object.entries(rawSources).map(([key, count]) => [key, Math.max(0, Number(count) || 0)]),
+  );
+  const rawFlow = Array.isArray(row.flow) ? row.flow : [];
+  return {
+    total: Math.max(0, Number(row.total) || 0),
+    sources,
+    flow: Array.from({ length: 8 }, (_, index) => Math.max(0, Number(rawFlow[index]) || 0)),
+  };
 }
 
 export default async function LeadsPage({ searchParams }: PageProps) {
@@ -87,13 +93,8 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   monthStart.setHours(0, 0, 0, 0);
   monthStart.setDate(1);
 
-  const [leadResult, activityResult, autopilotResult, projectResult, actionResult] = await Promise.all([
-    supabase
-      .from("leads")
-      .select("id,name,company,email,phone,whatsapp,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
-      .eq("workspace_id", workspace.id)
-      .order("lead_score", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false }),
+  const [summaryResult, activityResult, autopilotResult, activeProjectResult, emailActionResult] = await Promise.all([
+    supabase.rpc("get_lead_engine_summary", { p_workspace_id: workspace.id }),
     supabase
       .from("lead_activities")
       .select("id,outcome,summary,occurred_at")
@@ -107,35 +108,32 @@ export default async function LeadsPage({ searchParams }: PageProps) {
       .maybeSingle(),
     supabase
       .from("projects")
-      .select("id,status")
-      .eq("workspace_id", workspace.id),
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspace.id)
+      .neq("status", "completed"),
     supabase
       .from("orbit_external_action_requests")
-      .select("id,channel,status,created_at")
+      .select("id", { count: "exact", head: true })
       .eq("workspace_id", workspace.id)
-      .gte("created_at", monthStart.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(250),
+      .eq("channel", "email")
+      .in("status", ["completed", "sent", "succeeded"])
+      .gte("created_at", monthStart.toISOString()),
   ]);
 
-  const leads = (leadResult.data ?? []) as Lead[];
+  const summary = summaryResult.error ? emptySummary : asSummary(summaryResult.data);
   const activities = (activityResult.data ?? []) as LeadActivity[];
   const autopilot = (autopilotResult.data ?? null) as AutopilotConfig | null;
-  const projects = projectResult.data ?? [];
-  const externalActions = (actionResult.data ?? []) as ExternalAction[];
-
-  const totalLeadCount = Math.max(leads.length, 1);
-  const flowCounts = countFlow(leads);
-  const activeProjects = projects.filter((project) => project.status !== "completed").length;
+  const totalLeadCount = Math.max(summary.total, 1);
+  const flowCounts = summary.flow;
+  const activeProjects = activeProjectResult.count ?? 0;
   const maxProjects = autopilot?.max_active_projects ?? 0;
   const capacityAvailable = maxProjects > 0
     ? Math.max(0, Math.round(((maxProjects - activeProjects) / maxProjects) * 100))
     : null;
-  const emailActionsThisMonth = externalActions.filter(
-    (action) => action.channel === "email" && ["completed", "sent", "succeeded"].includes(action.status ?? ""),
-  ).length;
+  const emailActionsThisMonth = emailActionResult.count ?? 0;
   const autopilotState = autopilot?.state ? humanize(autopilot.state) : "Not configured";
   const health = autopilot?.blocked_reason ? "Needs attention" : autopilot ? "Healthy" : "Setup required";
+  const activeSources = sourceCards.filter((card) => (summary.sources[card.slug] ?? 0) > 0).length;
 
   return (
     <main className={styles.enginePage}>
@@ -160,8 +158,8 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           <Link href="/dashboard/plugins">Manage sources</Link>
         </div>
         <div className={styles.sourceGrid}>
-          {sourceCards.map(({ slug, label, aliases, icon: Icon, tone }) => {
-            const count = leads.filter((lead) => aliases.includes(lead.source as never)).length;
+          {sourceCards.map(({ slug, label, icon: Icon, tone }) => {
+            const count = summary.sources[slug] ?? 0;
             const share = Math.round((count / totalLeadCount) * 100);
             return (
               <Link className={styles.sourceCard} href={`/dashboard/leads/sources/${slug}`} key={slug}>
@@ -230,7 +228,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
               <div><Activity size={15} /><span>Status</span><strong className={styles.good}>{autopilotState}</strong></div>
               <div><ShieldCheck size={15} /><span>Health</span><strong className={autopilot?.blocked_reason ? styles.bad : styles.good}>{health}</strong></div>
               <div><CircleDollarSign size={15} /><span>Studio Capacity</span><strong>{capacityAvailable === null ? "Not set" : `${capacityAvailable}% available`}</strong></div>
-              <div><Sparkles size={15} /><span>Active Sources</span><strong>{sourceCards.filter((card) => leads.some((lead) => card.aliases.includes(lead.source as never))).length}</strong></div>
+              <div><Sparkles size={15} /><span>Active Sources</span><strong>{activeSources}</strong></div>
               <div><Mail size={15} /><span>Emails Sent This Month</span><strong>{emailActionsThisMonth}</strong></div>
             </div>
           </section>

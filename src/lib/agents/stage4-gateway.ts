@@ -34,12 +34,9 @@ export function stageFourGatewayUrl() {
 }
 
 export function stageFourGatewaySecret() {
-  return (
-    process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET?.trim() ||
-    process.env.ORBIT_AUTOPILOT_WORKER_SECRET?.trim() ||
-    process.env.CRON_SECRET?.trim() ||
-    null
-  );
+  // Gateway signing has its own credential domain. Worker and cron credentials
+  // are never reused as cryptographic signing keys.
+  return process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET?.trim() || null;
 }
 
 export function isStageFourGatewayConfigured() {
@@ -95,7 +92,7 @@ async function dispatchLegacyHttpGateway(
       ok: false,
       provider: "orbit_gateway",
       providerRequestId: null,
-      responseSummary: { blocked: true, reason: "Legacy external gateway URL or secret is missing." },
+      responseSummary: { blocked: true, reason: "Legacy external gateway URL or independent signing secret is missing." },
       errorCode: "gateway_not_configured",
     };
   }

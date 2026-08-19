@@ -870,7 +870,8 @@ $$;
 
 reset role;
 update public.foundry_task_assignments
-set due_at = now() - interval '1 hour'
+set starts_at = now() - interval '2 hours',
+    due_at = now() - interval '1 hour'
 where id = (
   select assignment_b_id
   from foundry_hardening_context

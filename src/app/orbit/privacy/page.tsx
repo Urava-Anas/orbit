@@ -2,53 +2,74 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Orbit Operator Privacy",
-  description: "Privacy and security information for the private Orbit Operator GPT connection.",
+  title: "Orbit Privacy & Data Controls",
+  description: "Privacy, security, retention and deletion information for Urava Orbit.",
 };
 
-export default function OrbitOperatorPrivacyPage() {
+export default function OrbitPrivacyPage() {
   return (
     <main className="legal-page">
       <article className="legal-card">
         <span className="eyebrow">Urava Orbit</span>
-        <h1>Orbit Operator privacy and security</h1>
+        <h1>Orbit privacy and data controls</h1>
         <p>
-          Orbit Operator is a private founder connection used to read and operate
-          Urava&apos;s own Orbit and Foundry systems.
+          Orbit processes organisation, account and workflow data only to provide the
+          features a user or workspace enables. Tenant data is separated by workspace
+          access controls and database row-level security.
         </p>
 
-        <h2>Authentication</h2>
+        <h2>Data Orbit processes</h2>
         <p>
-          The connection uses a revocable bearer key. Orbit stores only a SHA-256
-          hash and a short display prefix; the plaintext key is shown once when it
-          is generated.
+          Depending on enabled modules, this may include account identity, organisation
+          membership, leads and client records, projects, Foundry learning records,
+          integration metadata, automation events and security/audit logs.
         </p>
 
-        <h2>Data processed</h2>
+        <h2>Connected services</h2>
         <p>
-          Depending on the action, Orbit may return or update Foundry student,
-          task, submission, progress and integration records. The connection is
-          intended only for the authorized Urava founder account.
+          OAuth tokens and API credentials are handled server-side and encrypted before
+          storage. Orbit requests provider permissions for the selected integration and
+          marks a connection ready only after the required capability has been verified.
         </p>
 
-        <h2>Audit and retention</h2>
+        <h2>Use and sharing</h2>
         <p>
-          Every action records its operation, request ID, result, status and
-          timestamp. Sensitive task instructions and submission feedback are not
-          copied into the action-call summary log.
+          Orbit uses data to operate the requested workspace workflows, security controls
+          and integrations. Data is sent to a connected provider only when that provider is
+          needed for an authorised action. Orbit does not expose workspace data to another
+          tenant through the application data layer.
         </p>
 
-        <h2>Control</h2>
+        <h2>Retention</h2>
         <p>
-          The founder can revoke a key immediately from Orbit. Revoked or expired
-          keys cannot execute actions.
+          Workspace data remains while the workspace is active unless it is deleted sooner.
+          Security and operational records are retained only as needed for integrity,
+          troubleshooting, legal obligations and abuse prevention. Provider credentials are
+          revoked or removed when their connection is disconnected or the workspace is deleted.
         </p>
 
-        <h2>Write safeguards</h2>
+        <h2>Account deletion</h2>
         <p>
-          V1 exposes only specific governed actions. It does not expose user
-          deletion, role changes, raw SQL, infrastructure credentials or database
-          administration.
+          Users can initiate permanent deletion from Orbit. Owned workspaces and their tenant
+          records are deleted with the account. Historical records in another organisation
+          may remain as business records while the deleted user attribution is removed.
+        </p>
+        <Link className="button button-danger" href="/account/delete">
+          Delete Orbit account
+        </Link>
+
+        <h2>Security</h2>
+        <p>
+          Orbit uses authenticated sessions, tenant-scoped database policies, encrypted
+          secrets, least-privilege service identities, audit trails, request quotas and
+          governed approval paths for sensitive automation.
+        </p>
+
+        <h2>Your controls</h2>
+        <p>
+          You can disconnect integrations, revoke active sessions, reset credentials and
+          delete your account from Orbit. Organisation owners control workspace membership
+          and business records within their tenant.
         </p>
 
         <Link className="button button-primary" href="/login">

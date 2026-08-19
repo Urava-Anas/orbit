@@ -5,8 +5,7 @@ declare const Deno: {
   serve(handler: (request: Request) => Response | Promise<Response>): void;
 };
 
-const ORBIT_PROVIDER_REPLY_URL =
-  "https://orbit-two-delta.vercel.app/api/internal/provider-reply";
+const MAX_WEBHOOK_BYTES = 512 * 1024;
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -25,12 +24,6 @@ function toHex(buffer: ArrayBuffer) {
   return Array.from(new Uint8Array(buffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function toBase64(bytes: Uint8Array) {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 function fromBase64(value: string) {
@@ -96,6 +89,41 @@ async function providerSecret(
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+async function runtimeUrl(
+  supabaseUrl: string,
+  serviceRole: string,
+  key: "provider_reply_url",
+  expectedPath: string,
+) {
+  const url = new URL(`${supabaseUrl}/rest/v1/orbit_runtime_config`);
+  url.searchParams.set("key", `eq.${key}`);
+  url.searchParams.set("select", "value");
+  url.searchParams.set("limit", "1");
+  const response = await fetch(url, {
+    headers: {
+      apikey: serviceRole,
+      Authorization: `Bearer ${serviceRole}`,
+    },
+    signal: AbortSignal.timeout(8_000),
+  });
+  const rows = (await response.json().catch(() => [])) as Array<{ value?: string }>;
+  const value = rows[0]?.value?.trim();
+  if (!response.ok || !value) throw new Error("Provider reply endpoint is not configured.");
+
+  const parsed = new URL(value);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== expectedPath ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error("Provider reply endpoint is outside the reviewed HTTPS route.");
+  }
+  return parsed.toString();
+}
+
 async function mintInvocation(supabaseUrl: string, serviceRole: string) {
   const token = randomToken();
   const tokenHash = await sha256(token);
@@ -108,42 +136,23 @@ async function mintInvocation(supabaseUrl: string, serviceRole: string) {
       "Content-Type": "application/json",
       Prefer: "return=representation",
     },
-    body: JSON.stringify({ token_hash: tokenHash, expires_at: expiresAt }),
+    body: JSON.stringify({
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      purpose: "provider_reply",
+    }),
     signal: AbortSignal.timeout(8_000),
   });
   const rows = (await response.json().catch(() => [])) as Array<{ id?: string }>;
   const id = rows[0]?.id;
-  if (!response.ok || !id) throw new Error("Unable to mint one-time provider invocation.");
+  if (!response.ok || !id) throw new Error("Unable to mint one-time provider capability.");
   return { id, token };
-}
-
-async function encryptServiceRole(serviceRole: string, token: string) {
-  const keyBytes = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(token),
-  );
-  const key = await crypto.subtle.importKey(
-    "raw",
-    keyBytes,
-    { name: "AES-GCM" },
-    false,
-    ["encrypt"],
-  );
-  const iv = new Uint8Array(12);
-  crypto.getRandomValues(iv);
-  const encrypted = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      key,
-      new TextEncoder().encode(serviceRole),
-    ),
-  );
-  return { iv: toBase64(iv), ciphertext: toBase64(encrypted) };
 }
 
 async function forwardReply(
   supabaseUrl: string,
   serviceRole: string,
+  replyUrl: string,
   payload: {
     providerEventId: string;
     channel: "email" | "whatsapp";
@@ -153,18 +162,16 @@ async function forwardReply(
   },
 ) {
   const invocation = await mintInvocation(supabaseUrl, serviceRole);
-  const encryptedIdentity = await encryptServiceRole(serviceRole, invocation.token);
-  const response = await fetch(ORBIT_PROVIDER_REPLY_URL, {
+  const response = await fetch(replyUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Orbit-Scheduler-Invocation": invocation.id,
       "X-Orbit-Scheduler-Token": invocation.token,
-      "X-Orbit-Supabase-Iv": encryptedIdentity.iv,
-      "X-Orbit-Supabase-Ciphertext": encryptedIdentity.ciphertext,
-      "User-Agent": "Orbit-Supabase-Stage4-Provider-Webhook/1.0",
+      "User-Agent": "Orbit-Supabase-Stage4-Provider-Webhook/2.0",
     },
     body: JSON.stringify(payload),
+    redirect: "error",
     signal: AbortSignal.timeout(20_000),
   });
   const body = await response.json().catch(() => ({}));
@@ -281,9 +288,23 @@ Deno.serve(async (request: Request) => {
   }
 
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BYTES) {
+    return json({ error: "Webhook payload too large." }, 413);
+  }
   const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > MAX_WEBHOOK_BYTES) {
+    return json({ error: "Webhook payload too large." }, 413);
+  }
 
   try {
+    const replyUrl = await runtimeUrl(
+      supabaseUrl,
+      serviceRole,
+      "provider_reply_url",
+      "/api/internal/provider-reply",
+    );
+
     if (provider === "whatsapp") {
       const appSecret = await providerSecret(
         supabaseUrl,
@@ -309,14 +330,14 @@ Deno.serve(async (request: Request) => {
             const message = record(messageValue);
             const providerMessageId = typeof message.id === "string" ? message.id : "";
             const sender = typeof message.from === "string" ? message.from : "";
-            const responseText = whatsappMessageText(message);
+            const responseText = whatsappMessageText(message).slice(0, 4000);
             if (!providerMessageId || !sender || !responseText) continue;
             const timestampSeconds = Number(message.timestamp);
             results.push(
-              await forwardReply(supabaseUrl, serviceRole, {
+              await forwardReply(supabaseUrl, serviceRole, replyUrl, {
                 providerEventId: `whatsapp:${providerMessageId}`,
                 channel: "whatsapp",
-                sender,
+                sender: sender.slice(0, 500),
                 responseText,
                 occurredAt: Number.isFinite(timestampSeconds)
                   ? new Date(timestampSeconds * 1000).toISOString()
@@ -347,19 +368,21 @@ Deno.serve(async (request: Request) => {
         `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`,
         {
           headers: { Authorization: `Bearer ${apiKey}` },
+          redirect: "error",
           signal: AbortSignal.timeout(12_000),
         },
       );
       const email = (await emailResponse.json().catch(() => ({}))) as Record<string, unknown>;
       if (!emailResponse.ok) return json({ error: "Unable to retrieve received email." }, 502);
-      const responseText =
+      const responseText = (
         (typeof email.text === "string" && email.text.trim()) ||
-        (typeof email.html === "string" ? plainText(email.html) : "");
+        (typeof email.html === "string" ? plainText(email.html) : "")
+      ).slice(0, 4000);
       if (!responseText) return json({ ok: true, ignored: true, reason: "empty_email_body" });
-      const result = await forwardReply(supabaseUrl, serviceRole, {
+      const result = await forwardReply(supabaseUrl, serviceRole, replyUrl, {
         providerEventId: `resend:${deliveryId}`,
         channel: "email",
-        sender,
+        sender: sender.slice(0, 500),
         responseText,
         occurredAt: typeof event.created_at === "string" ? event.created_at : undefined,
       });
@@ -369,9 +392,6 @@ Deno.serve(async (request: Request) => {
     return json({ error: "Unsupported provider." }, 404);
   } catch (error) {
     console.error("Stage 4 provider webhook failed safely", error);
-    return json(
-      { error: error instanceof Error ? error.message : "Provider webhook failed safely." },
-      502,
-    );
+    return json({ error: "Provider webhook failed safely." }, 502);
   }
 });
