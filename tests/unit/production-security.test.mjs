@@ -56,11 +56,15 @@ test("internal signing domains do not reuse cron or worker credentials", async (
   assert.doesNotMatch(inbound, /ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET/);
 });
 
-test("production configuration has no baked-in Orbit Supabase project", async () => {
+test("production public Supabase config is explicit and preview builds fail closed", async () => {
   const config = await source("src/lib/supabase/config.ts");
-  assert.doesNotMatch(config, /sjtgydpwsnjwxlwbtpgf/);
+  assert.match(config, /VERCEL_ENV\s*===\s*"production"/);
+  assert.match(config, /VERCEL\s*===\s*"1"/);
   assert.match(config, /NEXT_PUBLIC_SUPABASE_URL/);
-  assert.match(config, /required/);
+  assert.match(config, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(config, /sb_publishable_/);
+  assert.match(config, /Preview and development builds never fall back to production data/);
+  assert.doesNotMatch(config, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
 });
 
 test("workspace provider credentials are preferred and platform mode is explicit", async () => {
