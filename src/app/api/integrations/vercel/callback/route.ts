@@ -10,10 +10,10 @@ import {
 export const dynamic = "force-dynamic";
 
 function back(request: Request, key: "error" | "notice", value: string) {
-  const url = new URL("/dashboard/connect", request.url);
-  url.searchParams.set("integration", "vercel");
+  const url = new URL("/dashboard/plugins", request.url);
+  url.searchParams.set("plugin", "app:vercel");
+  url.searchParams.set("connect", "vercel");
   url.searchParams.set(key, value);
-  url.hash = "integrations";
   return NextResponse.redirect(url);
 }
 
