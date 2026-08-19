@@ -4,13 +4,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOrbitAccess, orbitHomePath } from "@/lib/access";
+import { orbitBaseUrl } from "@/lib/integration-connections";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 const emailSchema = z.string().trim().email().max(254);
 const passwordSchema = z.string().min(12).max(128);
-const productionOrbitOrigin =
-  process.env.NEXT_PUBLIC_ORBIT_URL?.replace(/\/$/, "") ??
-  "https://orbit-two-delta.vercel.app";
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -22,96 +21,94 @@ function messagePath(path: string, type: "error" | "notice", message: string) {
 }
 
 async function requestOrigin() {
-  if (process.env.NODE_ENV === "production") return productionOrbitOrigin;
+  if (process.env.NODE_ENV === "production") return orbitBaseUrl();
 
   const requestHeaders = await headers();
   const origin = requestHeaders.get("origin");
   if (origin) return origin;
 
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
-  const host =
-    requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-  if (!host) throw new Error("Request host is unavailable.");
-
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? "http";
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  if (!host) return orbitBaseUrl();
   return `${protocol}://${host}`;
 }
 
+async function requestSubject(email: string) {
+  const requestHeaders = await headers();
+  const forwarded = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const realIp = requestHeaders.get("x-real-ip")?.trim();
+  return `${email.toLowerCase()}:${forwarded || realIp || "unknown"}`;
+}
+
 export async function login(formData: FormData) {
-  const parsed = z
-    .object({ email: emailSchema, password: passwordSchema })
-    .safeParse({
-      email: value(formData, "email"),
-      password: value(formData, "password"),
-    });
+  const parsed = z.object({ email: emailSchema, password: passwordSchema }).safeParse({
+    email: value(formData, "email"),
+    password: value(formData, "password"),
+  });
 
   if (!parsed.success) {
-    redirect(
-      messagePath(
-        "/login",
-        "error",
-        "Use a valid email and 12+ character password.",
-      ),
-    );
+    redirect(messagePath("/login", "error", "Use a valid email and 12+ character password."));
+  }
+
+  const quota = await consumeRateLimit({
+    scope: "auth.login",
+    subject: await requestSubject(parsed.data.email),
+    limit: 10,
+    windowSeconds: 600,
+  });
+  if (!quota.allowed) {
+    redirect(messagePath("/login", "error", "Too many sign-in attempts. Try again later."));
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-
-  if (error) {
-    redirect(messagePath("/login", "error", "Email or password is incorrect."));
-  }
+  if (error) redirect(messagePath("/login", "error", "Email or password is incorrect."));
 
   const context = await getOrbitAccess();
-  if (!context) {
-    redirect(
-      messagePath(
-        "/login",
-        "error",
-        "Sign-in session could not be verified.",
-      ),
-    );
-  }
+  if (!context) redirect(messagePath("/login", "error", "Sign-in session could not be verified."));
   redirect(orbitHomePath(context.access));
 }
 
 export async function signInWithGoogle() {
+  const requestHeaders = await headers();
+  const subject = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const quota = await consumeRateLimit({
+    scope: "auth.google.start",
+    subject,
+    limit: 20,
+    windowSeconds: 600,
+  });
+  if (!quota.allowed) redirect(messagePath("/login", "error", "Too many sign-in attempts. Try again later."));
+
   const origin = await requestOrigin();
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
       redirectTo: `${origin}/auth/callback`,
-      queryParams: {
-        prompt: "select_account",
-      },
+      queryParams: { prompt: "select_account" },
     },
   });
 
   if (error || !data.url) {
-    console.error("Orbit Google sign-in failed", {
-      code: error?.code,
-      status: error?.status,
-    });
-
-    redirect(
-      messagePath(
-        "/login",
-        "error",
-        "Google sign-in is unavailable right now. Use email or try again.",
-      ),
-    );
+    console.error("Orbit Google sign-in failed", { code: error?.code, status: error?.status });
+    redirect(messagePath("/login", "error", "Google sign-in is unavailable right now. Use email or try again."));
   }
-
   redirect(data.url);
 }
 
 export async function requestPasswordReset(formData: FormData) {
   const email = emailSchema.safeParse(value(formData, "email"));
+  if (!email.success) redirect(messagePath("/forgot-password", "error", "Enter a valid email."));
 
-  if (!email.success) {
-    redirect(
-      messagePath("/forgot-password", "error", "Enter a valid email."),
-    );
+  const quota = await consumeRateLimit({
+    scope: "auth.password_reset",
+    subject: await requestSubject(email.data),
+    limit: 5,
+    windowSeconds: 3600,
+  });
+  if (!quota.allowed) {
+    redirect(messagePath("/forgot-password", "notice", "If that account exists, a secure reset link is on its way."));
   }
 
   const origin = await requestOrigin();
@@ -120,47 +117,21 @@ export async function requestPasswordReset(formData: FormData) {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
   });
 
-  redirect(
-    messagePath(
-      "/forgot-password",
-      "notice",
-      "If that account exists, a secure reset link is on its way.",
-    ),
-  );
+  redirect(messagePath("/forgot-password", "notice", "If that account exists, a secure reset link is on its way."));
 }
 
 export async function updatePassword(formData: FormData) {
   const password = passwordSchema.safeParse(value(formData, "password"));
-
   if (!password.success) {
-    redirect(
-      messagePath(
-        "/reset-password",
-        "error",
-        "Use a password with at least 12 characters.",
-      ),
-    );
+    redirect(messagePath("/reset-password", "error", "Use a password with at least 12 characters."));
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({
-    password: password.data,
-  });
-
-  if (error) {
-    redirect(
-      messagePath(
-        "/reset-password",
-        "error",
-        "The reset link expired. Request a new one.",
-      ),
-    );
-  }
+  const { error } = await supabase.auth.updateUser({ password: password.data });
+  if (error) redirect(messagePath("/reset-password", "error", "The reset link expired. Request a new one."));
 
   await supabase.auth.signOut({ scope: "others" });
-  redirect(
-    messagePath("/dashboard/settings", "notice", "Password updated."),
-  );
+  redirect(messagePath("/dashboard/settings", "notice", "Password updated."));
 }
 
 export async function signOut() {
@@ -172,11 +143,5 @@ export async function signOut() {
 export async function signOutEverywhere() {
   const supabase = await createClient();
   await supabase.auth.signOut({ scope: "global" });
-  redirect(
-    messagePath(
-      "/login",
-      "notice",
-      "All Orbit sessions have been securely signed out.",
-    ),
-  );
+  redirect(messagePath("/login", "notice", "All Orbit sessions have been securely signed out."));
 }
