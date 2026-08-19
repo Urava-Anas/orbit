@@ -18,10 +18,10 @@ type Connection = {
 };
 
 function back(request: Request, provider: string, key: "error" | "notice", value: string) {
-  const url = new URL("/dashboard/connect", request.url);
-  url.searchParams.set("integration", provider);
+  const url = new URL("/dashboard/plugins", request.url);
+  url.searchParams.set("plugin", `app:${provider}`);
+  url.searchParams.set("connect", provider);
   url.searchParams.set(key, value);
-  url.hash = "integrations";
   return NextResponse.redirect(url, 303);
 }
 
