@@ -108,7 +108,7 @@ export function GeoapifyConnectionFlow({ open, installed, connected, canManage, 
                 <input id="geoapify-flow-key" name="apiKey" type="password" minLength={20} maxLength={240} autoComplete="off" required placeholder="Paste your Geoapify API key" />
               </div>
             </label>
-            <div className={styles.inputHelp}><LockKeyhole size={13} /><span>Validated on Orbit's server, then encrypted before persistence. It is never embedded in frontend JavaScript.</span></div>
+            <div className={styles.inputHelp}><LockKeyhole size={13} /><span>Validated on Orbit&apos;s server, then encrypted before persistence. It is never embedded in frontend JavaScript.</span></div>
             <button className={styles.primary} type="submit"><ShieldCheck size={15} /> Connect & validate</button>
           </form>
           <a className={styles.secondary} href="https://myprojects.geoapify.com" target="_blank" rel="noreferrer">How to find my key <ExternalLink size={13} /></a>
