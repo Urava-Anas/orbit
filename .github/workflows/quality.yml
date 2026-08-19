@@ -77,8 +77,14 @@ jobs:
           set -euo pipefail
           for test_file in supabase/tests/*.sql; do
             echo "Running ${test_file}"
-            psql postgresql://postgres:postgres@127.0.0.1:54322/postgres \
-              -v ON_ERROR_STOP=1 -f "${test_file}"
+            if ! psql postgresql://postgres:postgres@127.0.0.1:54322/postgres \
+              -v ON_ERROR_STOP=1 -f "${test_file}" > /tmp/orbit-db-test.log 2>&1; then
+              echo "::error file=${test_file}::Database acceptance suite failed"
+              echo "---- failing test: ${test_file} ----"
+              tail -n 80 /tmp/orbit-db-test.log
+              exit 1
+            fi
+            echo "PASS ${test_file}"
           done
 
       - name: Unit and security-contract tests
