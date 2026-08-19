@@ -18,7 +18,10 @@ export default async function ConnectRedirectPage({ searchParams }: PageProps) {
   const query = await searchParams;
   const params = new URLSearchParams();
 
-  if (query.integration) params.set("connection", query.integration);
+  if (query.integration) {
+    params.set("plugin", `app:${query.integration}`);
+    params.set("connect", query.integration);
+  }
   if (query.notice) params.set("notice", query.notice);
   if (query.error) params.set("error", query.error);
 
