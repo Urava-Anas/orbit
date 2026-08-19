@@ -64,11 +64,22 @@ begin
   );
   if c<>8 then raise exception 'Stage 4 expected 8 governed irreversible capabilities, got %',c; end if;
 
-  select id into agent_id
-  from public.orbit_agents
-  where workspace_id=w and agent_key='outreach'
-  limit 1;
-  if agent_id is null then raise exception 'Stage 4 test requires the Outreach agent'; end if;
+  -- Keep the suite isolated: prior acceptance tests run in rolled-back
+  -- transactions, so Stage 4 must create its own synthetic Outreach agent.
+  insert into public.orbit_agents(
+    workspace_id,agent_key,name,kind,status,mission,instructions,config,created_by
+  ) values(
+    w,'outreach','Outreach Agent','specialist','active',
+    'Synthetic Stage 4 outreach agent used only by the acceptance suite.',
+    'Acceptance-test dry run only. Never execute a real external action.',
+    jsonb_build_object('executionMode','dry_run','externalActionsEnabled',false),u
+  )
+  on conflict(workspace_id,agent_key) do update
+  set status='active',
+      config=excluded.config
+  returning id into agent_id;
+
+  if agent_id is null then raise exception 'Stage 4 could not create the synthetic Outreach agent'; end if;
 
   insert into public.leads(
     workspace_id,name,company,email,source,stage,currency,created_by
