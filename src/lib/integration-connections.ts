@@ -29,6 +29,7 @@ export type IntegrationState = {
 };
 
 const STATE_TTL_MS = 10 * 60 * 1000;
+const REVIEWED_ORBIT_PRODUCTION_ORIGIN = "https://orbit-two-delta.vercel.app";
 
 function integrationSecret() {
   const value = process.env.INTEGRATION_SECRET?.trim();
@@ -183,12 +184,21 @@ export function orbitBaseUrl() {
     process.env.FOUNDRY_APP_URL ??
     ""
   ).trim();
-  if (!configured) {
+
+  const productionOrigin =
+    process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production"
+      ? REVIEWED_ORBIT_PRODUCTION_ORIGIN
+      : "";
+  const resolved = configured || productionOrigin;
+
+  if (!resolved) {
     if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
-    throw new Error("NEXT_PUBLIC_APP_URL is required in production.");
+    throw new Error(
+      "NEXT_PUBLIC_APP_URL is required outside the reviewed Orbit Vercel production environment.",
+    );
   }
 
-  const url = new URL(configured);
+  const url = new URL(resolved);
   if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
     throw new Error("Production Orbit origin must use HTTPS.");
   }
