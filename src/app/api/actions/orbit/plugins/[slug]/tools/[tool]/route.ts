@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PluginRuntimeError } from "@/lib/plugins/mcp";
 import { invokePluginToolForOperator, parseOrbitOperatorBearer } from "@/lib/plugins/operator";
+import { consumeRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +29,19 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ ok: false, error: "payload_too_large" }, { status: 413 });
   }
 
+  const quota = await consumeRateLimit({
+    scope: "plugin.operator.invoke",
+    subject: createHash("sha256").update(token, "utf8").digest("hex"),
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "plugin_rate_limited" },
+      { status: 429, headers: { "Cache-Control": "no-store", ...rateLimitHeaders(quota) } },
+    );
+  }
+
   const admin = createAdminClient();
   if (!admin) {
     return NextResponse.json(
@@ -48,7 +63,7 @@ export async function POST(request: Request, context: RouteContext) {
     });
     return NextResponse.json(
       { ok: true, ...result },
-      { headers: { "Cache-Control": "no-store" } },
+      { headers: { "Cache-Control": "no-store", ...rateLimitHeaders(quota) } },
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
