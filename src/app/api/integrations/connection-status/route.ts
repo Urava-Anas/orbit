@@ -32,6 +32,12 @@ function platformReady(provider: string) {
   return false;
 }
 
+function verifiedCapabilities(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return [];
+  const raw = (metadata as Record<string, unknown>).verifiedCapabilities;
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
 export async function GET(request: Request) {
   const provider = new URL(request.url).searchParams.get("provider") ?? "";
   if (!supported.has(provider)) {
@@ -60,7 +66,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("integration_connections")
-    .select("status,provider_account_name,provider_account_type,selected_assets,updated_at")
+    .select("status,provider_account_name,provider_account_type,selected_assets,metadata,token_expires_at,updated_at")
     .eq("workspace_id", workspace.id)
     .eq("provider", provider)
     .maybeSingle();
@@ -70,15 +76,29 @@ export async function GET(request: Request) {
   }
 
   const selectedAssets = Array.isArray(data?.selected_assets) ? data.selected_assets : [];
+  const capabilities = verifiedCapabilities(data?.metadata);
+  const expiresAt = data?.token_expires_at ? Date.parse(data.token_expires_at) : null;
+  const expired = expiresAt !== null && Number.isFinite(expiresAt) && expiresAt <= Date.now() + 60_000;
+  const capabilityVerified = capabilities.length > 0;
+  const storedConnected = data?.status === "connected";
+  const connected = storedConnected && capabilityVerified && !expired;
+  const status = expired
+    ? "reauthorization_required"
+    : storedConnected && !capabilityVerified
+      ? "verification_required"
+      : data?.status ?? "disconnected";
+
   return NextResponse.json(
     {
       provider,
-      connected: data?.status === "connected",
-      status: data?.status ?? "disconnected",
+      connected,
+      status: connected ? "connected" : status,
       accountName: data?.provider_account_name ?? null,
       accountType: data?.provider_account_type ?? null,
       assetCount: selectedAssets.length,
       platformReady: platformReady(provider),
+      verifiedCapabilities: capabilities,
+      tokenExpiresAt: data?.token_expires_at ?? null,
       updatedAt: data?.updated_at ?? null,
     },
     { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } },
