@@ -36,7 +36,7 @@ export async function PluginWorkspaceEntry() {
       description: "Give Orbit approved repository access for delivery, automation and website work.",
       status: connections.get("github") === "connected" ? "connected" : githubAppReady() ? "ready" : "setup",
       kind: "app",
-      href: "/dashboard/plugins?connection=github",
+      href: "/dashboard/plugins?plugin=app%3Agithub",
       tags: ["development", "code", "repositories", "website", "delivery", "automation", "production"],
     },
     {
@@ -46,7 +46,7 @@ export async function PluginWorkspaceEntry() {
       description: "Connect approved projects so Orbit can inspect and operate production delivery.",
       status: connections.get("vercel") === "connected" ? "connected" : vercelIntegrationReady() ? "ready" : "setup",
       kind: "app",
-      href: "/dashboard/plugins?connection=vercel",
+      href: "/dashboard/plugins?plugin=app%3Avercel",
       tags: ["development", "deployment", "website", "production", "delivery", "projects"],
     },
     {
@@ -56,7 +56,7 @@ export async function PluginWorkspaceEntry() {
       description: "Bring verified search visibility and indexing data into Orbit growth workflows.",
       status: connections.get("google_search_console") === "connected" ? "connected" : "setup",
       kind: "app",
-      href: "/dashboard/plugins?connection=google_search_console",
+      href: "/dashboard/plugins?plugin=app%3Agoogle_search_console",
       tags: ["seo", "search", "growth", "website", "analytics", "indexing"],
     },
     {
@@ -66,7 +66,7 @@ export async function PluginWorkspaceEntry() {
       description: "Measure traffic, behaviour, acquisition and conversion inside Orbit.",
       status: connections.get("google_analytics") === "connected" ? "connected" : "setup",
       kind: "app",
-      href: "/dashboard/plugins?connection=google_analytics",
+      href: "/dashboard/plugins?plugin=app%3Agoogle_analytics",
       tags: ["analytics", "growth", "traffic", "conversion", "evidence", "website"],
     },
     {
@@ -76,7 +76,7 @@ export async function PluginWorkspaceEntry() {
       description: "Connect approved social assets for marketing, publishing and lead operations.",
       status: connections.get("meta") === "connected" ? "connected" : "setup",
       kind: "app",
-      href: "/dashboard/plugins?connection=meta",
+      href: "/dashboard/plugins?plugin=app%3Ameta",
       tags: ["growth", "lead", "marketing", "publishing", "content", "social", "facebook", "instagram"],
     },
     {
@@ -86,7 +86,7 @@ export async function PluginWorkspaceEntry() {
       description: "Use approved organisation assets for B2B publishing, outreach and lead workflows.",
       status: connections.get("linkedin") === "connected" ? "connected" : "setup",
       kind: "app",
-      href: "/dashboard/plugins?connection=linkedin",
+      href: "/dashboard/plugins?plugin=app%3Alinkedin",
       tags: ["growth", "lead", "marketing", "publishing", "content", "social", "linkedin", "outreach"],
     },
     {
@@ -96,7 +96,7 @@ export async function PluginWorkspaceEntry() {
       description: "Enable founder-governed AI actions through revocable workspace credentials.",
       status: activeOperator ? "connected" : "ready",
       kind: "app",
-      href: "/dashboard/plugins?connection=operator",
+      href: "/dashboard/plugins?plugin=app%3Aoperator",
       tags: ["ai", "automation", "operator", "workflow", "operations", "founder"],
     },
   ];
@@ -117,7 +117,7 @@ export async function PluginWorkspaceEntry() {
       description: catalog.short_description,
       status,
       kind: "plugin",
-      href: `/dashboard/plugins/${catalog.slug}`,
+      href: `/dashboard/plugins?plugin=${encodeURIComponent(`plugin:${catalog.slug}`)}`,
       tags: [
         manifest.category,
         catalog.developer_name,
