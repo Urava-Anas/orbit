@@ -18,6 +18,11 @@ type ConnectionTokenRow = {
   metadata: Record<string, unknown> | null;
 };
 
+type RefreshedGoogleToken = {
+  accessToken: string;
+  expiresIn: number | null;
+};
+
 function isRefreshable(provider: OAuthProvider): provider is RefreshableProvider {
   return provider === "google_search_console" || provider === "google_analytics";
 }
@@ -28,7 +33,7 @@ function expiresSoon(value: string | null) {
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now() + 5 * 60 * 1000;
 }
 
-async function refreshGoogleToken(refreshToken: string) {
+async function refreshGoogleToken(refreshToken: string): Promise<RefreshedGoogleToken> {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) throw new Error("Google OAuth refresh credentials are unavailable.");
@@ -49,11 +54,12 @@ async function refreshGoogleToken(refreshToken: string) {
   const payload = (await response.json().catch(() => ({}))) as {
     access_token?: string;
     expires_in?: number;
-    scope?: string;
-    token_type?: string;
   };
   if (!response.ok || !payload.access_token) throw new Error("Google OAuth token refresh failed.");
-  return payload;
+  return {
+    accessToken: payload.access_token,
+    expiresIn: typeof payload.expires_in === "number" ? payload.expires_in : null,
+  };
 }
 
 /**
@@ -83,8 +89,8 @@ export async function getFreshIntegrationAccessToken(input: {
     const refreshToken = decryptIntegrationSecret(row.refresh_token_ciphertext);
     const refreshed = await refreshGoogleToken(refreshToken);
     const now = new Date().toISOString();
-    const expiresAt = refreshed.expires_in
-      ? new Date(Date.now() + Math.max(60, refreshed.expires_in) * 1000).toISOString()
+    const expiresAt = refreshed.expiresIn
+      ? new Date(Date.now() + Math.max(60, refreshed.expiresIn) * 1000).toISOString()
       : null;
     const metadata = {
       ...(row.metadata ?? {}),
@@ -93,7 +99,7 @@ export async function getFreshIntegrationAccessToken(input: {
     const update = await input.supabase
       .from("integration_connections")
       .update({
-        access_token_ciphertext: encryptIntegrationSecret(refreshed.access_token),
+        access_token_ciphertext: encryptIntegrationSecret(refreshed.accessToken),
         token_expires_at: expiresAt,
         metadata,
         updated_at: now,
@@ -102,7 +108,7 @@ export async function getFreshIntegrationAccessToken(input: {
       .eq("provider", input.provider)
       .eq("status", "connected");
     if (update.error) throw new Error("Refreshed OAuth token could not be persisted.");
-    return refreshed.access_token;
+    return refreshed.accessToken;
   } catch (error) {
     console.error("OAuth token refresh failed safely", {
       provider: input.provider,
