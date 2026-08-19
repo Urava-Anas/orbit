@@ -47,6 +47,7 @@ async function consumeSchedulerInvocation(
     const { data, error } = await admin.rpc("consume_stage4_scheduler_invocation", {
       p_id: invocationId,
       p_token: token,
+      p_purpose: "autopilot_worker",
     });
     return !error && data === true;
   } catch {
