@@ -2,16 +2,16 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   ArrowRight,
   Blocks,
   CheckCircle2,
-  ExternalLink,
-  LockKeyhole,
+  CircleAlert,
   PlugZap,
   Search,
   ShieldCheck,
   Sparkles,
-  Trash2,
+  Workflow,
 } from "lucide-react";
 import {
   SiGithub,
@@ -22,28 +22,32 @@ import {
   SiOpenai,
   SiVercel,
 } from "react-icons/si";
-import { OrbitActionKeyManager } from "@/components/foundry/OrbitActionKeyManager";
-import { formatFoundryDate } from "@/lib/foundry";
+import { getGeoapifyRuntimeStatus } from "@/lib/geoapify";
 import { githubAppReady, vercelIntegrationReady } from "@/lib/integration-connections";
 import { listOrbitActionKeys } from "@/lib/orbit-actions";
 import { getPluginMarketplace } from "@/lib/plugins/catalog";
 import {
   getWorkspacePluginConnections,
+  providerLabel,
   resolvePluginAppConnections,
 } from "@/lib/plugins/connections";
 import { requireWorkspace } from "@/lib/workspace";
-import { revokeOrbitActionKeyAction } from "../foundry/integrations/actions";
-import styles from "./plugins-hub.module.css";
+import {
+  approvePluginUpdate,
+  disablePlugin,
+  enablePlugin,
+  installPlugin,
+  uninstallPlugin,
+} from "./actions";
+import { PluginWorkspaceEntry } from "./PluginWorkspaceEntry";
+import styles from "./unified-plugins.module.css";
 
 export const metadata: Metadata = {
   title: "Plugins · Orbit",
   robots: { index: false, follow: false },
 };
 
-const orbitUrl = "https://orbit-two-delta.vercel.app";
-const githubSetupUrl = "https://github.com/settings/apps/new";
-
-type ConnectionStatus = "connected" | "available" | "pending";
+type ConnectionStatus = "connected" | "ready" | "setup";
 type ProviderId =
   | "github"
   | "vercel"
@@ -56,13 +60,9 @@ type ProviderId =
 type ConnectionRecord = {
   provider: string;
   status: "connected" | "attention" | "disconnected";
-  provider_installation_id: string | null;
-  provider_account_id: string | null;
   provider_account_name: string | null;
   provider_account_type: string | null;
   selected_assets: unknown;
-  metadata: unknown;
-  connected_at: string;
   updated_at: string;
 };
 
@@ -74,95 +74,82 @@ type Provider = {
   description: string;
   usedBy: string[];
   logo: ReactNode;
-  logoTone: string;
-  connectPath?: string;
-  manageUrl?: string;
   platformReady: boolean;
+  authType: string;
+  setupTime: string;
+  unlocks: Array<{ title: string; detail: string }>;
+  permissions: string[];
+  flow: string[];
 };
 
 type PageProps = {
   searchParams: Promise<{
     q?: string;
     category?: string;
-    connection?: string;
+    plugin?: string;
+    connect?: string;
     notice?: string;
     error?: string;
   }>;
 };
 
-function assetList(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-    .map((item) => ({
-      id: String(item.id ?? item.name ?? item.fullName ?? "asset"),
-      name: String(item.fullName ?? item.name ?? "Connected asset"),
-      detail:
-        typeof item.framework === "string"
-          ? item.framework
-          : item.private === true
-            ? "Private repository"
-            : item.private === false
-              ? "Repository"
-              : "Approved asset",
-      url: typeof item.url === "string" ? item.url : null,
-    }));
-}
+const categories = ["all", "connected", "Development", "Growth", "Analytics", "AI", "Plugins"] as const;
 
-function messageFor(code: string | undefined) {
+function noticeText(value?: string) {
+  if (!value) return null;
   const messages: Record<string, string> = {
-    github_connected:
-      "GitHub connected. Orbit can now use only the repositories approved during installation.",
-    vercel_connected:
-      "Vercel connected. Orbit stored the installation securely and can use the approved account and projects.",
-    github_disconnected: "GitHub access was disconnected from Orbit.",
-    vercel_disconnected: "Vercel access was disconnected from Orbit.",
+    github_connected: "GitHub connected. Approved repositories are now available to Orbit.",
+    vercel_connected: "Vercel connected. Approved projects are now available to Orbit.",
+    github_disconnected: "GitHub was disconnected from this workspace.",
+    vercel_disconnected: "Vercel was disconnected from this workspace.",
   };
-  return code ? messages[code] ?? "Connection updated." : null;
+  return messages[value] ?? value;
 }
 
-function errorFor(code: string | undefined) {
+function errorText(value?: string) {
+  if (!value) return null;
   const messages: Record<string, string> = {
-    github_platform_setup:
-      "Orbit's GitHub App still needs its one-time product-owner registration before normal users can connect.",
-    vercel_platform_setup:
-      "Orbit's Vercel Integration still needs its one-time product-owner registration before normal users can connect.",
-    github_oauth_incomplete: "GitHub did not return a complete installation response. Try connecting again.",
-    github_state_mismatch: "GitHub connection validation failed. Start the connection again from Orbit.",
-    github_installation_unverified: "Orbit could not verify that GitHub App installation.",
-    github_installation_token_failed:
-      "GitHub installed the app, but Orbit could not obtain temporary installation access.",
-    github_save_failed: "GitHub was authorized, but Orbit could not save the installation.",
-    github_callback_failed: "GitHub connection failed before completion. Try again.",
-    vercel_oauth_incomplete: "Vercel did not return a complete authorization response. Try connecting again.",
-    vercel_state_mismatch: "Vercel connection validation failed. Start the connection again from Orbit.",
-    vercel_oauth_exchange: "Vercel authorization could not be completed. Try again.",
-    vercel_save_failed: "Vercel was authorized, but Orbit could not save the installation.",
-    vercel_callback_failed: "Vercel connection failed before completion. Try again.",
-    integration_disconnect_failed:
-      "Orbit could not safely disconnect that provider. Manage access at the provider and try again.",
+    github_platform_setup: "GitHub connector setup is not enabled in production yet.",
+    vercel_platform_setup: "Vercel connector setup is not enabled in production yet.",
+    github_oauth_incomplete: "GitHub did not return a complete authorization response.",
+    github_state_mismatch: "GitHub connection validation failed. Start the connection again.",
+    github_installation_unverified: "Orbit could not verify the GitHub installation.",
+    github_installation_token_failed: "Orbit could not obtain temporary GitHub installation access.",
+    github_save_failed: "GitHub was authorized, but Orbit could not save the connection.",
+    github_callback_failed: "GitHub connection failed before completion.",
+    vercel_oauth_incomplete: "Vercel did not return a complete authorization response.",
+    vercel_state_mismatch: "Vercel connection validation failed. Start the connection again.",
+    vercel_oauth_exchange: "Vercel authorization could not be completed.",
+    vercel_save_failed: "Vercel was authorized, but Orbit could not save the connection.",
+    vercel_callback_failed: "Vercel connection failed before completion.",
+    integration_disconnect_failed: "Orbit could not safely disconnect that provider.",
   };
-  return code ? messages[code] ?? "The integration could not be completed." : null;
+  return messages[value] ?? value;
 }
 
-function connectionStatusClass(status: ConnectionStatus) {
-  if (status === "connected") return styles.connectionConnected;
-  if (status === "available") return styles.connectionAvailable;
-  return styles.connectionPending;
+function statusClass(status: ConnectionStatus | "installed" | "available" | "pending") {
+  if (status === "connected" || status === "installed") return styles.statusConnected;
+  if (status === "ready") return styles.statusReady;
+  return styles.statusPending;
 }
 
-function connectionStatusLabel(status: ConnectionStatus) {
+function statusLabel(status: ConnectionStatus) {
   if (status === "connected") return "Connected";
-  if (status === "available") return "Ready";
+  if (status === "ready") return "Ready to connect";
   return "Setup required";
 }
 
-function pluginStatusLabel(status: string | null) {
+function pluginStatusLabel(status: string | null, connected = false) {
+  if (connected) return "Connected";
   if (status === "installed") return "Installed";
   if (status === "disabled") return "Disabled";
   if (status === "pending_connections") return "Needs connection";
   if (status === "pending_review") return "Update approval";
   return "Available";
+}
+
+function assetCount(value: unknown) {
+  return Array.isArray(value) ? value.length : 0;
 }
 
 export default async function PluginsPage({ searchParams }: PageProps) {
@@ -175,17 +162,14 @@ export default async function PluginsPage({ searchParams }: PageProps) {
     listOrbitActionKeys(supabase, workspace.id),
     supabase
       .from("integration_connections")
-      .select(
-        "provider,status,provider_installation_id,provider_account_id,provider_account_name,provider_account_type,selected_assets,metadata,connected_at,updated_at",
-      )
+      .select("provider,status,provider_account_name,provider_account_type,selected_assets,updated_at")
       .eq("workspace_id", workspace.id),
   ]);
 
   const canManage = role === "owner" || role === "admin";
-  const activeKeys = keys.filter((key) => key.is_active);
+  const activeOperator = keys.some((key) => key.is_active);
   const connectionRows = (connectionsResult.data ?? []) as ConnectionRecord[];
   const connectionsByProvider = new Map(connectionRows.map((item) => [item.provider, item]));
-  const isOrbitPlatformOwner = role === "owner" && workspace.slug === "urava";
 
   const providers: Provider[] = [
     {
@@ -193,114 +177,352 @@ export default async function PluginsPage({ searchParams }: PageProps) {
       name: "GitHub",
       category: "Code & repositories",
       bucket: "Development",
-      description:
-        "Authorize repository access with the Orbit GitHub App. Choose exactly which repositories Orbit may use.",
-      usedBy: ["Website Manager", "Delivery", "Automation"],
+      description: "Give Orbit approved repository access for delivery, website operations and governed automation.",
+      usedBy: ["Delivery", "Website Manager", "Automation"],
       logo: <SiGithub aria-hidden="true" />,
-      logoTone: styles.github,
-      connectPath: "/api/integrations/github/start",
-      manageUrl: "https://github.com/settings/installations",
       platformReady: githubAppReady(),
+      authType: "OAuth / GitHub App",
+      setupTime: "2–3 minutes",
+      unlocks: [
+        { title: "Repository-aware delivery", detail: "Use only repositories you explicitly approve." },
+        { title: "Website operations", detail: "Connect source code to delivery and production workflows." },
+        { title: "Governed automation", detail: "Let approved Orbit actions operate inside the repository boundary." },
+      ],
+      permissions: ["Approved repositories only", "Installation-scoped access", "No GitHub password stored"],
+      flow: ["GitHub", "Approved repositories", "Orbit Delivery", "Automation"],
     },
     {
       id: "vercel",
       name: "Vercel",
       category: "Deployments & projects",
       bucket: "Development",
-      description:
-        "Connect a Vercel account or team and approve the projects Orbit may deploy, inspect and operate.",
-      usedBy: ["Website Manager", "Delivery", "Production"],
+      description: "Connect approved Vercel projects for production delivery, deployment visibility and website operations.",
+      usedBy: ["Delivery", "Production", "Website Manager"],
       logo: <SiVercel aria-hidden="true" />,
-      logoTone: styles.vercel,
-      connectPath: "/api/integrations/vercel/start",
-      manageUrl: "https://vercel.com/dashboard/integrations",
       platformReady: vercelIntegrationReady(),
+      authType: "OAuth integration",
+      setupTime: "1–2 minutes",
+      unlocks: [
+        { title: "Production deployments", detail: "Operate approved projects from Orbit delivery workflows." },
+        { title: "Project visibility", detail: "See the projects Orbit is allowed to work with." },
+        { title: "Delivery handoff", detail: "Move approved work from source to production with a clear boundary." },
+      ],
+      permissions: ["Approved Vercel account", "Approved projects", "Provider token stays server-side"],
+      flow: ["Vercel", "Approved projects", "Orbit Delivery", "Production"],
     },
     {
       id: "google_search_console",
       name: "Search Console",
       category: "SEO & indexing",
       bucket: "Analytics",
-      description:
-        "Connect verified website properties for indexing health, search visibility and SEO operations.",
-      usedBy: ["Website Manager", "SEO", "Growth"],
+      description: "Bring verified search properties into Orbit for indexing health, visibility and SEO operations.",
+      usedBy: ["Growth", "SEO", "Website Manager"],
       logo: <SiGoogle aria-hidden="true" />,
-      logoTone: styles.google,
       platformReady: false,
+      authType: "Google OAuth",
+      setupTime: "1–2 minutes",
+      unlocks: [
+        { title: "Indexing visibility", detail: "Understand which approved properties are visible in search." },
+        { title: "SEO operations", detail: "Power search-health workflows inside Growth." },
+        { title: "Website evidence", detail: "Connect verified property data to website decisions." },
+      ],
+      permissions: ["Verified properties only", "Read-focused search data", "Explicit Google authorization"],
+      flow: ["Search Console", "Verified properties", "Orbit Growth", "SEO actions"],
     },
     {
       id: "google_analytics",
       name: "Google Analytics",
       category: "Traffic & conversion",
       bucket: "Analytics",
-      description:
-        "Connect Analytics properties for traffic, behaviour, conversion and acquisition reporting inside Orbit.",
-      usedBy: ["Website Manager", "Growth", "Evidence"],
+      description: "Measure traffic, acquisition, behaviour and conversion inside Orbit Growth and Evidence.",
+      usedBy: ["Growth", "Evidence", "Website Manager"],
       logo: <SiGoogleanalytics aria-hidden="true" />,
-      logoTone: styles.analytics,
       platformReady: false,
+      authType: "Google OAuth",
+      setupTime: "1–2 minutes",
+      unlocks: [
+        { title: "Traffic intelligence", detail: "Bring approved property traffic into Orbit." },
+        { title: "Conversion evidence", detail: "Use real conversion signals instead of invented metrics." },
+        { title: "Growth reporting", detail: "Support acquisition and performance decisions." },
+      ],
+      permissions: ["Approved Analytics properties", "Read analytics data", "Explicit Google authorization"],
+      flow: ["Google Analytics", "Approved properties", "Orbit Growth", "Evidence"],
     },
     {
       id: "meta",
       name: "Meta",
       category: "Facebook & Instagram",
       bucket: "Growth",
-      description:
-        "Connect Meta Business assets, Facebook Pages and Instagram accounts through one approval flow.",
-      usedBy: ["Lead Engine", "Marketing", "Publishing"],
+      description: "Connect approved Meta business assets for marketing, publishing and lead operations.",
+      usedBy: ["Marketing", "Publishing", "Lead Engine"],
       logo: <SiMeta aria-hidden="true" />,
-      logoTone: styles.meta,
       platformReady: false,
+      authType: "Meta OAuth",
+      setupTime: "2–3 minutes",
+      unlocks: [
+        { title: "Approved social assets", detail: "Use only Pages and business assets you select." },
+        { title: "Publishing workflows", detail: "Connect social distribution to Orbit Publishing." },
+        { title: "Lead operations", detail: "Support permissioned acquisition workflows." },
+      ],
+      permissions: ["Approved business assets", "Explicit Meta permissions", "No account password stored"],
+      flow: ["Meta", "Approved assets", "Orbit Growth", "Publishing"],
     },
     {
       id: "linkedin",
       name: "LinkedIn",
       category: "Professional network",
       bucket: "Growth",
-      description:
-        "Connect approved LinkedIn organisation assets for publishing, outreach and lead operations.",
+      description: "Use approved LinkedIn organisation assets for B2B publishing, outreach and lead workflows.",
       usedBy: ["Lead Engine", "Marketing", "Publishing"],
       logo: <SiLinkedin aria-hidden="true" />,
-      logoTone: styles.linkedin,
       platformReady: false,
+      authType: "LinkedIn OAuth",
+      setupTime: "2–3 minutes",
+      unlocks: [
+        { title: "B2B presence", detail: "Connect approved organisation assets to Orbit." },
+        { title: "Professional publishing", detail: "Use LinkedIn inside permissioned content workflows." },
+        { title: "Lead workflows", detail: "Support B2B acquisition without widening access silently." },
+      ],
+      permissions: ["Approved organisation assets", "Explicit LinkedIn scopes", "No password stored"],
+      flow: ["LinkedIn", "Organisation assets", "Orbit Growth", "Lead Engine"],
     },
     {
       id: "operator",
       name: "ChatGPT / Orbit Operator",
       category: "AI operator",
       bucket: "AI",
-      description:
-        "Founder-governed AI actions through revocable organisation-scoped Orbit credentials.",
-      usedBy: ["Founder Command", "Orbit Operator", "Automation"],
+      description: "Enable founder-governed AI actions through revocable organisation-scoped Orbit credentials.",
+      usedBy: ["Founder Command", "Automation", "Operations"],
       logo: <SiOpenai aria-hidden="true" />,
-      logoTone: styles.openai,
       platformReady: true,
+      authType: "Revocable Orbit credential",
+      setupTime: "Under 1 minute",
+      unlocks: [
+        { title: "Founder-governed actions", detail: "Use explicit workspace-scoped Orbit credentials." },
+        { title: "Revocable access", detail: "Disable operator access without changing the rest of Orbit." },
+        { title: "Auditable execution", detail: "Keep AI actions inside Orbit's permission boundary." },
+      ],
+      permissions: ["Workspace-scoped credential", "Founder/admin controlled", "Revocable at any time"],
+      flow: ["Orbit Operator", "Approved credential", "Governed actions", "Audit trail"],
     },
   ];
 
   const statusFor = (provider: Provider): ConnectionStatus => {
-    if (provider.id === "operator") return activeKeys.length ? "connected" : "available";
-    const record = connectionsByProvider.get(provider.id);
-    if (record?.status === "connected") return "connected";
-    if (provider.connectPath && provider.platformReady) return "available";
-    return "pending";
+    if (provider.id === "operator") return activeOperator ? "connected" : "ready";
+    if (connectionsByProvider.get(provider.id)?.status === "connected") return "connected";
+    return provider.platformReady ? "ready" : "setup";
   };
 
-  const selected = providers.find((item) => item.id === query.connection) ?? null;
-  const selectedStatus = selected ? statusFor(selected) : null;
-  const selectedRecord = selected ? connectionsByProvider.get(selected.id) : null;
-  const selectedAssets = assetList(selectedRecord?.selected_assets);
+  const selectedKey = query.plugin ?? null;
+  const selectedProvider = selectedKey?.startsWith("app:")
+    ? providers.find((provider) => provider.id === selectedKey.slice(4)) ?? null
+    : null;
+  const selectedPlugin = selectedKey?.startsWith("plugin:")
+    ? plugins.find(({ catalog }) => catalog.slug === selectedKey.slice(7)) ?? null
+    : null;
+
+  const notice = noticeText(query.notice);
+  const error = errorText(query.error);
+
+  if (selectedProvider) {
+    const status = statusFor(selectedProvider);
+    const record = connectionsByProvider.get(selectedProvider.id);
+    const connectHref = `/dashboard/plugins?plugin=${encodeURIComponent(`app:${selectedProvider.id}`)}&connect=${encodeURIComponent(selectedProvider.id)}`;
+
+    return (
+      <main className={styles.page}>
+        <Link className={styles.back} href="/dashboard/plugins"><ArrowLeft size={13} /> All plugins</Link>
+        {notice ? <div className={styles.notice}><CheckCircle2 size={13} /> {notice}</div> : null}
+        {error ? <div className={`${styles.notice} ${styles.noticeError}`}><CircleAlert size={13} /> {error}</div> : null}
+
+        <section className={styles.overviewHero}>
+          <div className={styles.identity}>
+            <span className={styles.heroLogo}>{selectedProvider.logo}</span>
+            <div>
+              <div className={styles.eyebrow}>Orbit connection · {selectedProvider.bucket}</div>
+              <h1>{selectedProvider.name}</h1>
+              <p>{selectedProvider.description}</p>
+              <div className={styles.identityMeta}>
+                <span>{selectedProvider.category}</span>
+                <span className={statusClass(status)}>{statusLabel(status)}</span>
+                {record?.provider_account_name ? <span>{record.provider_account_name}</span> : null}
+                {record ? <span>{assetCount(record.selected_assets)} approved assets</span> : null}
+              </div>
+            </div>
+          </div>
+          <div className={styles.heroActions}>
+            {selectedProvider.id === "operator" ? (
+              <Link className={styles.primary} href="/dashboard/foundry/integrations"><PlugZap size={14} /> Manage Operator access</Link>
+            ) : canManage ? (
+              <Link className={styles.primary} href={connectHref}><PlugZap size={14} /> {status === "connected" ? "Manage connection" : `Connect ${selectedProvider.name}`}</Link>
+            ) : (
+              <span className={styles.secondary}>Owner or admin required</span>
+            )}
+            <span className={styles.micro}>Nothing changes until you approve the connection flow.</span>
+          </div>
+        </section>
+
+        <section className={styles.overviewGrid}>
+          <article className={styles.panel}>
+            <h2>What this unlocks</h2>
+            <p>Outcomes first. Orbit keeps the technical setup behind the connection step.</p>
+            <div className={styles.unlockList}>
+              {selectedProvider.unlocks.map((item) => (
+                <div className={styles.unlock} key={item.title}><Sparkles size={14} /><span><strong>{item.title}</strong><small>{item.detail}</small></span></div>
+              ))}
+            </div>
+          </article>
+          <article className={styles.panel}>
+            <h2>What Orbit needs</h2>
+            <p>A plain-language permission boundary before you connect.</p>
+            <div className={styles.permissionList}>
+              {selectedProvider.permissions.map((permission) => <div className={styles.permission} key={permission}><CheckCircle2 size={12} /><span>{permission}</span></div>)}
+            </div>
+            <div className={styles.security}><ShieldCheck size={14} /><span><strong>Server-side security</strong><span>Provider credentials are kept on Orbit's server boundary and are never returned as frontend secrets.</span></span></div>
+          </article>
+        </section>
+
+        <section className={`${styles.panel} ${styles.flowPanel}`}>
+          <h2>How Orbit uses it</h2>
+          <p>One predictable path from provider to the Orbit module that needs it.</p>
+          <div className={styles.flow}>
+            {selectedProvider.flow.map((step, index) => (
+              <span style={{display:"contents"}} key={step}>
+                <span className={styles.flowStep}><span>Step {index + 1}</span><strong>{step}</strong></span>
+                {index < selectedProvider.flow.length - 1 ? <ArrowRight className={styles.flowArrow} size={14} /> : null}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        <section className={`${styles.panel} ${styles.flowPanel}`}>
+          <h2>Connection requirements</h2>
+          <p>Know exactly what the setup needs before starting.</p>
+          <div className={styles.requirements}>
+            <div className={styles.requirement}><span>Authorization</span><strong>{selectedProvider.authType}</strong></div>
+            <div className={styles.requirement}><span>Setup time</span><strong>{selectedProvider.setupTime}</strong></div>
+            <div className={styles.requirement}><span>Workspace role</span><strong>Owner or admin</strong></div>
+            <div className={styles.requirement}><span>Used by</span><strong>{selectedProvider.usedBy.join(" · ")}</strong></div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (selectedPlugin) {
+    const { catalog, manifest } = selectedPlugin;
+    const installation = selectedPlugin.installation?.status === "revoked" ? null : selectedPlugin.installation;
+    const appConnections = resolvePluginAppConnections(manifest, workspacePluginConnections);
+    const requiredMissing = appConnections.filter((app) => app.required && !app.connected);
+    const isGeoapify = catalog.slug === "geoapify-lead-discovery";
+    const geoapify = isGeoapify ? await getGeoapifyRuntimeStatus(workspace.id) : null;
+    const connected = Boolean(geoapify?.connected);
+    const currentStatus = pluginStatusLabel(installation?.status ?? null, connected);
+    const connectHref = `/dashboard/plugins?plugin=${encodeURIComponent(`plugin:${catalog.slug}`)}&connect=geoapify`;
+
+    return (
+      <main className={styles.page}>
+        <Link className={styles.back} href="/dashboard/plugins"><ArrowLeft size={13} /> All plugins</Link>
+        {notice ? <div className={styles.notice}><CheckCircle2 size={13} /> {notice}</div> : null}
+        {error ? <div className={`${styles.notice} ${styles.noticeError}`}><CircleAlert size={13} /> {error}</div> : null}
+
+        <section className={styles.overviewHero}>
+          <div className={styles.identity}>
+            <span className={`${styles.heroLogo} ${styles.heroPluginLogo}`}><Blocks size={28} /></span>
+            <div>
+              <div className={styles.eyebrow}>{catalog.verified ? "Marketplace reviewed" : "Orbit plugin"} · {manifest.category}</div>
+              <h1>{catalog.name}</h1>
+              <p>{catalog.short_description}</p>
+              <div className={styles.identityMeta}>
+                <span>{catalog.developer_name}</span>
+                <span>v{catalog.current_version}</span>
+                <span className={connected || installation?.status === "installed" ? styles.statusConnected : styles.statusPending}>{currentStatus}</span>
+                <span>{catalog.first_party ? "First-party" : "Marketplace"}</span>
+              </div>
+            </div>
+          </div>
+          <div className={styles.heroActions}>
+            {!canManage ? (
+              <span className={styles.secondary}>Owner or admin required</span>
+            ) : !installation ? (
+              <form action={installPlugin}><input name="pluginSlug" type="hidden" value={catalog.slug} /><button className={styles.primary} type="submit"><ShieldCheck size={14} /> Install plugin</button></form>
+            ) : installation.status === "pending_review" ? (
+              <form action={approvePluginUpdate}><input name="pluginSlug" type="hidden" value={catalog.slug} /><button className={styles.primary} type="submit">Approve v{catalog.current_version}</button></form>
+            ) : installation.status === "disabled" ? (
+              <form action={enablePlugin}><input name="pluginSlug" type="hidden" value={catalog.slug} /><button className={styles.primary} type="submit">Enable plugin</button></form>
+            ) : isGeoapify ? (
+              <Link className={styles.primary} href={connectHref}><PlugZap size={14} /> {connected ? "Manage connection" : "Connect Geoapify"}</Link>
+            ) : requiredMissing.length && providers.some((provider) => provider.id === requiredMissing[0]?.provider) ? (
+              <Link className={styles.primary} href={`/dashboard/plugins?plugin=${encodeURIComponent(`app:${requiredMissing[0].provider}`)}`}>Connect required app</Link>
+            ) : (
+              <span className={styles.secondary}>Ready in Orbit</span>
+            )}
+            <span className={styles.micro}>Review first. Install or connect only when you choose.</span>
+          </div>
+        </section>
+
+        <section className={styles.overviewGrid}>
+          <article className={styles.panel}>
+            <h2>What this unlocks</h2>
+            <p>Capabilities declared by the reviewed plugin manifest.</p>
+            <div className={styles.unlockList}>
+              {manifest.skills.map((skill) => <div className={styles.unlock} key={skill.id}><Sparkles size={14} /><span><strong>{skill.name}</strong><small>{skill.description}</small></span></div>)}
+              {manifest.workflows.map((workflow) => <div className={styles.unlock} key={workflow.id}><Workflow size={14} /><span><strong>{workflow.name}</strong><small>{workflow.description}</small></span></div>)}
+            </div>
+          </article>
+          <article className={styles.panel}>
+            <h2>What Orbit needs</h2>
+            <p>The reviewed permission boundary. Orbit does not silently widen it.</p>
+            <div className={styles.permissionList}>
+              {manifest.permissions.map((permission) => <div className={styles.permission} key={permission}><CheckCircle2 size={12} /><code>{permission}</code></div>)}
+            </div>
+            <div className={styles.security}><ShieldCheck size={14} /><span><strong>Permissioned by default</strong><span>Installation grants only this reviewed manifest. External credentials remain server-side.</span></span></div>
+          </article>
+        </section>
+
+        <section className={`${styles.panel} ${styles.flowPanel}`}>
+          <h2>How Orbit uses it</h2>
+          <p>A single visible route from provider capability to the Orbit modules that use it.</p>
+          <div className={styles.flow}>
+            {[catalog.name, ...manifest.orbit_modules.map((module) => module.replaceAll("_", " ")), "Orbit workflow"].map((step, index, list) => (
+              <span style={{display:"contents"}} key={`${step}-${index}`}>
+                <span className={styles.flowStep}><span>Step {index + 1}</span><strong>{step}</strong></span>
+                {index < list.length - 1 ? <ArrowRight className={styles.flowArrow} size={14} /> : null}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        <section className={`${styles.panel} ${styles.flowPanel}`}>
+          <h2>Connection requirements</h2>
+          <p>Everything needed to get this plugin from overview to a working state.</p>
+          <div className={styles.requirements}>
+            <div className={styles.requirement}><span>Plugin version</span><strong>v{catalog.current_version}</strong></div>
+            <div className={styles.requirement}><span>Required apps</span><strong>{appConnections.length ? appConnections.map((app) => providerLabel(app.provider)).join(" · ") : "None"}</strong></div>
+            <div className={styles.requirement}><span>Workspace role</span><strong>Owner or admin</strong></div>
+            <div className={styles.requirement}><span>Orbit modules</span><strong>{manifest.orbit_modules.map((module) => module.replaceAll("_", " ")).join(" · ")}</strong></div>
+          </div>
+          {installation && canManage ? (
+            <div className={styles.adminRow}>
+              <span>Administrative controls stay secondary to the product overview.</span>
+              <div className={styles.adminActions}>
+                {installation.status === "installed" && !isGeoapify ? <form action={disablePlugin}><input name="pluginSlug" type="hidden" value={catalog.slug} /><button className={styles.secondary} type="submit">Disable</button></form> : null}
+                <form action={uninstallPlugin}><input name="pluginSlug" type="hidden" value={catalog.slug} /><button className={styles.danger} type="submit">Uninstall</button></form>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
 
   const searchTerm = (query.q ?? "").trim().toLowerCase();
   const category = query.category ?? "all";
-  const categories = ["all", "connected", "Development", "Growth", "Analytics", "AI", "Plugins"];
+  const connectedProviders = providers.filter((provider) => statusFor(provider) === "connected");
+  const installedPlugins = plugins.filter(({ installation }) => installation?.status === "installed");
 
   const providerMatches = (provider: Provider) => {
-    const queryMatches =
-      !searchTerm ||
-      `${provider.name} ${provider.category} ${provider.description} ${provider.usedBy.join(" ")}`
-        .toLowerCase()
-        .includes(searchTerm);
+    const queryMatches = !searchTerm || `${provider.name} ${provider.category} ${provider.description} ${provider.usedBy.join(" ")}`.toLowerCase().includes(searchTerm);
     if (!queryMatches) return false;
     if (category === "all") return true;
     if (category === "connected") return statusFor(provider) === "connected";
@@ -309,395 +531,89 @@ export default async function PluginsPage({ searchParams }: PageProps) {
   };
 
   const pluginMatches = (plugin: (typeof plugins)[number]) => {
-    const { catalog, manifest, installation } = plugin;
-    const queryMatches =
-      !searchTerm ||
-      `${catalog.name} ${catalog.developer_name} ${catalog.short_description} ${manifest.category} ${manifest.orbit_modules.join(" ")}`
-        .toLowerCase()
-        .includes(searchTerm);
+    const queryMatches = !searchTerm || `${plugin.catalog.name} ${plugin.catalog.developer_name} ${plugin.catalog.short_description} ${plugin.manifest.category} ${plugin.manifest.orbit_modules.join(" ")}`.toLowerCase().includes(searchTerm);
     if (!queryMatches) return false;
     if (category === "all") return true;
-    if (category === "connected") return installation?.status === "installed";
+    if (category === "connected") return plugin.installation?.status === "installed";
     return category === "Plugins";
   };
 
   const visibleProviders = providers.filter(providerMatches);
   const visiblePlugins = plugins.filter(pluginMatches);
-  const connectedProviders = providers.filter((provider) => statusFor(provider) === "connected");
-  const installedPlugins = plugins.filter((plugin) => plugin.installation?.status === "installed");
-  const connectedCount = connectedProviders.length;
-  const installedCount = installedPlugins.length;
 
-  const buildHref = (updates: {
-    q?: string | null;
-    category?: string | null;
-    connection?: string | null;
-    notice?: string | null;
-    error?: string | null;
-  }) => {
+  function filterHref(nextCategory: string) {
     const params = new URLSearchParams();
-    const next = {
-      q: query.q,
-      category: query.category,
-      connection: query.connection,
-      notice: query.notice,
-      error: query.error,
-      ...updates,
-    };
-    if (next.q) params.set("q", next.q);
-    if (next.category && next.category !== "all") params.set("category", next.category);
-    if (next.connection) params.set("connection", next.connection);
-    if (next.notice) params.set("notice", next.notice);
-    if (next.error) params.set("error", next.error);
+    if (query.q) params.set("q", query.q);
+    if (nextCategory !== "all") params.set("category", nextCategory);
     const suffix = params.toString();
     return suffix ? `/dashboard/plugins?${suffix}` : "/dashboard/plugins";
-  };
-
-  const notice = messageFor(query.notice);
-  const error = errorFor(query.error);
+  }
 
   return (
-    <main className={styles.hubPage}>
-      <section className={styles.hubHero}>
+    <main className={styles.page}>
+      <section className={styles.topbar}>
         <div>
-          <div className={styles.hubEyebrow}>
-            <Blocks size={14} aria-hidden="true" /> Orbit · System · Plugins
-          </div>
+          <div className={styles.eyebrow}><Blocks size={13} /> Orbit · Plugins</div>
           <h1>Plugins</h1>
-          <p>
-            Connect Orbit to the tools your organisation already uses, install approved capabilities,
-            and manage every permission from one place.
-          </p>
+          <p>Choose a tool yourself or let Orbit recommend the right capability for this workspace. Every selection opens the same overview before setup.</p>
         </div>
-        <div className={styles.heroMetrics} aria-label="Plugin and connection summary">
-          <div><strong>{connectedCount}</strong><span>Connected apps</span></div>
-          <div><strong>{installedCount}</strong><span>Active plugins</span></div>
+        <div className={styles.metrics}>
+          <div className={styles.metric}><strong>{connectedProviders.length}</strong><span>Connected apps</span></div>
+          <div className={styles.metric}><strong>{installedPlugins.length}</strong><span>Installed plugins</span></div>
         </div>
       </section>
 
-      {notice ? <div className={`${styles.hubNotice} ${styles.hubNoticeSuccess}`}>{notice}</div> : null}
-      {error ? <div className={`${styles.hubNotice} ${styles.hubNoticeError}`}>{error}</div> : null}
+      {notice ? <div className={styles.notice}><CheckCircle2 size={13} /> {notice}</div> : null}
+      {error ? <div className={`${styles.notice} ${styles.noticeError}`}><CircleAlert size={13} /> {error}</div> : null}
 
-      <section className={styles.hubCommand}>
-        <form className={styles.searchBar} action="/dashboard/plugins" method="get">
-          <Search size={17} aria-hidden="true" />
-          <input
-            aria-label="Search plugins and connections"
-            defaultValue={query.q}
-            name="q"
-            placeholder="Search plugins, tools or capabilities…"
-          />
+      <PluginWorkspaceEntry />
+
+      <section className={styles.command}>
+        <form className={styles.search} action="/dashboard/plugins" method="get">
+          <Search size={16} />
+          <input aria-label="Search plugins" defaultValue={query.q} name="q" placeholder="Search plugins, apps or capabilities…" />
           {category !== "all" ? <input name="category" type="hidden" value={category} /> : null}
           <button type="submit">Search</button>
         </form>
-        <Link className={styles.addButton} href="/dashboard/plugins/develop">
-          <Sparkles size={15} aria-hidden="true" /> Add custom plugin
-        </Link>
+        <Link className={styles.custom} href="/dashboard/plugins/develop"><Sparkles size={14} /> Add custom plugin</Link>
       </section>
 
-      <section className={styles.connectedPanel}>
-        <div className={styles.connectedHeader}>
-          <div>
-            <strong>Connected</strong>
-            <span>Live in {workspace.name}</span>
-          </div>
-          <Link href={buildHref({ category: "connected", connection: null })}>Manage all</Link>
-        </div>
-
-        <div className={styles.connectedRail}>
-          {connectedProviders.map((provider) => (
-            <Link
-              className={styles.connectedMini}
-              href={buildHref({ connection: provider.id, notice: null, error: null })}
-              key={provider.id}
-            >
-              <span className={`${styles.miniLogo} ${provider.logoTone}`}>{provider.logo}</span>
-              <span><strong>{provider.name}</strong><small><i /> Connected</small></span>
-            </Link>
-          ))}
-          {installedPlugins.map(({ catalog }) => (
-            <Link className={styles.connectedMini} href={`/dashboard/plugins/${catalog.slug}`} key={catalog.id}>
-              <span className={`${styles.miniLogo} ${styles.pluginLogo}`}><Blocks size={16} /></span>
-              <span><strong>{catalog.name}</strong><small><i /> Installed</small></span>
-            </Link>
-          ))}
-          {!connectedProviders.length && !installedPlugins.length ? (
-            <div className={styles.connectedEmpty}>
-              Nothing connected yet. Start with GitHub, Vercel or an approved Orbit plugin.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <nav className={styles.filterRail} aria-label="Plugin categories">
-        {categories.map((item) => {
-          const active = category === item || (item === "all" && category === "all");
-          return (
-            <Link
-              className={active ? styles.filterActive : styles.filterChip}
-              href={buildHref({ category: item, connection: null, notice: null, error: null })}
-              key={item}
-            >
-              {item === "all" ? "All" : item === "connected" ? "Connected" : item}
-            </Link>
-          );
-        })}
+      <nav className={styles.filters} aria-label="Plugin categories">
+        {categories.map((item) => <Link className={category === item ? styles.filterActive : styles.filter} href={filterHref(item)} key={item}>{item === "all" ? "All" : item === "connected" ? "Connected" : item}</Link>)}
       </nav>
 
-      <section className={styles.libraryHeader}>
-        <div>
-          <span>Plugin library</span>
-          <h2>{category === "connected" ? "Connected to Orbit" : "Discover and connect"}</h2>
-          <p>Apps and Orbit plugins use one consistent discovery, approval and management model.</p>
-        </div>
+      <section className={styles.libraryHead}>
+        <div><h2>Plugin library</h2><p>One card → one overview → one connection flow.</p></div>
         <span className={styles.resultCount}>{visibleProviders.length + visiblePlugins.length} results</span>
       </section>
 
-      <section className={styles.libraryGrid} aria-label="Plugins and app connections">
+      <section className={styles.grid} id="plugin-library">
         {visibleProviders.map((provider) => {
           const status = statusFor(provider);
-          const drawerHref = buildHref({ connection: provider.id, notice: null, error: null });
           return (
-            <article className={styles.libraryCard} key={`provider-${provider.id}`}>
-              <div className={styles.libraryCardTop}>
-                <span className={`${styles.libraryLogo} ${provider.logoTone}`}>{provider.logo}</span>
-                <span className={`${styles.statusBadge} ${connectionStatusClass(status)}`}>
-                  {connectionStatusLabel(status)}
-                </span>
-              </div>
-              <div className={styles.libraryIdentity}>
-                <h3>{provider.name}</h3>
-                <small>{provider.category}</small>
-              </div>
-              <p>{provider.description}</p>
-              <div className={styles.cardFooter}>
-                <span>{provider.bucket}</span>
-                {status === "available" && provider.connectPath ? (
-                  <a className={styles.cardActionPrimary} href={provider.connectPath}>
-                    Connect
-                  </a>
-                ) : (
-                  <Link className={styles.cardAction} href={drawerHref}>
-                    {status === "connected" ? "Manage" : "View setup"}
-                  </Link>
-                )}
-              </div>
-            </article>
+            <Link className={styles.card} href={`/dashboard/plugins?plugin=${encodeURIComponent(`app:${provider.id}`)}`} key={`app-${provider.id}`}>
+              <div className={styles.cardTop}><span className={styles.logo}>{provider.logo}</span><span className={`${styles.status} ${statusClass(status)}`}>{statusLabel(status)}</span></div>
+              <h3>{provider.name}</h3><span className={styles.category}>{provider.category}</span><p>{provider.description}</p>
+              <div className={styles.cardFoot}><span>{provider.bucket}</span><span className={styles.open}>View overview <ArrowRight size={12} /></span></div>
+            </Link>
           );
         })}
 
         {visiblePlugins.map(({ catalog, manifest, installation }) => {
           const effectiveStatus = installation?.status === "revoked" ? null : installation?.status ?? null;
-          const appConnections = resolvePluginAppConnections(manifest, workspacePluginConnections);
-          const connectedRequired = appConnections.filter((app) => app.connected).length;
+          const label = pluginStatusLabel(effectiveStatus);
+          const className = effectiveStatus === "installed" ? styles.statusConnected : styles.statusPending;
           return (
-            <article className={styles.libraryCard} key={`plugin-${catalog.id}`}>
-              <div className={styles.libraryCardTop}>
-                <span className={`${styles.libraryLogo} ${styles.pluginLogo}`}><Blocks size={20} /></span>
-                <span className={`${styles.statusBadge} ${effectiveStatus === "installed" ? styles.connectionConnected : styles.connectionPending}`}>
-                  {pluginStatusLabel(effectiveStatus)}
-                </span>
-              </div>
-              <div className={styles.libraryIdentity}>
-                <h3>{catalog.name}</h3>
-                <small>{catalog.developer_name} · {manifest.category}</small>
-              </div>
-              <p>{catalog.short_description}</p>
-              <div className={styles.cardMeta}>
-                <span>{manifest.skills.length} skills</span>
-                <span>{connectedRequired}/{manifest.apps.length} apps ready</span>
-                <span>v{catalog.current_version}</span>
-              </div>
-              <div className={styles.cardFooter}>
-                <span>Orbit plugin</span>
-                <Link
-                  className={effectiveStatus === "installed" ? styles.cardAction : styles.cardActionPrimary}
-                  href={`/dashboard/plugins/${catalog.slug}`}
-                >
-                  {effectiveStatus === "installed" ? "Manage" : "Review & install"}
-                </Link>
-              </div>
-            </article>
+            <Link className={styles.card} href={`/dashboard/plugins?plugin=${encodeURIComponent(`plugin:${catalog.slug}`)}`} key={`plugin-${catalog.id}`}>
+              <div className={styles.cardTop}><span className={`${styles.logo} ${styles.pluginLogo}`}><Blocks size={19} /></span><span className={`${styles.status} ${className}`}>{label}</span></div>
+              <h3>{catalog.name}</h3><span className={styles.category}>{catalog.developer_name} · {manifest.category}</span><p>{catalog.short_description}</p>
+              <div className={styles.cardFoot}><span>v{catalog.current_version}</span><span className={styles.open}>View overview <ArrowRight size={12} /></span></div>
+            </Link>
           );
         })}
 
-        {!visibleProviders.length && !visiblePlugins.length ? (
-          <div className={styles.hubEmpty}>
-            <Search size={20} aria-hidden="true" />
-            <strong>No plugins found</strong>
-            <span>Try another search or category.</span>
-          </div>
-        ) : null}
+        {!visibleProviders.length && !visiblePlugins.length ? <div className={styles.empty}><Search size={18} /><strong>No plugins found</strong><span>Try another search or category.</span></div> : null}
       </section>
-
-      <section className={styles.securityStrip}>
-        <ShieldCheck size={15} aria-hidden="true" />
-        <div>
-          <strong>Permissioned by default</strong>
-          <span>Orbit shows the account, assets and permission boundary before a connection or plugin is approved.</span>
-        </div>
-      </section>
-
-      {selected && selectedStatus ? (
-        <>
-          <Link
-            aria-label="Close connection details"
-            className={styles.drawerBackdrop}
-            href={buildHref({ connection: null, notice: null, error: null })}
-          />
-          <aside className={styles.connectionDrawer} aria-label={`${selected.name} connection details`}>
-            <div className={styles.drawerTop}>
-              <Link
-                aria-label="Close connection details"
-                className={styles.drawerClose}
-                href={buildHref({ connection: null, notice: null, error: null })}
-              >
-                ×
-              </Link>
-            </div>
-
-            <div className={styles.drawerBrand}>
-              <span className={`${styles.drawerLogo} ${selected.logoTone}`}>{selected.logo}</span>
-              <div>
-                <small>{selected.category}</small>
-                <h2>{selected.name}</h2>
-                <span className={`${styles.detailState} ${connectionStatusClass(selectedStatus)}`}>
-                  <i /> {connectionStatusLabel(selectedStatus)}
-                </span>
-              </div>
-            </div>
-
-            <p className={styles.drawerDescription}>{selected.description}</p>
-
-            {selected.id === "operator" ? (
-              <div className={styles.drawerStack}>
-                <section className={styles.drawerPanel}>
-                  <div className={styles.drawerPanelTitle}>
-                    <LockKeyhole size={16} />
-                    <div><strong>Orbit Operator access</strong><small>Founder-governed AI connection</small></div>
-                  </div>
-                  <p>Create revocable organisation-scoped access. Normal business integrations continue to use OAuth or provider app installation.</p>
-                  {canManage ? <OrbitActionKeyManager /> : <p>Owner or admin access is required to manage this connection.</p>}
-                </section>
-
-                <section className={styles.drawerPanel}>
-                  <div className={styles.drawerPanelTitle}>
-                    <ShieldCheck size={16} />
-                    <div><strong>Active credentials</strong><small>{activeKeys.length} active</small></div>
-                  </div>
-                  <div className={styles.keyList}>
-                    {keys.length ? keys.map((key) => (
-                      <div className={styles.keyRow} key={key.id}>
-                        <span>
-                          <strong>{key.name}</strong>
-                          <small>{key.token_prefix}… · Created {formatFoundryDate(key.created_at)}</small>
-                        </span>
-                        {!key.revoked_at && canManage ? (
-                          <form action={revokeOrbitActionKeyAction}>
-                            <input name="keyId" type="hidden" value={key.id} />
-                            <button aria-label={`Revoke ${key.name}`} type="submit"><Trash2 size={14} /></button>
-                          </form>
-                        ) : null}
-                      </div>
-                    )) : <p>No Orbit Operator credential has been created yet.</p>}
-                  </div>
-                </section>
-              </div>
-            ) : (
-              <div className={styles.drawerStack}>
-                <section className={styles.drawerPanel}>
-                  <div className={styles.drawerPanelTitle}>
-                    <PlugZap size={16} />
-                    <div>
-                      <strong>{selectedStatus === "connected" ? "Connected account" : selectedStatus === "available" ? "Connect account" : "Connector setup"}</strong>
-                      <small>Secure provider authorization</small>
-                    </div>
-                  </div>
-
-                  {selectedStatus === "connected" && selectedRecord ? (
-                    <>
-                      <div className={styles.accountCard}>
-                        <span className={`${styles.accountLogo} ${selected.logoTone}`}>{selected.logo}</span>
-                        <div>
-                          <small>Connected as</small>
-                          <strong>{selectedRecord.provider_account_name ?? `${selected.name} account`}</strong>
-                          <span>{selectedRecord.provider_account_type ?? "Authorized installation"}</span>
-                        </div>
-                        <CheckCircle2 size={18} />
-                      </div>
-                      <div className={styles.drawerActions}>
-                        {selected.manageUrl ? (
-                          <a href={selected.manageUrl} rel="noreferrer" target="_blank">
-                            Manage access <ExternalLink size={12} />
-                          </a>
-                        ) : null}
-                        {canManage ? (
-                          <form action={`/api/integrations/${selected.id}/disconnect`} method="post">
-                            <button type="submit">Disconnect</button>
-                          </form>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : selected.connectPath && selected.platformReady ? (
-                    <>
-                      <p>No API token to paste. Orbit opens {selected.name}, you approve the account and assets, then you return here automatically.</p>
-                      <div className={styles.permissionFlow}>
-                        <span>Connect</span><i /><span>Account</span><i /><span>Assets</span><i /><span>Approve</span>
-                      </div>
-                      <div className={styles.drawerActions}>
-                        <a href={selected.connectPath}>Connect {selected.name} <ArrowRight size={13} /></a>
-                      </div>
-                    </>
-                  ) : selected.id === "github" && isOrbitPlatformOwner ? (
-                    <>
-                      <div className={styles.setupBox}>
-                        <strong>One-time Orbit platform setup</strong>
-                        <span>This is only for Urava as the product owner. Normal Orbit users will never see this step.</span>
-                      </div>
-                      <div className={styles.setupList}>
-                        <span><b>01</b> Register the Orbit GitHub App</span>
-                        <span><b>02</b> Homepage: {orbitUrl}</span>
-                        <span><b>03</b> Callback: {orbitUrl}/api/integrations/github/callback</span>
-                        <span><b>04</b> Use selected-repository permissions</span>
-                      </div>
-                      <div className={styles.drawerActions}>
-                        <a href={githubSetupUrl} rel="noreferrer" target="_blank">Register GitHub App <ExternalLink size={12} /></a>
-                      </div>
-                    </>
-                  ) : (
-                    <div className={styles.setupBox}>
-                      <strong>Connector not enabled yet</strong>
-                      <span>It will use the same account → assets → approve pattern. Users will not paste raw API keys.</span>
-                    </div>
-                  )}
-                </section>
-
-                <section className={styles.drawerPanel}>
-                  <div className={styles.drawerPanelTitle}>
-                    <ShieldCheck size={16} />
-                    <div><strong>{selectedStatus === "connected" ? "Approved assets" : "Permission boundary"}</strong><small>Least privilege</small></div>
-                  </div>
-                  {selectedStatus === "connected" && selectedAssets.length ? (
-                    <div className={styles.assetList}>
-                      {selectedAssets.slice(0, 12).map((asset) => (
-                        <div className={styles.assetRow} key={asset.id}>
-                          <CheckCircle2 size={13} />
-                          <span><strong>{asset.name}</strong><small>{asset.detail}</small></span>
-                          {asset.url ? <a href={asset.url} rel="noreferrer" target="_blank"><ExternalLink size={11} /></a> : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className={styles.usedBy}>
-                      {selected.usedBy.map((label) => <span key={label}>{label}</span>)}
-                    </div>
-                  )}
-                </section>
-              </div>
-            )}
-          </aside>
-        </>
-      ) : null}
     </main>
   );
 }
