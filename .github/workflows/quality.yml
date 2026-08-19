@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  app-quality:
-    name: Lint, audit and build
+  production-gate:
+    name: Production engineering gate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,6 +27,11 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
       - name: Install dependencies
         run: npm ci
 
@@ -36,34 +41,56 @@ jobs:
       - name: Verify patched development dependencies
         run: npm run audit:dev-patches
 
+      - name: Start isolated Supabase
+        run: supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
+
+      - name: Reset database from repository migrations
+        run: supabase db reset --local
+
+      - name: Export isolated application environment
+        shell: bash
+        run: |
+          eval "$(supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL}"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${ANON_KEY}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}"
+            echo "INTEGRATION_SECRET=ci-only-independent-integration-secret-0000000000000000000000000001"
+            echo "NEXT_PUBLIC_APP_URL=https://orbit.example.test"
+            echo "ORBIT_PROVIDER_CREDENTIAL_MODE=workspace"
+          } >> "$GITHUB_ENV"
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Lint
         run: npm run lint
 
-      - name: Build
+      - name: Run every database isolation and workflow suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in supabase/tests/*.sql; do
+            echo "Running ${test_file}"
+            psql postgresql://postgres:postgres@127.0.0.1:54322/postgres \
+              -v ON_ERROR_STOP=1 -f "${test_file}"
+          done
+
+      - name: Unit and security-contract tests
+        run: npm run test:unit
+
+      - name: Production build
         run: npm run build
 
-  tenant-isolation:
-    name: Database tenant isolation
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: End-to-end smoke
+        run: npm run test:e2e
 
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Scale smoke
+        env:
+          ORBIT_LOAD_REQUESTS: "500"
+          ORBIT_LOAD_CONCURRENCY: "40"
+        run: npm run test:scale
 
-      - name: Start local Supabase
-        run: supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
-
-      - name: Reset database from migrations
-        run: supabase db reset --local
-
-      - name: Run tenant-isolation test
-        run: psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
-
-      - name: Stop local Supabase
+      - name: Stop isolated Supabase
         if: always()
         run: supabase stop --no-backup
