@@ -14,10 +14,10 @@ const apiHeaders = {
 };
 
 function back(request: Request, key: "error" | "notice", value: string) {
-  const url = new URL("/dashboard/connect", request.url);
-  url.searchParams.set("integration", "github");
+  const url = new URL("/dashboard/plugins", request.url);
+  url.searchParams.set("plugin", "app:github");
+  url.searchParams.set("connect", "github");
   url.searchParams.set(key, value);
-  url.hash = "integrations";
   return NextResponse.redirect(url);
 }
 
