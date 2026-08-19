@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getGeoapifyRuntimeStatus } from "@/lib/geoapify";
 import { githubAppReady, vercelIntegrationReady } from "@/lib/integration-connections";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -9,6 +10,7 @@ const supported = new Set([
   "google_analytics",
   "meta",
   "linkedin",
+  "geoapify",
 ]);
 
 function platformReady(provider: string) {
@@ -24,6 +26,25 @@ export async function GET(request: Request) {
   }
 
   const { supabase, workspace } = await requireWorkspace();
+
+  if (provider === "geoapify") {
+    const runtime = await getGeoapifyRuntimeStatus(workspace.id);
+    return NextResponse.json(
+      {
+        provider,
+        installed: runtime.installed,
+        connected: runtime.connected,
+        status: runtime.connected ? "connected" : runtime.installed ? "disconnected" : "not_installed",
+        accountName: runtime.accountName,
+        accountType: runtime.connected ? "Encrypted API key" : null,
+        assetCount: runtime.connected ? 3 : 0,
+        platformReady: runtime.installed,
+        updatedAt: null,
+      },
+      { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } },
+    );
+  }
+
   const { data, error } = await supabase
     .from("integration_connections")
     .select("status,provider_account_name,provider_account_type,selected_assets,updated_at")
