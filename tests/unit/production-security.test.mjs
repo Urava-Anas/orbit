@@ -1,9 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+
+const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 async function source(path) {
-  return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
+  return readFile(join(repoRoot, path), "utf8");
+}
+
+async function runtimeSources(directory) {
+  const root = join(repoRoot, directory);
+  const files = [];
+  async function walk(path) {
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      const next = join(path, entry.name);
+      if (entry.isDirectory()) await walk(next);
+      else if (/\.(?:ts|tsx|js|mjs)$/.test(entry.name)) files.push(await readFile(next, "utf8"));
+    }
+  }
+  await walk(root);
+  return files.join("\n");
 }
 
 test("scheduler never transports Supabase admin credentials", async () => {
@@ -13,6 +31,12 @@ test("scheduler never transports Supabase admin credentials", async () => {
   assert.doesNotMatch(worker, /createDecipheriv|x-orbit-supabase|service-auth/i);
   assert.match(scheduler, /X-Orbit-Scheduler-Token/);
   assert.match(worker, /consume_stage4_scheduler_invocation/);
+});
+
+test("legacy service-role transport cannot remain anywhere in executable runtime code", async () => {
+  const runtime = `${await runtimeSources("src")}\n${await runtimeSources("supabase/functions")}`;
+  assert.doesNotMatch(runtime, /x-orbit-supabase-(?:iv|ciphertext)/i);
+  assert.doesNotMatch(runtime, /decryptServiceRole/);
 });
 
 test("integration encryption is independent from database admin keys", async () => {
