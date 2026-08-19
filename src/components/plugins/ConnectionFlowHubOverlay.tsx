@@ -30,6 +30,11 @@ type RuntimeStatus = {
   platformReady: boolean;
 };
 
+type RuntimeState = {
+  provider: ProviderId;
+  data: RuntimeStatus | null;
+};
+
 const providers: Record<ProviderId, ProviderConfig> = {
   github: {
     name: "GitHub",
@@ -84,12 +89,12 @@ const providers: Record<ProviderId, ProviderConfig> = {
   linkedin: {
     name: "LinkedIn",
     mark: "in",
-    description: "Organisation assets for professional publishing, outreach and lead operations.",
+    description: "Verified LinkedIn identity for professional-network connections. Organisation and publishing scopes stay locked until separately approved.",
     authLabel: "Continue with LinkedIn",
     authType: "oauth",
     connectPath: "/api/integrations/oauth/linkedin/start",
     manageUrl: "https://www.linkedin.com/mypreferences/d/third-party-applications",
-    unlock: "Approved LinkedIn access becomes available to Growth and Publishing.",
+    unlock: "Verified identity becomes available to Orbit; organisation and publishing capabilities remain disabled until their provider scopes are explicitly reviewed.",
   },
   geoapify: {
     name: "Geoapify",
@@ -128,20 +133,26 @@ function errorText(value: string | null) {
     google_analytics_auth_config: "Google authentication needs an Orbit OAuth client before this workspace can authorize Analytics.",
     meta_auth_config: "Meta authentication needs an Orbit Meta app before this workspace can authorize assets.",
     linkedin_auth_config: "LinkedIn authentication needs an Orbit LinkedIn app before this workspace can authorize access.",
+    github_rate_limited: "Too many GitHub connection attempts. Try again shortly.",
+    vercel_rate_limited: "Too many Vercel connection attempts. Try again shortly.",
+    oauth_rate_limited: "Too many connection attempts. Try again shortly.",
     github_oauth_incomplete: "GitHub did not return a complete authorization response.",
     github_state_mismatch: "GitHub connection validation failed. Start again.",
     github_installation_unverified: "Orbit could not verify the GitHub installation.",
     github_installation_token_failed: "Orbit could not obtain GitHub installation access.",
+    github_repository_capability_unverified: "GitHub authenticated, but repository access could not be verified.",
     github_save_failed: "GitHub was authorized, but Orbit could not save the connection.",
     github_callback_failed: "GitHub connection failed before completion.",
     vercel_oauth_incomplete: "Vercel did not return a complete authorization response.",
     vercel_state_mismatch: "Vercel connection validation failed. Start again.",
     vercel_oauth_exchange: "Vercel authorization could not be completed.",
+    vercel_capability_verification_failed: "Vercel authenticated, but project access could not be verified.",
     vercel_save_failed: "Vercel was authorized, but Orbit could not save the connection.",
     vercel_callback_failed: "Vercel connection failed before completion.",
     oauth_incomplete: "The provider did not return a complete authorization response.",
     oauth_state_mismatch: "Authentication validation failed. Start the connection again.",
     oauth_exchange_failed: "The provider accepted the sign-in but Orbit could not complete the token exchange.",
+    oauth_capability_verification_failed: "Authentication succeeded, but the requested provider capability could not be verified.",
     oauth_save_failed: "Authentication succeeded but Orbit could not save the encrypted connection.",
     oauth_callback_failed: "Authentication could not be completed. Try again.",
   };
@@ -154,17 +165,15 @@ export function ConnectionFlowHubOverlay() {
   const router = useRouter();
   const providerId = searchParams.get("connect");
   const config = isProvider(providerId) ? providers[providerId] : null;
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [runtimeState, setRuntimeState] = useState<RuntimeState | null>(null);
+  const runtime = isProvider(providerId) && runtimeState?.provider === providerId ? runtimeState.data : null;
+  const loading = Boolean(config && isProvider(providerId) && runtimeState?.provider !== providerId);
 
   useEffect(() => {
-    if (!config || !providerId || pathname !== "/dashboard/plugins") {
-      setRuntime(null);
-      return;
-    }
+    if (!config || !isProvider(providerId) || pathname !== "/dashboard/plugins") return;
+    const activeProvider = providerId;
     const controller = new AbortController();
-    setLoading(true);
-    fetch(`/api/integrations/connection-status?provider=${encodeURIComponent(providerId)}`, {
+    fetch(`/api/integrations/connection-status?provider=${encodeURIComponent(activeProvider)}`, {
       credentials: "same-origin",
       cache: "no-store",
       signal: controller.signal,
@@ -173,12 +182,9 @@ export function ConnectionFlowHubOverlay() {
         if (!response.ok) throw new Error("status_failed");
         return response.json() as Promise<RuntimeStatus>;
       })
-      .then((data) => setRuntime(data))
+      .then((data) => setRuntimeState({ provider: activeProvider, data }))
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime(null);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) setRuntimeState({ provider: activeProvider, data: null });
       });
     return () => controller.abort();
   }, [config, pathname, providerId]);
@@ -211,7 +217,7 @@ export function ConnectionFlowHubOverlay() {
       { label: "Validation", detail: connected ? "Provider access has been verified." : "Runs immediately after authentication.", badge: connected ? "Verified" : "Waiting", state: connected ? "done" : "pending" },
       { label: "Permissions", detail: connected ? "Approved provider boundary is active." : "Explicit approval is required before use.", badge: connected ? "Approved" : "Pending", state: connected ? "done" : "pending" },
       { label: "Assets", detail: connected ? `${runtime?.assetCount ?? 0} approved asset${runtime?.assetCount === 1 ? "" : "s"}.` : geo ? "Capabilities are scoped by the reviewed plugin." : "Selected during provider authorization.", badge: connected ? "Ready" : "Locked", state: connected ? "done" : "pending" },
-      { label: "Security", detail: "Tokens and provider secrets stay on Orbit's server boundary.", badge: "Protected", state: "done" },
+      { label: "Security", detail: "Tokens and provider secrets stay on Orbit’s server boundary.", badge: "Protected", state: "done" },
     ];
     const successPath: ConnectionSuccessItem[] = [
       { label: "Authenticated", detail: "Provider linked", state: connected ? "done" : "pending" },
@@ -270,7 +276,7 @@ export function ConnectionFlowHubOverlay() {
       ) : config.connectPath ? (
         <>
           <h4>Authenticate with {config.name === "Search Console" || config.name === "Google Analytics" ? "Google" : config.name}</h4>
-          <p>You will sign in on the provider's own authentication screen and approve the access Orbit requests. Orbit never handles your provider password.</p>
+          <p>You will sign in on the provider’s own authentication screen and approve the access Orbit requests. Orbit never handles your provider password.</p>
           <a className={styles.primary} href={config.connectPath}><PlugZap size={15} /> {config.authLabel}</a>
           <div className={styles.inputHelp}><ShieldCheck size={13} /><span>After authentication, Orbit validates the callback and stores only the credential required for the approved scope.</span></div>
         </>
