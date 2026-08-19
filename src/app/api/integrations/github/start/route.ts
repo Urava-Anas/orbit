@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { workspace, user } = await requireFounderFoundry();
-  const fallback = new URL("/dashboard/connect?integration=github", request.url);
-  fallback.hash = "integrations";
+  const fallback = new URL("/dashboard/plugins", request.url);
+  fallback.searchParams.set("plugin", "app:github");
+  fallback.searchParams.set("connect", "github");
 
   if (!githubAppReady()) {
     fallback.searchParams.set("error", "github_platform_setup");
