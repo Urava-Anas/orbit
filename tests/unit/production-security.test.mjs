@@ -70,14 +70,18 @@ test("workspace provider credentials are preferred and platform mode is explicit
   assert.ok(setting.indexOf("vaultSecret") < setting.indexOf("platformCredentialMode"));
 });
 
-test("OAuth connections require provider capability verification", async () => {
+test("OAuth connections require provider capability verification and token lifecycle handling", async () => {
   const callback = await source("src/app/api/integrations/oauth/[provider]/callback/route.ts");
   const status = await source("src/app/api/integrations/connection-status/route.ts");
+  const lifecycle = await source("src/lib/integration-token-lifecycle.ts");
   const pluginConnections = await source("src/lib/plugins/connections.ts");
   assert.match(callback, /verifiedCapabilities/);
   assert.match(callback, /oauth_capability_verification_failed/);
   assert.match(status, /verification_required/);
   assert.match(status, /reauthorization_required/);
+  assert.match(status, /getFreshIntegrationAccessToken/);
+  assert.match(lifecycle, /grant_type:\s*"refresh_token"/);
+  assert.match(lifecycle, /AbortSignal\.timeout/);
   assert.match(pluginConnections, /verifiedCapabilities/);
   assert.match(pluginConnections, /token_expires_at/);
 });
