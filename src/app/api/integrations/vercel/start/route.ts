@@ -6,6 +6,7 @@ import {
   vercelInstallUrl,
   vercelIntegrationReady,
 } from "@/lib/integration-connections";
+import { consumeRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,22 +16,25 @@ export async function GET(request: Request) {
   fallback.searchParams.set("plugin", "app:vercel");
   fallback.searchParams.set("connect", "vercel");
 
+  const quota = await consumeRateLimit({
+    scope: "integration.vercel.start",
+    subject: `${workspace.id}:${user.id}`,
+    limit: 10,
+    windowSeconds: 600,
+  });
+  if (!quota.allowed) {
+    fallback.searchParams.set("error", "vercel_rate_limited");
+    return NextResponse.redirect(fallback);
+  }
+
   if (!vercelIntegrationReady()) {
     fallback.searchParams.set("error", "vercel_platform_setup");
     return NextResponse.redirect(fallback);
   }
 
   try {
-    const state = issueIntegrationState({
-      workspaceId: workspace.id,
-      userId: user.id,
-      provider: "vercel",
-    });
-    await registerIntegrationState(state, {
-      workspaceId: workspace.id,
-      userId: user.id,
-      provider: "vercel",
-    });
+    const state = issueIntegrationState({ workspaceId: workspace.id, userId: user.id, provider: "vercel" });
+    await registerIntegrationState(state, { workspaceId: workspace.id, userId: user.id, provider: "vercel" });
     return NextResponse.redirect(vercelInstallUrl(state));
   } catch (error) {
     console.error("Vercel integration state issuance failed", error);
