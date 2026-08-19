@@ -22,6 +22,16 @@ test("integration encryption is independent from database admin keys", async () 
   assert.doesNotMatch(secretFunction, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
 });
 
+test("internal signing domains do not reuse cron or worker credentials", async () => {
+  const gateway = await source("src/lib/agents/stage4-gateway.ts");
+  const inbound = await source("src/app/api/internal/autopilot-events/route.ts");
+  const gatewaySecret = gateway.match(/export function stageFourGatewaySecret\(\)[\s\S]*?\n}/)?.[0] ?? "";
+  assert.match(gatewaySecret, /ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET/);
+  assert.doesNotMatch(gatewaySecret, /CRON_SECRET|ORBIT_AUTOPILOT_WORKER_SECRET/);
+  assert.match(inbound, /ORBIT_INBOUND_EVENT_SECRET/);
+  assert.doesNotMatch(inbound, /ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET/);
+});
+
 test("production configuration has no baked-in Orbit Supabase project", async () => {
   const config = await source("src/lib/supabase/config.ts");
   assert.doesNotMatch(config, /sjtgydpwsnjwxlwbtpgf/);
@@ -34,6 +44,18 @@ test("workspace provider credentials are preferred and platform mode is explicit
   assert.match(providers, /ORBIT_PROVIDER_CREDENTIAL_MODE/);
   const setting = providers.match(/async function providerSetting[\s\S]*?\n}/)?.[0] ?? "";
   assert.ok(setting.indexOf("vaultSecret") < setting.indexOf("platformCredentialMode"));
+});
+
+test("OAuth connections require provider capability verification", async () => {
+  const callback = await source("src/app/api/integrations/oauth/[provider]/callback/route.ts");
+  const status = await source("src/app/api/integrations/connection-status/route.ts");
+  const pluginConnections = await source("src/lib/plugins/connections.ts");
+  assert.match(callback, /verifiedCapabilities/);
+  assert.match(callback, /oauth_capability_verification_failed/);
+  assert.match(status, /verification_required/);
+  assert.match(status, /reauthorization_required/);
+  assert.match(pluginConnections, /verifiedCapabilities/);
+  assert.match(pluginConnections, /token_expires_at/);
 });
 
 test("CSP no longer permits unsafe inline scripts or arbitrary https connections", async () => {
