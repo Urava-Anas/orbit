@@ -51,7 +51,11 @@ async function mintInvocation(supabaseUrl: string, serviceRole: string) {
       "Content-Type": "application/json",
       Prefer: "return=representation",
     },
-    body: JSON.stringify({ token_hash: tokenHash, expires_at: expiresAt }),
+    body: JSON.stringify({
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      purpose: "autopilot_worker",
+    }),
     signal: AbortSignal.timeout(10_000),
   });
   const rows = (await response.json().catch(() => [])) as Array<{ id?: string }>;
