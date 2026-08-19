@@ -12,7 +12,12 @@ begin
     ('foundry_studio_assignments_project_id_idx'),
     ('integration_connections_connected_by_idx'),
     ('lead_source_assets_created_by_idx'),
-    ('leads_workspace_source_asset_idx')
+    ('leads_workspace_source_asset_idx'),
+    ('leads_workspace_source_idx'),
+    ('leads_workspace_score_created_idx'),
+    ('lead_activities_workspace_occurred_idx'),
+    ('projects_workspace_status_idx'),
+    ('orbit_external_actions_workspace_created_idx')
   ) required(index_name)
   where not exists (
     select 1 from pg_indexes where schemaname='public' and indexname=required.index_name
@@ -36,6 +41,19 @@ begin
   end if;
   if not has_function_privilege('service_role', 'public.consume_orbit_rate_limit(text,text,integer,integer)', 'EXECUTE') then
     raise exception 'service role cannot execute server rate limiter';
+  end if;
+
+  if has_function_privilege('anon', 'public.create_foundry_class_journey_command(uuid,uuid,text,text,text,timestamptz,timestamptz,text,text,text,smallint)', 'EXECUTE') then
+    raise exception 'anonymous role can execute class journey command';
+  end if;
+  if has_function_privilege('anon', 'public.create_foundry_task_assignment_journey_command(uuid,uuid,uuid,text,text,text,text,text,smallint,timestamptz,timestamptz,smallint)', 'EXECUTE') then
+    raise exception 'anonymous role can execute task journey command';
+  end if;
+  if not has_function_privilege('anon', 'public.verify_foundry_certificate(uuid)', 'EXECUTE') then
+    raise exception 'public certificate verification RPC is no longer available';
+  end if;
+  if not has_function_privilege('authenticated', 'public.get_lead_engine_summary(uuid)', 'EXECUTE') then
+    raise exception 'authenticated members cannot execute lead engine summary';
   end if;
 end
 $$;
