@@ -7,14 +7,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+const MAX_EVENT_BYTES = 256 * 1024;
+
 export async function POST(request: Request) {
-  const secret =
-    process.env.ORBIT_INBOUND_EVENT_SECRET?.trim() ||
-    process.env.ORBIT_EXTERNAL_ACTION_GATEWAY_SECRET?.trim();
+  const secret = process.env.ORBIT_INBOUND_EVENT_SECRET?.trim();
   if (!secret) {
     return NextResponse.json(
       { error: "Inbound event gateway is not configured." },
       { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_EVENT_BYTES) {
+    return NextResponse.json(
+      { error: "Inbound event payload is too large." },
+      { status: 413, headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -24,6 +32,13 @@ export async function POST(request: Request) {
   }
 
   const body = await request.text();
+  if (Buffer.byteLength(body, "utf8") > MAX_EVENT_BYTES) {
+    return NextResponse.json(
+      { error: "Inbound event payload is too large." },
+      { status: 413, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   let verified = false;
   try {
     verified = verifyStageFourGatewaySignature(body, signature, secret);
@@ -58,9 +73,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Stage 4 inbound event failed safely", error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Stage 4 inbound event failed.",
-      },
+      { error: "Stage 4 inbound event was rejected." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
