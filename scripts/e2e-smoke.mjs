@@ -27,6 +27,8 @@ try {
   const checks = [
     ["/login", [200]],
     ["/orbit/privacy", [200]],
+    ["/account/delete", [200]],
+    ["/api/health/production", [200]],
     ["/dashboard", [307, 308]],
   ];
   for (const [path, expected] of checks) {
