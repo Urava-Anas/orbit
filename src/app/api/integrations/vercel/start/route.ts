@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { workspace, user } = await requireFounderFoundry();
-  const fallback = new URL("/dashboard/connect?integration=vercel", request.url);
-  fallback.hash = "integrations";
+  const fallback = new URL("/dashboard/plugins", request.url);
+  fallback.searchParams.set("plugin", "app:vercel");
+  fallback.searchParams.set("connect", "vercel");
 
   if (!vercelIntegrationReady()) {
     fallback.searchParams.set("error", "vercel_platform_setup");
