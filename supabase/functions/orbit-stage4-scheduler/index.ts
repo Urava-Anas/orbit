@@ -5,19 +5,10 @@ declare const Deno: {
   serve(handler: (request: Request) => Response | Promise<Response>): void;
 };
 
-const DEFAULT_WORKER_URL =
-  "https://orbit-two-delta.vercel.app/api/internal/autopilot-worker";
-
 function toHex(buffer: ArrayBuffer) {
   return Array.from(new Uint8Array(buffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function toBase64(bytes: Uint8Array) {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 function randomToken() {
@@ -56,31 +47,6 @@ async function mintInvocation(supabaseUrl: string, serviceRole: string) {
   return { id, token };
 }
 
-async function encryptServiceRole(serviceRole: string, token: string) {
-  const keyBytes = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(token),
-  );
-  const key = await crypto.subtle.importKey(
-    "raw",
-    keyBytes,
-    { name: "AES-GCM" },
-    false,
-    ["encrypt"],
-  );
-  const iv = new Uint8Array(12);
-  crypto.getRandomValues(iv);
-  const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(serviceRole),
-  );
-  return {
-    iv: toBase64(iv),
-    ciphertext: toBase64(new Uint8Array(encrypted)),
-  };
-}
-
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -91,16 +57,33 @@ Deno.serve(async (request: Request) => {
 
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
-  if (!serviceRole || !supabaseUrl) {
-    return new Response(JSON.stringify({ error: "Scheduler service identity is unavailable." }), {
+  const workerUrl = Deno.env.get("ORBIT_STAGE4_WORKER_URL")?.trim();
+  if (!serviceRole || !supabaseUrl || !workerUrl) {
+    return new Response(
+      JSON.stringify({ error: "Scheduler service identity or worker endpoint is unavailable." }),
+      {
+        status: 503,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      },
+    );
+  }
+
+  let parsedWorkerUrl: URL;
+  try {
+    parsedWorkerUrl = new URL(workerUrl);
+  } catch {
+    return new Response(JSON.stringify({ error: "Worker URL is invalid." }), {
       status: 503,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   }
-
-  const workerUrl = Deno.env.get("ORBIT_STAGE4_WORKER_URL")?.trim() || DEFAULT_WORKER_URL;
-  if (!workerUrl.startsWith("https://")) {
-    return new Response(JSON.stringify({ error: "Worker URL must use HTTPS." }), {
+  if (
+    parsedWorkerUrl.protocol !== "https:" ||
+    parsedWorkerUrl.username ||
+    parsedWorkerUrl.password ||
+    parsedWorkerUrl.pathname !== "/api/internal/autopilot-worker"
+  ) {
+    return new Response(JSON.stringify({ error: "Worker URL must be the reviewed HTTPS worker endpoint." }), {
       status: 503,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
@@ -108,18 +91,15 @@ Deno.serve(async (request: Request) => {
 
   try {
     const invocation = await mintInvocation(supabaseUrl, serviceRole);
-    const encryptedIdentity = await encryptServiceRole(serviceRole, invocation.token);
-    const response = await fetch(workerUrl, {
+    const response = await fetch(parsedWorkerUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Orbit-Scheduler-Invocation": invocation.id,
         "X-Orbit-Scheduler-Token": invocation.token,
-        "X-Orbit-Supabase-Iv": encryptedIdentity.iv,
-        "X-Orbit-Supabase-Ciphertext": encryptedIdentity.ciphertext,
-        "User-Agent": "Orbit-Supabase-Stage4-Scheduler/1.0",
+        "User-Agent": "Orbit-Supabase-Stage4-Scheduler/2.0",
       },
-      body: JSON.stringify({ source: "supabase_scheduler", version: 3 }),
+      body: JSON.stringify({ source: "supabase_scheduler", version: 4 }),
       signal: AbortSignal.timeout(55_000),
     });
 
@@ -131,21 +111,27 @@ Deno.serve(async (request: Request) => {
       payload = { upstreamStatus: response.status };
     }
 
-    return new Response(JSON.stringify({
-      ok: response.ok,
-      workerStatus: response.status,
-      worker: payload,
-    }), {
-      status: response.ok ? 200 : 502,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return new Response(
+      JSON.stringify({
+        ok: response.ok,
+        workerStatus: response.status,
+        worker: payload,
+      }),
+      {
+        status: response.ok ? 200 : 502,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      },
+    );
   } catch (error) {
-    return new Response(JSON.stringify({
-      ok: false,
-      error: error instanceof Error ? error.message : "Stage 4 scheduler bridge failed.",
-    }), {
-      status: 502,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : "Stage 4 scheduler bridge failed.",
+      }),
+      {
+        status: 502,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      },
+    );
   }
 });
