@@ -14,6 +14,7 @@ type ProviderConfig = {
   mark: string;
   description: string;
   authLabel: string;
+  authType: "oauth" | "api_key";
   connectPath?: string;
   manageUrl?: string;
   unlock: string;
@@ -35,6 +36,7 @@ const providers: Record<ProviderId, ProviderConfig> = {
     mark: "GH",
     description: "Repository access for delivery, website management and governed automation.",
     authLabel: "Continue with GitHub",
+    authType: "oauth",
     connectPath: "/api/integrations/github/start",
     manageUrl: "https://github.com/settings/installations",
     unlock: "Approved repositories become available to Orbit delivery and automation tools.",
@@ -44,6 +46,7 @@ const providers: Record<ProviderId, ProviderConfig> = {
     mark: "V",
     description: "Deployment and project access for production delivery and website operations.",
     authLabel: "Continue with Vercel",
+    authType: "oauth",
     connectPath: "/api/integrations/vercel/start",
     manageUrl: "https://vercel.com/dashboard/integrations",
     unlock: "Approved projects become available to Orbit deployment and production workflows.",
@@ -52,35 +55,48 @@ const providers: Record<ProviderId, ProviderConfig> = {
     name: "Search Console",
     mark: "SC",
     description: "Verified search properties for indexing health, visibility and SEO operations.",
-    authLabel: "Connect Search Console",
-    unlock: "Verified properties will power SEO and indexing workflows after the provider integration is enabled.",
+    authLabel: "Continue with Google",
+    authType: "oauth",
+    connectPath: "/api/integrations/oauth/google_search_console/start",
+    manageUrl: "https://search.google.com/search-console",
+    unlock: "Verified Search Console properties become available to Orbit Growth and SEO workflows.",
   },
   google_analytics: {
     name: "Google Analytics",
     mark: "GA",
     description: "Traffic, acquisition and conversion analytics for Growth and Evidence.",
-    authLabel: "Connect Google Analytics",
-    unlock: "Analytics properties will power traffic and conversion reporting after the provider integration is enabled.",
+    authLabel: "Continue with Google",
+    authType: "oauth",
+    connectPath: "/api/integrations/oauth/google_analytics/start",
+    manageUrl: "https://analytics.google.com",
+    unlock: "Approved Analytics properties become available to Orbit Growth and Evidence.",
   },
   meta: {
     name: "Meta",
     mark: "M",
     description: "Facebook Pages and Instagram business assets for Growth and Publishing.",
-    authLabel: "Connect Meta",
-    unlock: "Approved Meta assets will become available to publishing and growth workflows.",
+    authLabel: "Continue with Meta",
+    authType: "oauth",
+    connectPath: "/api/integrations/oauth/meta/start",
+    manageUrl: "https://business.facebook.com/settings",
+    unlock: "Approved Meta assets become available to publishing and growth workflows.",
   },
   linkedin: {
     name: "LinkedIn",
     mark: "in",
     description: "Organisation assets for professional publishing, outreach and lead operations.",
-    authLabel: "Connect LinkedIn",
-    unlock: "Approved organisation assets will become available to Growth and Publishing.",
+    authLabel: "Continue with LinkedIn",
+    authType: "oauth",
+    connectPath: "/api/integrations/oauth/linkedin/start",
+    manageUrl: "https://www.linkedin.com/mypreferences/d/third-party-applications",
+    unlock: "Approved LinkedIn access becomes available to Growth and Publishing.",
   },
   geoapify: {
     name: "Geoapify",
     mark: "G",
     description: "Location intelligence for local business discovery, geocoding and lead enrichment.",
     authLabel: "Connect & validate",
+    authType: "api_key",
     manageUrl: "https://myprojects.geoapify.com",
     unlock: "Validated Geoapify access unlocks local business discovery inside Orbit Lead Finder.",
   },
@@ -95,6 +111,10 @@ function noticeText(value: string | null) {
   const map: Record<string, string> = {
     github_connected: "GitHub connected successfully.",
     vercel_connected: "Vercel connected successfully.",
+    google_search_console_connected: "Search Console connected successfully.",
+    google_analytics_connected: "Google Analytics connected successfully.",
+    meta_connected: "Meta connected successfully.",
+    linkedin_connected: "LinkedIn connected successfully.",
   };
   return map[value] ?? value;
 }
@@ -102,8 +122,12 @@ function noticeText(value: string | null) {
 function errorText(value: string | null) {
   if (!value) return null;
   const map: Record<string, string> = {
-    github_platform_setup: "GitHub connector setup is not enabled in production yet.",
-    vercel_platform_setup: "Vercel connector setup is not enabled in production yet.",
+    github_platform_setup: "GitHub authentication needs the Orbit GitHub App credentials configured by the product owner.",
+    vercel_platform_setup: "Vercel authentication needs the Orbit Vercel Integration credentials configured by the product owner.",
+    google_search_console_auth_config: "Google authentication needs an Orbit OAuth client before this workspace can authorize Search Console.",
+    google_analytics_auth_config: "Google authentication needs an Orbit OAuth client before this workspace can authorize Analytics.",
+    meta_auth_config: "Meta authentication needs an Orbit Meta app before this workspace can authorize assets.",
+    linkedin_auth_config: "LinkedIn authentication needs an Orbit LinkedIn app before this workspace can authorize access.",
     github_oauth_incomplete: "GitHub did not return a complete authorization response.",
     github_state_mismatch: "GitHub connection validation failed. Start again.",
     github_installation_unverified: "Orbit could not verify the GitHub installation.",
@@ -115,6 +139,11 @@ function errorText(value: string | null) {
     vercel_oauth_exchange: "Vercel authorization could not be completed.",
     vercel_save_failed: "Vercel was authorized, but Orbit could not save the connection.",
     vercel_callback_failed: "Vercel connection failed before completion.",
+    oauth_incomplete: "The provider did not return a complete authorization response.",
+    oauth_state_mismatch: "Authentication validation failed. Start the connection again.",
+    oauth_exchange_failed: "The provider accepted the sign-in but Orbit could not complete the token exchange.",
+    oauth_save_failed: "Authentication succeeded but Orbit could not save the encrypted connection.",
+    oauth_callback_failed: "Authentication could not be completed. Try again.",
   };
   return map[value] ?? value;
 }
@@ -166,11 +195,10 @@ export function ConnectionFlowHubOverlay() {
   const flow = useMemo(() => {
     if (!config) return null;
     const connected = runtime?.connected === true;
-    const platformReady = runtime?.platformReady === true;
     const geo = providerId === "geoapify";
-    const firstTitle = geo ? "Connect API key" : "Connect account";
-    const firstDescription = geo ? "Validate the workspace Geoapify credential." : `Authorize Orbit with ${config.name}.`;
-    const authState = connected ? "done" : platformReady ? "current" : "pending";
+    const firstTitle = geo ? "API key authentication" : `Sign in with ${config.name === "Search Console" || config.name === "Google Analytics" ? "Google" : config.name}`;
+    const firstDescription = geo ? "Enter and validate the workspace Geoapify API key." : `Authenticate directly with ${config.name} and approve Orbit access.`;
+    const authState = connected ? "done" : "current";
     const steps: ConnectionFlowStep[] = [
       { title: firstTitle, description: firstDescription, state: authState },
       { title: "Validate access", description: "Orbit verifies provider access before enabling anything.", state: connected ? "done" : "pending" },
@@ -179,20 +207,20 @@ export function ConnectionFlowHubOverlay() {
       { title: "Complete setup", description: "Unlock the provider inside the relevant Orbit modules.", state: connected ? "done" : "pending" },
     ];
     const statuses: ConnectionStatusItem[] = [
-      { label: "Connection", detail: connected ? `${runtime?.accountName ?? config.name} is connected.` : platformReady ? "Ready for secure authorization." : "Provider setup is not enabled yet.", badge: connected ? "Connected" : platformReady ? "Ready" : "Pending", state: connected ? "done" : platformReady ? "current" : "pending" },
-      { label: "Validation", detail: connected ? "Provider access has been verified." : "Runs immediately after authorization.", badge: connected ? "Verified" : "Waiting", state: connected ? "done" : "pending" },
+      { label: "Authentication", detail: connected ? `${runtime?.accountName ?? config.name} is authenticated.` : config.authType === "api_key" ? "API key required." : "Provider sign-in required.", badge: connected ? "Connected" : "Required", state: connected ? "done" : "current" },
+      { label: "Validation", detail: connected ? "Provider access has been verified." : "Runs immediately after authentication.", badge: connected ? "Verified" : "Waiting", state: connected ? "done" : "pending" },
       { label: "Permissions", detail: connected ? "Approved provider boundary is active." : "Explicit approval is required before use.", badge: connected ? "Approved" : "Pending", state: connected ? "done" : "pending" },
       { label: "Assets", detail: connected ? `${runtime?.assetCount ?? 0} approved asset${runtime?.assetCount === 1 ? "" : "s"}.` : geo ? "Capabilities are scoped by the reviewed plugin." : "Selected during provider authorization.", badge: connected ? "Ready" : "Locked", state: connected ? "done" : "pending" },
       { label: "Security", detail: "Tokens and provider secrets stay on Orbit's server boundary.", badge: "Protected", state: "done" },
     ];
     const successPath: ConnectionSuccessItem[] = [
-      { label: "Connected", detail: "Provider linked", state: connected ? "done" : "pending" },
+      { label: "Authenticated", detail: "Provider linked", state: connected ? "done" : "pending" },
       { label: "Validated", detail: "Access verified", state: connected ? "done" : "pending" },
       { label: "Permissions approved", detail: "Boundary confirmed", state: connected ? "done" : "pending" },
       { label: "Assets selected", detail: "Resources scoped", state: connected ? "done" : "pending" },
       { label: "Ready in Orbit", detail: "Integration active", state: connected ? "done" : "pending" },
     ];
-    return { connected, platformReady, steps, statuses, successPath };
+    return { connected, steps, statuses, successPath };
   }, [config, providerId, runtime]);
 
   if (!config || !flow || pathname !== "/dashboard/plugins") return null;
@@ -204,7 +232,7 @@ export function ConnectionFlowHubOverlay() {
     <ConnectionFlowModal
       open
       title={`Connect ${config.name}`}
-      subtitle={`A guided setup from authorization to a working ${config.name} connection.`}
+      subtitle={config.authType === "api_key" ? "Authenticate with the provider API key, validate it, and unlock the connection." : `Authenticate with ${config.name}, approve access, and finish the connection.`}
       providerName={config.name}
       providerDescription={config.description}
       providerMark={config.mark}
@@ -224,34 +252,29 @@ export function ConnectionFlowHubOverlay() {
           <div className={styles.completeCard}><strong>{runtime?.accountName ?? "Connected account"}</strong><span>{runtime?.assetCount ?? 0} approved asset{runtime?.assetCount === 1 ? "" : "s"} available to Orbit.</span></div>
           {providerId === "geoapify" ? <form action={disconnectGeoapify}><button className={styles.secondary} type="submit">Disconnect Geoapify</button></form> : config.manageUrl ? <a className={styles.secondary} href={config.manageUrl} target="_blank" rel="noreferrer">Manage at {config.name} <ExternalLink size={13} /></a> : null}
         </>
-      ) : providerId === "geoapify" && runtime?.installed && flow.platformReady ? (
+      ) : providerId === "geoapify" ? (
         <>
-          <h4>Connect your Geoapify API key</h4>
-          <p>Orbit validates the key first, then encrypts it before persistence.</p>
+          <h4>API key authentication</h4>
+          <p>Paste your Geoapify API key. Orbit validates it on the server and encrypts it before storage.</p>
+          {runtime?.installed === false ? <div className={styles.completeCard}><strong>Plugin installation required</strong><span>Install Geoapify Lead Discovery from the overview first, then return here to authenticate the API key.</span></div> : null}
           <form action={connectGeoapify}>
             <label className={styles.field} htmlFor="geoapify-unified-key">
               <span>Geoapify API key</span>
               <div className={styles.inputWrap}><KeyRound className={styles.keyIcon} size={16} /><input id="geoapify-unified-key" name="apiKey" type="password" minLength={20} maxLength={240} autoComplete="off" required placeholder="Paste your Geoapify API key" /></div>
             </label>
             <div className={styles.inputHelp}><LockKeyhole size={13} /><span>Validated server-side and never embedded in frontend JavaScript.</span></div>
-            <button className={styles.primary} type="submit"><ShieldCheck size={15} /> Connect & validate</button>
+            <button className={styles.primary} type="submit" disabled={runtime?.installed === false}><ShieldCheck size={15} /> Connect & validate</button>
           </form>
           <a className={styles.secondary} href="https://myprojects.geoapify.com" target="_blank" rel="noreferrer">Open Geoapify dashboard <ExternalLink size={13} /></a>
         </>
-      ) : flow.platformReady && config.connectPath ? (
+      ) : config.connectPath ? (
         <>
-          <h4>Authorize {config.name}</h4>
-          <p>Orbit sends you to {config.name} to sign in and approve access. Your provider password is never handled by Orbit.</p>
+          <h4>Authenticate with {config.name === "Search Console" || config.name === "Google Analytics" ? "Google" : config.name}</h4>
+          <p>You will sign in on the provider's own authentication screen and approve the access Orbit requests. Orbit never handles your provider password.</p>
           <a className={styles.primary} href={config.connectPath}><PlugZap size={15} /> {config.authLabel}</a>
-          <div className={styles.inputHelp}><ShieldCheck size={13} /><span>After authorization, Orbit validates the callback and stores only the provider credential required for the approved scope.</span></div>
+          <div className={styles.inputHelp}><ShieldCheck size={13} /><span>After authentication, Orbit validates the callback and stores only the credential required for the approved scope.</span></div>
         </>
-      ) : (
-        <>
-          <h4>{config.name} connection is being prepared</h4>
-          <p>The interface is ready, but the real provider-side integration is not enabled in production yet.</p>
-          <div className={styles.completeCard}><strong>No fake connection</strong><span>Orbit keeps this capability locked until the provider integration is configured and verifiable.</span></div>
-        </>
-      )}
+      ) : null}
     </ConnectionFlowModal>
   );
 }
