@@ -3,15 +3,39 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 import { supabaseUrl } from "@/lib/supabase/config";
 
-function configuredCanonicalHost() {
-  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!raw) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("NEXT_PUBLIC_APP_URL is required in production.");
-    }
-    return null;
+const REVIEWED_ORBIT_PRODUCTION_HOST = "orbit-two-delta.vercel.app";
+const REVIEWED_ORBIT_PRODUCTION_ALIASES = new Set([
+  REVIEWED_ORBIT_PRODUCTION_HOST,
+  "orbit-urava-pros.vercel.app",
+  "orbit-git-main-urava-pros.vercel.app",
+]);
+
+function normalizedHost(value: string | null | undefined) {
+  return value?.trim().toLowerCase().split(":")[0] || null;
+}
+
+function configuredCanonicalHost(requestHost: string | null) {
+  const raw = (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.FOUNDRY_APP_URL ??
+    ""
+  ).trim();
+  if (raw) return new URL(raw).host.toLowerCase();
+
+  const host = normalizedHost(requestHost);
+  if (
+    process.env.NODE_ENV === "production" &&
+    host &&
+    REVIEWED_ORBIT_PRODUCTION_ALIASES.has(host)
+  ) {
+    return REVIEWED_ORBIT_PRODUCTION_HOST;
   }
-  return new URL(raw).host.toLowerCase();
+
+  // Unknown preview/deployment hosts are not silently redirected into production.
+  // They continue with their own injected environment, while the reviewed public
+  // Orbit aliases have a deterministic canonical host even when Vercel does not
+  // expose NEXT_PUBLIC_APP_URL to the proxy runtime.
+  return null;
 }
 
 function contentSecurityPolicy(nonce: string) {
@@ -37,8 +61,8 @@ function contentSecurityPolicy(nonce: string) {
 }
 
 export async function proxy(request: NextRequest) {
-  const canonicalHost = configuredCanonicalHost();
-  const host = request.headers.get("host")?.toLowerCase();
+  const host = request.headers.get("host")?.toLowerCase() ?? null;
+  const canonicalHost = configuredCanonicalHost(host);
 
   if (process.env.NODE_ENV === "production" && host && canonicalHost && host !== canonicalHost) {
     const isVercelHost = host.endsWith(".vercel.app");
