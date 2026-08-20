@@ -311,6 +311,26 @@ async function sendWhatsApp(envelope: StageFourGatewayEnvelope): Promise<StageFo
     };
   }
 
+  const body = text(envelope.payload.body);
+  if (!body) {
+    return {
+      ok: false,
+      provider: "meta_whatsapp_cloud",
+      providerRequestId: null,
+      responseSummary: { blocked: true, reason: "WhatsApp template body is empty." },
+      errorCode: "whatsapp_body_missing",
+    };
+  }
+  if (body.length > 1024) {
+    return {
+      ok: false,
+      provider: "meta_whatsapp_cloud",
+      providerRequestId: null,
+      responseSummary: { blocked: true, reason: "WhatsApp template body exceeds the approved 1,024-character variable limit." },
+      errorCode: "whatsapp_body_too_long",
+    };
+  }
+
   const response = await fetch(`${META_GRAPH_HOST}/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`, {
     method: "POST",
     headers: {
@@ -325,6 +345,12 @@ async function sendWhatsApp(envelope: StageFourGatewayEnvelope): Promise<StageFo
       template: {
         name: templateName,
         language: { code: language },
+        components: [
+          {
+            type: "body",
+            parameters: [{ type: "text", text: body }],
+          },
+        ],
       },
     }),
     cache: "no-store",

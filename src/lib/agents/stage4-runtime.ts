@@ -742,28 +742,72 @@ async function buildAction(
       .eq("workspace_id", workspaceId)
       .eq("id", input.artifactId)
       .eq("lead_id", lead.id)
-      .single();
+      .maybeSingle();
     throwDatabaseError("Load Stage 4 proposal", proposal.error);
-    if (!proposal.data) throw new Error("Proposal draft was not found for this lead.");
-    const body = proposalMessage(lead, proposal.data);
+    if (proposal.data) {
+      const body = proposalMessage(lead, proposal.data);
+      return {
+        opportunity,
+        lead,
+        destination,
+        artifactRefs: { proposalId: proposal.data.id },
+        payload: {
+          type: "proposal",
+          subject: proposal.data.title,
+          body,
+          scope: proposal.data.scope,
+          assumptions: proposal.data.assumptions,
+          priceMin: Number(proposal.data.price_min),
+          priceMax: Number(proposal.data.price_max),
+          currency: proposal.data.currency,
+        },
+        messageChars: body.length,
+        priceAmount: Number(proposal.data.price_max),
+        currency: proposal.data.currency,
+      };
+    }
+
+    const sendPack = await client
+      .from("orbit_recommended_send_packs")
+      .select("id,lead_id,channel,subject,message_body,proposal_title,proposal_scope,pricing_snapshot,content_snapshot,status")
+      .eq("workspace_id", workspaceId)
+      .eq("id", input.artifactId)
+      .eq("lead_id", lead.id)
+      .maybeSingle();
+    throwDatabaseError("Load Phase One recommended send pack", sendPack.error);
+    if (!sendPack.data) throw new Error("Proposal or recommended send pack was not found for this lead.");
+    if (sendPack.data.status !== "ready") {
+      throw new Error(`Recommended send pack is ${sendPack.data.status}, not ready.`);
+    }
+    if (sendPack.data.channel !== input.channel) {
+      throw new Error(`Send-pack channel ${sendPack.data.channel} does not match requested channel ${input.channel}.`);
+    }
+    const pricing = sendPack.data.pricing_snapshot as Record<string, unknown>;
+    const content = sendPack.data.content_snapshot as Record<string, unknown>;
+    const min = Number(pricing.minPrice ?? pricing.basePrice ?? 0);
+    const max = Number(pricing.maxPrice ?? pricing.basePrice ?? min);
+    const currency = String(pricing.currency ?? "PKR");
+    const body = String(sendPack.data.message_body);
     return {
       opportunity,
       lead,
       destination,
-      artifactRefs: { proposalId: proposal.data.id },
+      artifactRefs: {
+        sendPackId: sendPack.data.id,
+        contentAssetId: typeof content.contentAssetId === "string" ? content.contentAssetId : null,
+      },
       payload: {
-        type: "proposal",
-        subject: proposal.data.title,
+        type: "recommended_send_pack",
+        subject: sendPack.data.subject ?? sendPack.data.proposal_title,
         body,
-        scope: proposal.data.scope,
-        assumptions: proposal.data.assumptions,
-        priceMin: Number(proposal.data.price_min),
-        priceMax: Number(proposal.data.price_max),
-        currency: proposal.data.currency,
+        scope: sendPack.data.proposal_scope,
+        pricing,
+        content,
+        assetUrl: typeof content.assetUrl === "string" ? content.assetUrl : null,
       },
       messageChars: body.length,
-      priceAmount: Number(proposal.data.price_max),
-      currency: proposal.data.currency,
+      priceAmount: max,
+      currency,
     };
   }
 

@@ -340,7 +340,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.leadTable}>
-              <thead><tr><th>Lead</th><th>Score</th><th>Status</th><th>Next action</th><th>Source link</th><th>Added</th></tr></thead>
+              <thead><tr><th>Lead</th><th>Score</th><th>Status</th><th>Next action</th><th>Source link</th><th>Added</th><th /></tr></thead>
               <tbody>
                 {leads.map((lead) => (
                   <tr key={lead.id}>
@@ -350,6 +350,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
                     <td><strong className={styles.nextActionText}>{lead.next_action ?? "Set next action"}</strong>{lead.next_action_at ? <small>{formatRelativeDate(lead.next_action_at)}</small> : null}</td>
                     <td>{lead.google_maps_url ? <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Open <ExternalLink size={11} /></a> : "—"}</td>
                     <td>{formatRelativeDate(lead.created_at)}</td>
+                    <td><Link className={styles.rowAction} href={`/dashboard/leads/${lead.id}`} aria-label={`Open ${lead.company ?? lead.name}`}><Sparkles size={14} /></Link></td>
                   </tr>
                 ))}
               </tbody>
