@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getGeoapifyApiKey } from "@/lib/geoapify";
-import { consumeRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { requireWorkspace } from "@/lib/workspace";
 
 type GeoapifyAutocompleteResult = {
@@ -18,6 +17,14 @@ type GeoapifyAutocompleteResult = {
   lon?: number;
 };
 
+type AutocompleteQuota = {
+  allowed: boolean;
+  remaining: number;
+  resetAt: string;
+};
+
+type WorkspaceContext = Awaited<ReturnType<typeof requireWorkspace>>;
+
 function normalizeQuery(value: string | null) {
   return (value ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
 }
@@ -29,6 +36,31 @@ function secondaryLabel(result: GeoapifyAutocompleteResult, label: string) {
   const unique = Array.from(new Set(parts));
   const secondary = unique.join(" · ");
   return secondary && secondary.toLowerCase() !== label.toLowerCase() ? secondary : null;
+}
+
+function quotaHeaders(quota: AutocompleteQuota) {
+  return {
+    "X-RateLimit-Remaining": String(quota.remaining),
+    "X-RateLimit-Reset": quota.resetAt,
+  };
+}
+
+async function consumeAutocompleteQuota(
+  supabase: WorkspaceContext["supabase"],
+  workspaceId: string,
+): Promise<AutocompleteQuota | null> {
+  const { data, error } = await supabase.rpc("consume_lead_autocomplete_rate_limit", {
+    p_workspace_id: workspaceId,
+    p_limit: 60,
+    p_window_seconds: 60,
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) return null;
+  return {
+    allowed: row.allowed === true,
+    remaining: Math.max(0, Number(row.remaining ?? 0)),
+    resetAt: String(row.reset_at ?? new Date(Date.now() + 60_000).toISOString()),
+  };
 }
 
 export async function GET(request: Request) {
@@ -43,17 +75,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ suggestions: [] }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
-  const { workspace, user } = await requireWorkspace();
-  const quota = await consumeRateLimit({
-    scope: "lead.autocomplete",
-    subject: `${workspace.id}:${user.id}`,
-    limit: 60,
-    windowSeconds: 60,
-  });
+  const { workspace, supabase } = await requireWorkspace();
+  const quota = await consumeAutocompleteQuota(supabase, workspace.id);
+  if (!quota) {
+    return NextResponse.json(
+      { suggestions: [], error: "Place suggestion quota service unavailable." },
+      { status: 503, headers: { "Cache-Control": "private, no-store" } },
+    );
+  }
   if (!quota.allowed) {
     return NextResponse.json(
       { suggestions: [], error: "Too many place searches. Try again shortly." },
-      { status: 429, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
+      { status: 429, headers: { "Cache-Control": "private, no-store", ...quotaHeaders(quota) } },
     );
   }
 
@@ -63,7 +96,7 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json(
       { suggestions: [], error: "Geoapify plugin connection required." },
-      { status: 409, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
+      { status: 409, headers: { "Cache-Control": "private, no-store", ...quotaHeaders(quota) } },
     );
   }
 
@@ -85,7 +118,7 @@ export async function GET(request: Request) {
     if (!response.ok) {
       return NextResponse.json(
         { suggestions: [], error: "Place search provider unavailable." },
-        { status: 502, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
+        { status: 502, headers: { "Cache-Control": "private, no-store", ...quotaHeaders(quota) } },
       );
     }
 
@@ -112,12 +145,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { suggestions },
-      { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", ...rateLimitHeaders(quota) } },
+      { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", ...quotaHeaders(quota) } },
     );
   } catch {
     return NextResponse.json(
       { suggestions: [], error: "Place suggestions timed out." },
-      { status: 504, headers: { "Cache-Control": "private, no-store", ...rateLimitHeaders(quota) } },
+      { status: 504, headers: { "Cache-Control": "private, no-store", ...quotaHeaders(quota) } },
     );
   }
 }
