@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +17,7 @@ function requestUsesReviewedProductionOrigin(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const checks = {
-    supabasePublicConfig: Boolean(
-      process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim(),
-    ),
+    supabasePublicConfig: Boolean(supabaseUrl.trim() && supabasePublishableKey.trim()),
     supabaseServiceIdentity: Boolean(
       process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
     ),
