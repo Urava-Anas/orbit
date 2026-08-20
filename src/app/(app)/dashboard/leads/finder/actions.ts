@@ -342,6 +342,7 @@ export async function searchPlaces(formData: FormData) {
     .single();
   if (searchError || !search) finderRedirect("error", "Orbit could not create the discovery search.");
 
+  let completionMessage = "Lead Finder search completed.";
   try {
     const center = await resolveLocation(key, parsed.data.location);
     if (!center) throw new Error("Geoapify could not resolve the requested place.");
@@ -443,7 +444,7 @@ export async function searchPlaces(formData: FormData) {
     if (completionError) throw completionError;
 
     const skipped = candidates.length - freshCandidates.length;
-    done(`${freshCandidates.length} review-ready local leads found within about ${parsed.data.radiusKm} km of ${parsed.data.location}. ${skipped} known or filtered businesses skipped.`);
+    completionMessage = `${freshCandidates.length} review-ready local leads found within about ${parsed.data.radiusKm} km of ${parsed.data.location}. ${skipped} known or filtered businesses skipped.`;
   } catch (error) {
     await supabase
       .from("lead_finder_searches")
@@ -456,6 +457,8 @@ export async function searchPlaces(formData: FormData) {
       .eq("workspace_id", workspace.id);
     finderRedirect("error", "Lead Finder could not complete the Geoapify search. Check the plugin connection and try again.");
   }
+
+  done(completionMessage);
 }
 
 export async function analyzeFinderResult(formData: FormData) {
