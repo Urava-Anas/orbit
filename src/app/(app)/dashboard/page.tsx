@@ -11,9 +11,10 @@ import {
 } from "@/lib/format";
 import type { AuditEvent, Lead, Project } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
+import { getWorkspaceProfile } from "@/lib/workspace-profile";
 
 export const metadata: Metadata = {
-  title: "Founder Command",
+  title: "Founder Dashboard",
   robots: { index: false, follow: false },
 };
 
@@ -28,6 +29,8 @@ type AttentionItem = {
 
 export default async function DashboardPage() {
   const { supabase, workspace } = await requireWorkspace();
+  const profile = getWorkspaceProfile(workspace);
+  const dashboard = profile.dashboard;
   const [leadsResult, projectsResult, invoicesResult, proofsResult, auditResult] =
     await Promise.all([
       supabase
@@ -65,6 +68,7 @@ export default async function DashboardPage() {
   const audit = (auditResult.data ?? []) as AuditEvent[];
   const now = currentTimestamp();
   const nextThreeDays = now + 3 * 24 * 60 * 60 * 1000;
+  const apexExperience = profile.experience === "apex";
 
   const activeLeads = leads.filter(
     (lead) => !["won", "lost"].includes(lead.stage),
@@ -72,8 +76,11 @@ export default async function DashboardPage() {
   const activeProjects = projects.filter(
     (project) => project.status !== "completed",
   );
-  const cashReceivedPkr = invoices
-    .filter((invoice) => invoice.status === "paid" && invoice.currency === "PKR")
+  const cashReceived = invoices
+    .filter(
+      (invoice) =>
+        invoice.status === "paid" && invoice.currency === dashboard.cashCurrency,
+    )
     .reduce((sum, invoice) => sum + Number(invoice.amount), 0);
   const approvedProof = proofs.filter((proof) =>
     ["approved", "published"].includes(proof.status),
@@ -87,7 +94,9 @@ export default async function DashboardPage() {
     if (project.status === "blocked") {
       attention.push({
         id: `project-blocked-${project.id}`,
-        title: `${project.name} is blocked`,
+        title: apexExperience
+          ? `${project.name} carrier account is blocked`
+          : `${project.name} is blocked`,
         detail: project.clients?.name
           ? `${project.clients.name} · founder decision required`
           : "Founder decision required",
@@ -98,8 +107,10 @@ export default async function DashboardPage() {
     } else if (dueTime && dueTime < now) {
       attention.push({
         id: `project-overdue-${project.id}`,
-        title: `${project.name} passed its due date`,
-        detail: project.clients?.name ?? "Delivery needs review",
+        title: apexExperience
+          ? `${project.name} dispatch milestone is overdue`
+          : `${project.name} passed its due date`,
+        detail: project.clients?.name ?? (apexExperience ? "Dispatch needs review" : "Delivery needs review"),
         href: "/dashboard/projects",
         priority: 2,
         date: project.due_date,
@@ -152,43 +163,43 @@ export default async function DashboardPage() {
   return (
     <div className="page">
       <PageHeader
-        kicker="Organisation operating state"
-        title="Founder Command"
-        description="The decisions, risks, money, delivery, and evidence that require founder attention. Every signal resolves to a real organisation record."
+        kicker={dashboard.kicker}
+        title={dashboard.title}
+        description={dashboard.description}
         action={
           <Link className="button button-primary" href="/dashboard/leads">
-            Capture opportunity <ArrowUpRight size={15} aria-hidden="true" />
+            {dashboard.actionLabel} <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         }
       />
 
       <section className="metrics-grid" aria-label="Organisation metrics">
         <MetricCard
-          label="Active opportunities"
+          label={dashboard.opportunityLabel}
           value={activeLeads.length}
-          note={`${leads.length} total lead records`}
+          note={`${leads.length} ${dashboard.opportunityNote}`}
         />
         <MetricCard
-          label="Active delivery"
+          label={dashboard.deliveryLabel}
           value={activeProjects.length}
-          note={`${projects.length} total projects`}
+          note={`${projects.length} ${dashboard.deliveryNote}`}
         />
         <MetricCard
-          label="Cash collected"
-          value={formatMoney(cashReceivedPkr, "PKR")}
-          note="Paid PKR invoices only"
+          label={dashboard.cashLabel}
+          value={formatMoney(cashReceived, dashboard.cashCurrency)}
+          note={dashboard.cashNote}
         />
         <MetricCard
-          label="Approved evidence"
+          label={dashboard.proofLabel}
           value={approvedProof}
-          note={`${proofs.length} total proof assets`}
+          note={`${proofs.length} ${dashboard.proofNote}`}
         />
       </section>
 
       <section className="dashboard-grid">
         <article className="panel">
           <div className="panel-head">
-            <h2>Founder attention</h2>
+            <h2>{dashboard.attentionTitle}</h2>
             <span>{founderAttention.length} current signals</span>
           </div>
           {founderAttention.length ? (
@@ -212,11 +223,8 @@ export default async function DashboardPage() {
                 <span className="empty-state-icon">
                   <CheckCircle2 size={22} aria-hidden="true" />
                 </span>
-                <h3>No urgent founder decisions</h3>
-                <p>
-                  Orbit will surface overdue money, blocked delivery, late work,
-                  and near-term follow-ups here.
-                </p>
+                <h3>{dashboard.attentionEmptyTitle}</h3>
+                <p>{dashboard.attentionEmptyDescription}</p>
               </div>
             </div>
           )}
@@ -224,8 +232,8 @@ export default async function DashboardPage() {
 
         <article className="panel">
           <div className="panel-head">
-            <h2>System activity</h2>
-            <span>Latest audited changes</span>
+            <h2>{dashboard.activityTitle}</h2>
+            <span>{dashboard.activitySubtitle}</span>
           </div>
           {audit.length ? (
             <div className="action-list">
@@ -236,7 +244,7 @@ export default async function DashboardPage() {
                     <strong>
                       {humanize(event.action)} {humanize(event.entity_type)}
                     </strong>
-                    <small>Organisation mutation recorded</small>
+                    <small>{dashboard.mutationDescription}</small>
                   </div>
                   <time dateTime={event.created_at}>
                     {formatRelativeDate(event.created_at)}

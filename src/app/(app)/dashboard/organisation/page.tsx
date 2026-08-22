@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
+import { getWorkspaceProfile } from "@/lib/workspace-profile";
 
 export const metadata: Metadata = {
   title: "Organisation",
@@ -11,13 +12,19 @@ export const metadata: Metadata = {
 
 export default async function OrganisationPage() {
   const { user, role, workspace } = await requireWorkspace();
+  const profile = getWorkspaceProfile(workspace);
+  const apexExperience = profile.experience === "apex";
 
   return (
     <div className="page">
       <PageHeader
-        kicker="Organisation architecture"
+        kicker={apexExperience ? "Apex workspace architecture" : "Organisation architecture"}
         title={workspace.name}
-        description="One organisation boundary, one person identity, controlled access to each operating domain, and an audit trail for every important action."
+        description={
+          apexExperience
+            ? "One secure Apex workspace for carrier acquisition, onboarding, dispatch operations, revenue, proof, and integrations."
+            : "One organisation boundary, one person identity, controlled access to each operating domain, and an audit trail for every important action."
+        }
       />
 
       <section className="settings-grid">
@@ -68,35 +75,59 @@ export default async function OrganisationPage() {
         <article className="panel settings-card">
           <h2>Current operating domains</h2>
           <p>
-            Orbit currently runs the proven founder loop while the broader
-            organisation model is introduced in controlled vertical slices.
+            {apexExperience
+              ? "The Apex workspace keeps the founder view focused on the dispatch business while reusing Orbit's secure operating core."
+              : "Orbit currently runs the proven founder loop while the broader organisation model is introduced in controlled vertical slices."}
           </p>
           <dl>
-            <div>
-              <dt>Founder Command</dt>
-              <dd>Active</dd>
-            </div>
-            <div>
-              <dt>Growth and delivery</dt>
-              <dd>Active</dd>
-            </div>
-            <div>
-              <dt>Finance and evidence</dt>
-              <dd>Active</dd>
-            </div>
-            <div>
-              <dt>Foundry</dt>
-              <dd>Architecture locked</dd>
-            </div>
+            {apexExperience ? (
+              <>
+                <div>
+                  <dt>Carrier pipeline</dt>
+                  <dd>Active</dd>
+                </div>
+                <div>
+                  <dt>Sales and onboarding</dt>
+                  <dd>Active</dd>
+                </div>
+                <div>
+                  <dt>Dispatch operations</dt>
+                  <dd>Active</dd>
+                </div>
+                <div>
+                  <dt>Revenue and proof</dt>
+                  <dd>Active</dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt>Founder Command</dt>
+                  <dd>Active</dd>
+                </div>
+                <div>
+                  <dt>Growth and delivery</dt>
+                  <dd>Active</dd>
+                </div>
+                <div>
+                  <dt>Finance and evidence</dt>
+                  <dd>Active</dd>
+                </div>
+                <div>
+                  <dt>Foundry</dt>
+                  <dd>Architecture locked</dd>
+                </div>
+              </>
+            )}
           </dl>
         </article>
 
         <article className="panel settings-card">
           <h2>Platform direction</h2>
           <p>
-            Orbit remains founder-first in experience and organisation-first in
-            architecture. Foundry will enter as a bounded domain, not as a second
-            application or a replacement for Founder Command.
+            {apexExperience
+              ? "Apex is a workspace experience inside Orbit, not a separate product. The operating model changes by workspace while identity, permissions, audit, and data isolation stay shared."
+              : "Orbit remains founder-first in experience and organisation-first in architecture. Foundry will enter as a bounded domain, not as a second application or a replacement for Founder Command."}
           </p>
           <dl>
             <div>

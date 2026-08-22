@@ -18,9 +18,10 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import type { WorkspaceExperience } from "@/lib/workspace-profile";
 import styles from "./AppNavigation.module.css";
 
-const links = [
+const orbitLinks = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
   { href: "/dashboard/foundry", label: "Foundry OS", icon: GraduationCap },
   { href: "/dashboard/leads", label: "Growth", icon: UsersRound },
@@ -34,18 +35,40 @@ const links = [
   { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
 ] as const;
 
+const apexLinks = [
+  { href: "/dashboard", label: "Founder Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/leads", label: "Carrier Pipeline", icon: UsersRound },
+  { href: "/dashboard/sales", label: "Sales & Onboarding", icon: Crosshair },
+  { href: "/dashboard/projects", label: "Dispatch Operations", icon: FolderKanban },
+  { href: "/dashboard/cash", label: "Revenue", icon: Banknote },
+  { href: "/dashboard/proof", label: "Proof & Reviews", icon: FileCheck2 },
+  { href: "/dashboard/content", label: "Marketing Content", icon: MessageSquareText },
+  { href: "/dashboard/plugins", label: "Integrations", icon: Blocks },
+  { href: "/dashboard/organisation", label: "Workspace", icon: Building2 },
+  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
+] as const;
+
 type AppNavigationProps = {
   mobile?: boolean;
+  experience?: WorkspaceExperience;
+  workspaceName?: string;
+  productLabel?: string;
 };
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
 }
 
-export function AppNavigation({ mobile = false }: AppNavigationProps) {
+export function AppNavigation({
+  mobile = false,
+  experience = "orbit",
+  workspaceName = "Orbit",
+  productLabel = "Organisation workspace",
+}: AppNavigationProps) {
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const open = openPath === pathname;
+  const links = experience === "apex" ? apexLinks : orbitLinks;
 
   useEffect(() => {
     if (!open) return;
@@ -103,8 +126,8 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
               <div className={styles.drawerBrand}>
                 <span className={styles.brandMark} aria-hidden="true" />
                 <div>
-                  <strong>Orbit</strong>
-                  <small>Organisation workspace</small>
+                  <strong>{experience === "apex" ? workspaceName : "Orbit"}</strong>
+                  <small>{productLabel}</small>
                 </div>
               </div>
               <button type="button" className={styles.closeButton} aria-label="Close navigation" onClick={() => setOpenPath(null)}>
@@ -130,7 +153,7 @@ export function AppNavigation({ mobile = false }: AppNavigationProps) {
             </nav>
 
             <div className={styles.drawerFooter}>
-              <span><i aria-hidden="true" /> Organisation isolated · secure workspace</span>
+              <span><i aria-hidden="true" /> {workspaceName} · secure workspace</span>
             </div>
           </aside>
         </>
