@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Banknote,
   Blocks,
@@ -66,17 +67,37 @@ export function AppNavigation({
   productLabel = "Organisation workspace",
 }: AppNavigationProps) {
   const pathname = usePathname();
-  const [openPath, setOpenPath] = useState<string | null>(null);
-  const open = openPath === pathname;
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const links = experience === "apex" ? apexLinks : orbitLinks;
+  const primaryCutoff = experience === "apex" ? 6 : 8;
+  const primaryLinks = links.slice(0, primaryCutoff);
+  const systemLinks = links.slice(primaryCutoff);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!open) return;
+
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenPath(null);
+      if (event.key === "Escape") {
+        setOpen(false);
+        requestAnimationFrame(() => triggerRef.current?.focus());
+      }
     };
+
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
@@ -101,63 +122,118 @@ export function AppNavigation({
     );
   }
 
+  const closeMenu = () => {
+    setOpen(false);
+  };
+
+  const drawer =
+    mounted && open
+      ? createPortal(
+          <>
+            <button
+              type="button"
+              className={styles.backdrop}
+              aria-label="Close navigation"
+              onClick={() => {
+                closeMenu();
+                requestAnimationFrame(() => triggerRef.current?.focus());
+              }}
+            />
+            <aside
+              className={`${styles.drawer} ${experience === "apex" ? styles.apexDrawer : ""}`}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${workspaceName} navigation`}
+            >
+              <div className={styles.drawerHeader}>
+                <div className={styles.drawerBrand}>
+                  <span className={styles.brandMark} aria-hidden="true" />
+                  <div>
+                    <strong>{experience === "apex" ? workspaceName : "Orbit"}</strong>
+                    <small>{productLabel}</small>
+                  </div>
+                </div>
+                <button
+                  ref={closeRef}
+                  type="button"
+                  className={styles.closeButton}
+                  aria-label="Close navigation"
+                  onClick={() => {
+                    closeMenu();
+                    requestAnimationFrame(() => triggerRef.current?.focus());
+                  }}
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className={styles.drawerScroll}>
+                <nav className={styles.mobileLinks} aria-label="Primary operating areas">
+                  <span className={styles.groupLabel}>Operate</span>
+                  {primaryLinks.map(({ href, label, icon: Icon }) => {
+                    const active = isActive(pathname, href);
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={closeMenu}
+                        className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}
+                      >
+                        <span className={styles.linkIcon}>
+                          <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                        </span>
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+
+                <nav className={styles.mobileLinks} aria-label="Workspace controls">
+                  <span className={styles.groupLabel}>Workspace</span>
+                  {systemLinks.map(({ href, label, icon: Icon }) => {
+                    const active = isActive(pathname, href);
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={closeMenu}
+                        className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}
+                      >
+                        <span className={styles.linkIcon}>
+                          <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                        </span>
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              <div className={styles.drawerFooter}>
+                <span>
+                  <i aria-hidden="true" /> {workspaceName}
+                </span>
+                <small>Secure workspace · isolated data</small>
+              </div>
+            </aside>
+          </>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className={`mobile-nav ${styles.mobileNav}`}>
       <button
+        ref={triggerRef}
         type="button"
-        className={`button button-quiet ${styles.menuButton}`}
-        aria-label="Open Orbit navigation"
+        className={styles.menuButton}
+        aria-label={open ? "Close navigation" : "Open navigation"}
         aria-expanded={open}
-        onClick={() => setOpenPath(pathname)}
+        onClick={() => setOpen((current) => !current)}
       >
-        <Menu size={19} aria-hidden="true" />
+        <Menu size={21} strokeWidth={1.8} aria-hidden="true" />
       </button>
-
-      {open ? (
-        <>
-          <button
-            type="button"
-            className={styles.backdrop}
-            aria-label="Close Orbit navigation"
-            onClick={() => setOpenPath(null)}
-          />
-          <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label="Orbit navigation">
-            <div className={styles.drawerHeader}>
-              <div className={styles.drawerBrand}>
-                <span className={styles.brandMark} aria-hidden="true" />
-                <div>
-                  <strong>{experience === "apex" ? workspaceName : "Orbit"}</strong>
-                  <small>{productLabel}</small>
-                </div>
-              </div>
-              <button type="button" className={styles.closeButton} aria-label="Close navigation" onClick={() => setOpenPath(null)}>
-                <X size={17} aria-hidden="true" />
-              </button>
-            </div>
-
-            <nav className={styles.mobileLinks} aria-label="Orbit operating domains">
-              {links.map(({ href, label, icon: Icon }) => {
-                const active = isActive(pathname, href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setOpenPath(null)}
-                    className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}
-                  >
-                    <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
-                    {label}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className={styles.drawerFooter}>
-              <span><i aria-hidden="true" /> {workspaceName} · secure workspace</span>
-            </div>
-          </aside>
-        </>
-      ) : null}
+      {drawer}
     </div>
   );
 }
