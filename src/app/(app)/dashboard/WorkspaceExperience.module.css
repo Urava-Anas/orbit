@@ -1,0 +1,68 @@
+.apexWorkspace {
+  --background: #07131e;
+  --surface: #0b1d2c;
+  --surface-raised: #102a3e;
+  --surface-soft: #132f45;
+  --foreground: #f7f9fa;
+  --muted: #8796a1;
+  --muted-strong: #c6d0d7;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --accent: #ff8a1f;
+  --accent-ink: #07131e;
+  --success: #1ea672;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 82% 4%, rgba(255, 138, 31, 0.1), transparent 24%),
+    #07131e;
+}
+
+.apexWorkspace :global(.sidebar) {
+  background: rgba(7, 19, 30, 0.94);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.apexWorkspace :global(.topbar) {
+  background: rgba(7, 19, 30, 0.86);
+}
+
+.apexWorkspace :global(.sidebar-workspace),
+.apexWorkspace :global(.metric-card),
+.apexWorkspace :global(.panel) {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.apexWorkspace :global(.nav-link:hover),
+.apexWorkspace :global(.nav-link-active) {
+  background: rgba(255, 138, 31, 0.075);
+  border-color: rgba(255, 138, 31, 0.18);
+}
+
+.apexWorkspace :global(.button-primary) {
+  border-color: #ff8a1f;
+  background: #ff8a1f;
+  color: #07131e;
+  font-weight: 750;
+}
+
+.apexWorkspace :global(.button-primary:hover) {
+  background: #ff9a3b;
+}
+
+.apexWorkspace :global(.page-header h1) {
+  letter-spacing: -0.05em;
+}
+
+.apexWorkspace :global(.section-kicker),
+.apexWorkspace :global(.nav-link-active svg) {
+  color: #ff8a1f;
+}
+
+.apexWorkspace :global(.orbit-mark::before) {
+  background: #ff8a1f;
+  box-shadow: 0 0 24px rgba(255, 138, 31, 0.55);
+}
+
+.apexWorkspace :global(.orbit-mark::after) {
+  border-color: rgba(255, 138, 31, 0.5);
+}
