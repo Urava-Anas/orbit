@@ -1,7 +1,8 @@
 import { OrbitMark } from "@/components/OrbitMark";
 import { AppNavigation } from "@/components/AppNavigation";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { humanize } from "@/lib/format";
-import { requireWorkspace } from "@/lib/workspace";
+import { listFounderWorkspaces, requireWorkspace } from "@/lib/workspace";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
 import styles from "./WorkspaceExperience.module.css";
 
@@ -9,6 +10,7 @@ export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const { user, role, workspace } = await requireWorkspace();
+  const workspaceOptions = await listFounderWorkspaces();
   const profile = getWorkspaceProfile(workspace);
   const initial = (user.user_metadata.full_name ?? user.email ?? "O")
     .slice(0, 1)
@@ -22,10 +24,10 @@ export default async function DashboardLayout({
     <div className={shellClassName} data-workspace-experience={profile.experience}>
       <aside className="sidebar">
         <OrbitMark />
-        <div className="sidebar-workspace">
-          <small>Active organisation</small>
-          <strong>{workspace.name}</strong>
-        </div>
+        <WorkspaceSwitcher
+          currentWorkspace={workspace}
+          workspaces={workspaceOptions}
+        />
         <AppNavigation
           experience={profile.experience}
           workspaceName={workspace.name}
