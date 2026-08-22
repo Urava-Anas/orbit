@@ -4,6 +4,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Workspace } from "@/lib/types";
+import { getWorkspaceProfile } from "@/lib/workspace-profile";
 
 export type OrbitAccountRole = "founder" | "student" | "pending";
 export type OrbitMembershipRole = "owner" | "admin" | "member" | null;
@@ -54,7 +55,15 @@ function normalizeAccessRow(value: unknown): OrbitAccessRow | null {
 }
 
 export function orbitHomePath(access: OrbitAccess) {
-  if (access.accountRole === "founder") return "/dashboard/foundry";
+  if (access.accountRole === "founder") {
+    if (
+      access.workspace &&
+      getWorkspaceProfile(access.workspace).experience === "apex"
+    ) {
+      return "/dashboard";
+    }
+    return "/dashboard/foundry";
+  }
   if (access.accountRole === "student") return "/learn";
   return "/access-pending";
 }
@@ -111,7 +120,7 @@ export async function requireStudentAccess() {
   const { access } = context;
 
   if (access.accountRole === "founder") {
-    redirect("/dashboard/foundry");
+    redirect(orbitHomePath(access));
   }
 
   if (
