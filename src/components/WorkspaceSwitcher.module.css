@@ -1,0 +1,57 @@
+.switcher,
+.staticWorkspace {
+  margin: 26px 0 22px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.switcher label,
+.staticWorkspace small {
+  display: block;
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.switcher select {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 4px;
+  padding: 0 22px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+  outline: none;
+  cursor: pointer;
+}
+
+.switcher option {
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.staticWorkspace strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending {
+  display: block;
+  min-height: 12px;
+  margin-top: 4px;
+  color: var(--accent);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
