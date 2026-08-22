@@ -2,36 +2,52 @@ import { OrbitMark } from "@/components/OrbitMark";
 import { AppNavigation } from "@/components/AppNavigation";
 import { humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
+import { getWorkspaceProfile } from "@/lib/workspace-profile";
+import styles from "./WorkspaceExperience.module.css";
 
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const { user, role, workspace } = await requireWorkspace();
+  const profile = getWorkspaceProfile(workspace);
   const initial = (user.user_metadata.full_name ?? user.email ?? "O")
     .slice(0, 1)
     .toUpperCase();
+  const shellClassName =
+    profile.experience === "apex"
+      ? `app-shell ${styles.apexWorkspace}`
+      : "app-shell";
 
   return (
-    <div className="app-shell">
+    <div className={shellClassName} data-workspace-experience={profile.experience}>
       <aside className="sidebar">
         <OrbitMark />
         <div className="sidebar-workspace">
           <small>Active organisation</small>
           <strong>{workspace.name}</strong>
         </div>
-        <AppNavigation />
+        <AppNavigation
+          experience={profile.experience}
+          workspaceName={workspace.name}
+          productLabel={profile.productLabel}
+        />
         <div className="sidebar-foot">
           <div className="sidebar-status">
             <i aria-hidden="true" />
-            Organisation isolated
+            {profile.sidebarStatus}
           </div>
         </div>
       </aside>
 
       <main className="app-main">
         <header className="topbar">
-          <AppNavigation mobile />
-          <span className="topbar-context">Decisions → Execution → Evidence</span>
+          <AppNavigation
+            mobile
+            experience={profile.experience}
+            workspaceName={workspace.name}
+            productLabel={profile.productLabel}
+          />
+          <span className="topbar-context">{profile.topbarContext}</span>
           <div className="topbar-user">
             <span>
               {humanize(role)} · {user.email}
