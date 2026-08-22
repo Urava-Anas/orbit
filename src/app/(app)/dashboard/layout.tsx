@@ -4,7 +4,8 @@ import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { humanize } from "@/lib/format";
 import { listFounderWorkspaces, requireWorkspace } from "@/lib/workspace";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
-import styles from "./WorkspaceExperience.module.css";
+import experienceStyles from "./WorkspaceExperience.module.css";
+import layoutStyles from "./DashboardLayout.module.css";
 
 export default async function DashboardLayout({
   children,
@@ -17,7 +18,7 @@ export default async function DashboardLayout({
     .toUpperCase();
   const shellClassName =
     profile.experience === "apex"
-      ? `app-shell ${styles.apexWorkspace}`
+      ? `app-shell ${experienceStyles.apexWorkspace}`
       : "app-shell";
 
   return (
@@ -42,15 +43,26 @@ export default async function DashboardLayout({
       </aside>
 
       <main className="app-main">
-        <header className="topbar">
+        <header className={`topbar ${layoutStyles.topbar}`}>
           <AppNavigation
             mobile
             experience={profile.experience}
             workspaceName={workspace.name}
             productLabel={profile.productLabel}
           />
-          <span className="topbar-context">{profile.topbarContext}</span>
-          <div className="topbar-user">
+
+          <div className={layoutStyles.mobileWorkspace}>
+            <WorkspaceSwitcher
+              compact
+              currentWorkspace={workspace}
+              workspaces={workspaceOptions}
+            />
+          </div>
+
+          <span className={`topbar-context ${layoutStyles.context}`}>
+            {profile.topbarContext}
+          </span>
+          <div className={`topbar-user ${layoutStyles.user}`}>
             <span>
               {humanize(role)} · {user.email}
             </span>
