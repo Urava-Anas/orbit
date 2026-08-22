@@ -1,10 +1,13 @@
 import "server-only";
 
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Workspace } from "@/lib/types";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
+
+export const ACTIVE_WORKSPACE_COOKIE = "orbit-active-workspace";
 
 export type OrbitAccountRole = "founder" | "student" | "pending";
 export type OrbitMembershipRole = "owner" | "admin" | "member" | null;
@@ -26,6 +29,9 @@ type OrbitAccessRow = {
   student_id: string | null;
   foundry_id: string | null;
 };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizeAccessRow(value: unknown): OrbitAccessRow | null {
   const row = Array.isArray(value) ? value[0] : value;
@@ -68,6 +74,51 @@ export function orbitHomePath(access: OrbitAccess) {
   return "/access-pending";
 }
 
+async function resolveSelectedFounderWorkspace(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  fallbackWorkspace: Workspace | null,
+  fallbackRole: OrbitMembershipRole,
+) {
+  const cookieStore = await cookies();
+  const selectedWorkspaceId = cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value;
+
+  if (
+    !selectedWorkspaceId ||
+    !UUID_PATTERN.test(selectedWorkspaceId) ||
+    selectedWorkspaceId === fallbackWorkspace?.id
+  ) {
+    return { workspace: fallbackWorkspace, role: fallbackRole };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("workspace_id, role")
+    .eq("workspace_id", selectedWorkspaceId)
+    .eq("user_id", userId)
+    .in("role", ["owner", "admin"])
+    .maybeSingle();
+
+  if (membershipError || !membership) {
+    return { workspace: fallbackWorkspace, role: fallbackRole };
+  }
+
+  const { data: selectedWorkspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("id, name, slug")
+    .eq("id", selectedWorkspaceId)
+    .maybeSingle();
+
+  if (workspaceError || !selectedWorkspace) {
+    return { workspace: fallbackWorkspace, role: fallbackRole };
+  }
+
+  return {
+    workspace: selectedWorkspace as Workspace,
+    role: membership.role as OrbitMembershipRole,
+  };
+}
+
 export const getOrbitAccess = cache(async function getOrbitAccess() {
   const supabase = await createClient();
   const {
@@ -87,7 +138,7 @@ export const getOrbitAccess = cache(async function getOrbitAccess() {
     throw new Error("Orbit access resolution returned an invalid result.");
   }
 
-  const workspace =
+  const fallbackWorkspace =
     row.workspace_id && row.workspace_name && row.workspace_slug
       ? {
           id: row.workspace_id,
@@ -96,13 +147,23 @@ export const getOrbitAccess = cache(async function getOrbitAccess() {
         }
       : null;
 
+  const selected =
+    row.account_role === "founder"
+      ? await resolveSelectedFounderWorkspace(
+          supabase,
+          user.id,
+          fallbackWorkspace,
+          row.membership_role,
+        )
+      : { workspace: fallbackWorkspace, role: row.membership_role };
+
   return {
     supabase,
     user,
     access: {
       accountRole: row.account_role,
-      membershipRole: row.membership_role,
-      workspace,
+      membershipRole: selected.role,
+      workspace: selected.workspace,
       studentId: row.student_id,
       foundryId: row.foundry_id,
     } satisfies OrbitAccess,
