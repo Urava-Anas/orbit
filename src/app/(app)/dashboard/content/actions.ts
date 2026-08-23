@@ -66,6 +66,10 @@ async function requireContentAdmin() {
   return context;
 }
 
+function isReviewState(status: string) {
+  return status === "review" || status === "draft";
+}
+
 async function appendAuditEvent(
   supabase: WorkspaceSupabase,
   event: {
@@ -383,12 +387,13 @@ export async function approveContentItem(formData: FormData) {
   const { supabase, user, workspace } = await requireContentAdmin();
   const { data: content, error: contentError } = await supabase
     .from("content_drafts")
-    .select("id,channel,scheduled_for,batch_id")
+    .select("id,channel,scheduled_for,batch_id,status")
     .eq("id", parsed.data)
     .eq("workspace_id", workspace.id)
     .single();
 
   if (contentError || !content) fail("Content item was not found.");
+  if (!isReviewState(content.status)) fail("Only content awaiting review can be approved.");
   if (content.channel === "instagram") {
     try {
       const readyIds = await readyGeneratedImageIds(supabase, workspace.id, [content.id]);
@@ -401,12 +406,15 @@ export async function approveContentItem(formData: FormData) {
   }
 
   const approvedAt = new Date().toISOString();
-  const { error } = await supabase
+  const { data: approved, error } = await supabase
     .from("content_drafts")
     .update({ status: "approved", approved_at: approvedAt, approved_by: user.id, rejection_reason: null })
     .eq("id", content.id)
-    .eq("workspace_id", workspace.id);
-  if (error) fail("Content item could not be approved.");
+    .eq("workspace_id", workspace.id)
+    .in("status", ["review", "draft"])
+    .select("id")
+    .maybeSingle();
+  if (error || !approved) fail("Content item changed during review. Reload it before approving.");
 
   if (content.channel === "instagram") {
     try {
@@ -416,7 +424,8 @@ export async function approveContentItem(formData: FormData) {
         .from("content_drafts")
         .update({ status: "review", approved_at: null, approved_by: null })
         .eq("workspace_id", workspace.id)
-        .eq("id", content.id);
+        .eq("id", content.id)
+        .eq("status", "approved");
       fail(promotionError instanceof Error ? promotionError.message : "Instagram visual could not be prepared for publishing.");
     }
   }
@@ -448,18 +457,24 @@ export async function rejectContentItem(formData: FormData) {
 
   const { supabase, workspace, user } = await requireContentAdmin();
   const reason = parsed.data.reason || "Rejected during daily founder review.";
-  const { data: content } = await supabase
+  const { data: content, error: contentError } = await supabase
     .from("content_drafts")
-    .select("batch_id")
+    .select("batch_id,status")
     .eq("id", parsed.data.id)
     .eq("workspace_id", workspace.id)
     .maybeSingle();
-  const { error } = await supabase
+  if (contentError || !content) fail("Content item was not found.");
+  if (!isReviewState(content.status)) fail("Only content awaiting review can be rejected.");
+
+  const { data: rejected, error } = await supabase
     .from("content_drafts")
     .update({ status: "rejected", rejection_reason: reason, approved_at: null, approved_by: null })
     .eq("id", parsed.data.id)
-    .eq("workspace_id", workspace.id);
-  if (error) fail("Content item could not be rejected.");
+    .eq("workspace_id", workspace.id)
+    .in("status", ["review", "draft"])
+    .select("id")
+    .maybeSingle();
+  if (error || !rejected) fail("Content item changed during review. Reload it before rejecting.");
 
   await supabase
     .from("content_publications")
@@ -468,7 +483,7 @@ export async function rejectContentItem(formData: FormData) {
     .eq("content_id", parsed.data.id);
   await appendAuditEvent(supabase, {
     workspaceId: workspace.id,
-    batchId: content?.batch_id ?? null,
+    batchId: content.batch_id,
     contentId: parsed.data.id,
     eventType: "content_rejected",
     actorId: user.id,
@@ -498,12 +513,14 @@ export async function updateContentItem(formData: FormData) {
   if (!parsed.success) fail("Check the content edits and try again.");
 
   const { supabase, workspace, user } = await requireContentAdmin();
-  const { data: content } = await supabase
+  const { data: content, error: contentError } = await supabase
     .from("content_drafts")
-    .select("batch_id")
+    .select("batch_id,status")
     .eq("id", parsed.data.id)
     .eq("workspace_id", workspace.id)
     .maybeSingle();
+  if (contentError || !content) fail("Content item was not found.");
+  if (!isReviewState(content.status)) fail("Approved or published content cannot be edited in place. Create a new revision instead.");
 
   try {
     await archiveGeneratedVisuals(supabase, workspace.id, parsed.data.id);
@@ -511,7 +528,7 @@ export async function updateContentItem(formData: FormData) {
     fail(archiveError instanceof Error ? archiveError.message : "The old generated visual could not be invalidated safely.");
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("content_drafts")
     .update({
       title: parsed.data.title,
@@ -524,17 +541,20 @@ export async function updateContentItem(formData: FormData) {
       approved_by: null,
     })
     .eq("id", parsed.data.id)
-    .eq("workspace_id", workspace.id);
-  if (error) fail("Content edits could not be saved.");
+    .eq("workspace_id", workspace.id)
+    .in("status", ["review", "draft"])
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) fail("Content item changed while you were editing it. Reload before trying again.");
 
   await supabase
     .from("content_publications")
-    .update({ status: "cancelled", last_error: "Content changed after approval and requires re-approval." })
+    .update({ status: "cancelled", last_error: "Content changed before approval." })
     .eq("workspace_id", workspace.id)
     .eq("content_id", parsed.data.id);
   await appendAuditEvent(supabase, {
     workspaceId: workspace.id,
-    batchId: content?.batch_id ?? null,
+    batchId: content.batch_id,
     contentId: parsed.data.id,
     eventType: "content_edited",
     actorId: user.id,
@@ -573,12 +593,17 @@ export async function approveDailyBatch(formData: FormData) {
 
   const ids = items.map((item) => item.id);
   const approvedAt = new Date().toISOString();
-  const { error: approvalError } = await supabase
+  const { data: approvedRows, error: approvalError } = await supabase
     .from("content_drafts")
     .update({ status: "approved", approved_at: approvedAt, approved_by: user.id, rejection_reason: null })
     .in("id", ids)
-    .eq("workspace_id", workspace.id);
+    .eq("workspace_id", workspace.id)
+    .in("status", ["review", "draft"])
+    .select("id");
   if (approvalError) fail("The batch could not be approved.");
+  if ((approvedRows?.length ?? 0) !== ids.length) {
+    fail("One or more content items changed during review. Reload the batch before approving the day.");
+  }
 
   try {
     for (const contentId of instagramIds) {
@@ -589,7 +614,8 @@ export async function approveDailyBatch(formData: FormData) {
       .from("content_drafts")
       .update({ status: "review", approved_at: null, approved_by: null })
       .in("id", ids)
-      .eq("workspace_id", workspace.id);
+      .eq("workspace_id", workspace.id)
+      .eq("status", "approved");
     fail(promotionError instanceof Error ? promotionError.message : "One or more Instagram visuals could not be prepared for publishing.");
   }
 
