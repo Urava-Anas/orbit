@@ -8,6 +8,7 @@ import {
   Banknote,
   Blocks,
   Building2,
+  CreditCard,
   Crosshair,
   FileCheck2,
   FolderKanban,
@@ -33,6 +34,7 @@ const orbitLinks = [
   { href: "/dashboard/content", label: "Publishing", icon: MessageSquareText },
   { href: "/dashboard/plugins", label: "Plugins", icon: Blocks },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
+  { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
   { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
 ] as const;
 
@@ -46,6 +48,7 @@ const apexLinks = [
   { href: "/dashboard/content", label: "Marketing Content", icon: MessageSquareText },
   { href: "/dashboard/plugins", label: "Integrations", icon: Blocks },
   { href: "/dashboard/organisation", label: "Workspace", icon: Building2 },
+  { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
   { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
 ] as const;
 

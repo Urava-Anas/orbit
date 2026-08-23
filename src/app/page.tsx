@@ -37,11 +37,14 @@ export default async function HomePage({ searchParams }: Props) {
       <nav className="landing-nav" aria-label="Primary navigation">
         <OrbitMark />
         <div className="landing-nav-actions">
+          <Link className="button button-quiet" href="/pricing">
+            Pricing
+          </Link>
           <Link className="button button-quiet" href="/login">
             Sign in
           </Link>
-          <Link className="button button-primary" href="/login">
-            Open Orbit <ArrowUpRight size={15} aria-hidden="true" />
+          <Link className="button button-primary" href="/login?next=/trial">
+            Start free trial <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         </div>
       </nav>
@@ -59,12 +62,16 @@ export default async function HomePage({ searchParams }: Props) {
             modules, workflows, and permissions.
           </p>
           <div className="hero-actions">
-            <Link className="button button-primary" href="/login">
-              Enter your workspace
+            <Link className="button button-primary" href="/login?next=/trial">
+              Start 15-day Business trial
               <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+            <Link className="button" href="/pricing">
+              See plans
             </Link>
           </div>
           <div className="hero-proof" aria-label="Product foundations">
+            <span>15-day Business trial</span>
             <span>Organisation-scoped data</span>
             <span>Capability-based access</span>
             <span>Audited actions</span>
