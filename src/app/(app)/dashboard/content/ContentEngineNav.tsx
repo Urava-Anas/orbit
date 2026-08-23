@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, CalendarDays, Library, Settings2, Sparkles } from "lucide-react";
+import { Activity, BarChart3, CalendarDays, Gauge, Library, Settings2, Sparkles } from "lucide-react";
 import styles from "./ContentEngineNav.module.css";
 
 const links = [
   { href: "/dashboard/content", label: "Today", icon: Sparkles },
+  { href: "/dashboard/content/impact", label: "Impact", icon: Gauge },
   { href: "/dashboard/content/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/dashboard/content/library", label: "Library", icon: Library },
   { href: "/dashboard/content/intelligence", label: "Intelligence", icon: BarChart3 },
