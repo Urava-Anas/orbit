@@ -49,10 +49,22 @@ function configuredCanonicalHost(requestHost: string | null) {
 
 function connectionLauncherRedirect(request: NextRequest) {
   if (request.nextUrl.pathname !== "/dashboard/plugins") return null;
-  if (request.nextUrl.searchParams.has("error") || request.nextUrl.searchParams.has("notice")) return null;
 
   const provider = request.nextUrl.searchParams.get("connect");
   const plugin = request.nextUrl.searchParams.get("plugin");
+
+  // OAuth callbacks are terminal. Never allow a returned error/notice URL to keep
+  // the active connect parameter because it can be replayed by browser navigation
+  // or framework prefetch and accidentally start the provider flow again.
+  if (
+    provider &&
+    (request.nextUrl.searchParams.has("error") || request.nextUrl.searchParams.has("notice"))
+  ) {
+    const destination = request.nextUrl.clone();
+    destination.searchParams.delete("connect");
+    return NextResponse.redirect(destination, 307);
+  }
+
   if (!provider || plugin !== `app:${provider}` || !CONNECTION_PROVIDERS.has(provider)) return null;
 
   return NextResponse.redirect(new URL(`/dashboard/plugins/connect/${provider}`, request.url), 307);
