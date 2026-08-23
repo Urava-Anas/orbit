@@ -1,0 +1,431 @@
+.page {
+  max-width: 1500px;
+}
+
+.pageHeader {
+  display: flex;
+  margin-bottom: 28px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.pageHeader h1 {
+  margin: 8px 0 0;
+  font-size: clamp(38px, 5vw, 62px);
+  font-weight: 590;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+}
+
+.pageHeader p {
+  max-width: 680px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.publicPricingLink {
+  display: inline-flex;
+  min-height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--muted-strong);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.publicPricingLink:hover {
+  border-color: var(--line-strong);
+  color: var(--foreground);
+}
+
+.trialBanner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 18px 0 14px;
+  padding: 20px;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(255, 93, 82, 0.22);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 0% 50%, rgba(255, 93, 82, 0.11), transparent 17rem),
+    rgba(255, 255, 255, 0.025);
+}
+
+.bannerIcon,
+.summaryIcon {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--accent);
+}
+
+.bannerIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
+.trialBanner span,
+.summaryCard > span {
+  display: block;
+  color: var(--muted);
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trialBanner strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.trialBanner p {
+  max-width: 720px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.bannerMeta {
+  min-width: 120px;
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+  text-align: right;
+}
+
+.bannerMeta small {
+  display: block;
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.bannerMeta b {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.expiredBanner {
+  border-color: rgba(255, 196, 93, 0.2);
+  background: rgba(255, 196, 93, 0.045);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 14px 0 18px;
+  gap: 12px;
+}
+
+.summaryCard {
+  min-height: 168px;
+  padding: 19px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.024);
+}
+
+.summaryIcon {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 20px;
+  border-radius: 11px;
+}
+
+.summaryCard strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 19px;
+  letter-spacing: -0.035em;
+}
+
+.summaryCard p,
+.statusLine {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.liveDot,
+.attentionDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.liveDot {
+  background: var(--success);
+  box-shadow: 0 0 9px var(--success);
+}
+
+.attentionDot {
+  background: var(--warning);
+  box-shadow: 0 0 9px var(--warning);
+}
+
+.planChooser {
+  margin-top: 34px;
+}
+
+.chooserHead {
+  display: flex;
+  margin-bottom: 17px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.chooserHead h2,
+.paymentBoundary h2 {
+  margin: 7px 0 0;
+  font-size: clamp(25px, 3vw, 36px);
+  letter-spacing: -0.045em;
+}
+
+.chooserHead p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.intervalToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.intervalToggle button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 730;
+  cursor: pointer;
+}
+
+.intervalToggle button span {
+  margin-left: 4px;
+  color: var(--success);
+  font-size: 8px;
+}
+
+.intervalToggle .intervalActive {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.planGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.planCard {
+  position: relative;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.023);
+}
+
+.recommended {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 12rem),
+    rgba(255, 255, 255, 0.03);
+}
+
+.planTitleRow {
+  display: flex;
+  min-height: 54px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.planTitleRow > div > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.planTitleRow h3 {
+  margin: 5px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.03em;
+}
+
+.planTitleRow em {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.planDescription {
+  min-height: 50px;
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.price {
+  display: flex;
+  margin-top: 20px;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.price strong {
+  font-size: clamp(30px, 3vw, 40px);
+  font-weight: 590;
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.price small {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.priceNote {
+  min-height: 27px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.chooseButton {
+  width: 100%;
+  min-height: 39px;
+  margin-top: 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.chooseButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.primaryButton {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #090b0f);
+}
+
+.chooseButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.featureList {
+  display: grid;
+  margin-top: 17px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  gap: 9px;
+}
+
+.featureList > div {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.featureList svg { color: var(--success); }
+
+.paymentBoundary {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(300px, 1.2fr);
+  margin-top: 28px;
+  padding: 24px;
+  gap: 26px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.paymentBoundary > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+@media (max-width: 1100px) {
+  .planGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .pageHeader,
+  .chooserHead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .publicPricingLink { width: 100%; }
+  .summaryGrid { grid-template-columns: 1fr; }
+  .trialBanner { grid-template-columns: auto minmax(0, 1fr); }
+  .bannerMeta {
+    grid-column: 1 / -1;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    text-align: left;
+  }
+  .intervalToggle { width: 100%; }
+  .planGrid { grid-template-columns: 1fr; }
+  .planDescription { min-height: 0; }
+  .paymentBoundary { grid-template-columns: 1fr; }
+}
