@@ -1,1 +1,1 @@
-export * from "./namecheap-connector";
+export * from "./namecheap-vault";
