@@ -8,7 +8,7 @@ create table if not exists public.integration_asset_credentials (
   asset_kind text not null check (asset_kind in ('facebook_page')),
   credential_ciphertext text not null check (char_length(credential_ciphertext) between 20 and 20000),
   metadata jsonb not null default '{}'::jsonb,
-  connected_by uuid references auth.users(id) on delete set null,
+  connected_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (workspace_id, provider, asset_id)
@@ -26,4 +26,4 @@ before update on public.integration_asset_credentials
 for each row execute function private.set_updated_at();
 
 comment on table public.integration_asset_credentials is
-  'Server-only encrypted provider asset credentials used by governed publishing workers. User JWTs have no table privileges.';
+  'Server-only encrypted provider asset credentials used by governed publishing workers. connected_by is audit metadata only, intentionally not an auth.users foreign key so account deletion can never be blocked by a vault record.';
