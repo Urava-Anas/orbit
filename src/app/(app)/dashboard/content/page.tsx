@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
   BrainCircuit,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -41,6 +41,7 @@ import {
   updateContentItem,
 } from "./actions";
 import styles from "./content-engine.module.css";
+import mediaStyles from "./ReviewMedia.module.css";
 
 export const metadata: Metadata = {
   title: "Content Engine · Orbit",
@@ -103,6 +104,16 @@ type Publication = {
   attempts: number;
   last_error: string | null;
   published_at: string | null;
+};
+
+type ContentAsset = {
+  id: string;
+  content_id: string;
+  status: string;
+  source: string;
+  asset_type: string;
+  public_url: string | null;
+  created_at: string;
 };
 
 type Connection = {
@@ -199,11 +210,12 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
   const { supabase, workspace, role } = await requireWorkspace();
   const canApprove = role === "owner" || role === "admin";
 
-  const { data: profileRow } = await supabase
+  const { data: profileRow, error: profileError } = await supabase
     .from("content_brand_profiles")
     .select("audience,voice,pillars,offers,proof_rules,default_cta,timezone,daily_target_count,daily_generation_enabled,generation_hour,approval_required")
     .eq("workspace_id", workspace.id)
     .maybeSingle();
+  if (profileError) throw new Error("Content Engine Brand Brain could not be loaded.");
 
   const profile = (profileRow as BrandProfile | null) ?? (workspace.name === "Urava" ? defaultUravaProfile : { ...defaultUravaProfile, timezone: "UTC", daily_generation_enabled: false });
   const today = localDate(profile.timezone);
@@ -239,10 +251,14 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
       .eq("status", "approved")
       .in("permission_scope", ["anonymous", "public"]),
   ]);
+  if (batchResult.error || connectionsResult.error || learningsResult.error || metricsResult.error || approvedProofResult.error) {
+    throw new Error("Content Engine operating data could not be loaded completely.");
+  }
 
   const batch = batchResult.data as Batch | null;
   let drafts: Draft[] = [];
   let publications: Publication[] = [];
+  let assets: ContentAsset[] = [];
   if (batch) {
     const draftResult = await supabase
       .from("content_drafts")
@@ -250,19 +266,36 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
       .eq("workspace_id", workspace.id)
       .eq("batch_id", batch.id)
       .order("sort_order", { ascending: true });
+    if (draftResult.error) throw new Error("Today’s Content Engine drafts could not be loaded.");
     drafts = (draftResult.data ?? []) as unknown as Draft[];
 
     if (drafts.length) {
-      const publicationResult = await supabase
-        .from("content_publications")
-        .select("content_id,provider,status,scheduled_for,provider_post_url,attempts,last_error,published_at")
-        .eq("workspace_id", workspace.id)
-        .in("content_id", drafts.map((item) => item.id));
+      const contentIds = drafts.map((item) => item.id);
+      const [publicationResult, assetResult] = await Promise.all([
+        supabase
+          .from("content_publications")
+          .select("content_id,provider,status,scheduled_for,provider_post_url,attempts,last_error,published_at")
+          .eq("workspace_id", workspace.id)
+          .in("content_id", contentIds),
+        supabase
+          .from("content_assets")
+          .select("id,content_id,status,source,asset_type,public_url,created_at")
+          .eq("workspace_id", workspace.id)
+          .eq("asset_type", "image")
+          .in("content_id", contentIds)
+          .order("created_at", { ascending: false }),
+      ]);
+      if (publicationResult.error || assetResult.error) throw new Error("Content review state could not be loaded completely.");
       publications = (publicationResult.data ?? []) as Publication[];
+      assets = (assetResult.data ?? []) as ContentAsset[];
     }
   }
 
   const publicationByContent = new Map(publications.map((item) => [item.content_id, item]));
+  const assetByContent = new Map<string, ContentAsset>();
+  for (const asset of assets) {
+    if (!assetByContent.has(asset.content_id) && asset.status === "ready") assetByContent.set(asset.content_id, asset);
+  }
   const connections = (connectionsResult.data ?? []) as Connection[];
   const connectionByProvider = new Map(connections.map((item) => [item.provider, item]));
   const learnings = (learningsResult.data ?? []) as Learning[];
@@ -288,6 +321,11 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
   const approvedCount = drafts.filter((item) => item.status === "approved" || item.status === "scheduled" || item.status === "published").length;
   const publishedCount = publications.filter((item) => item.status === "published").length;
   const blockedCount = publications.filter((item) => item.status === "blocked" || item.status === "failed").length;
+  const mediaBlockedCount = drafts.filter((item) =>
+    (item.status === "review" || item.status === "draft")
+    && item.channel === "instagram"
+    && assetByContent.get(item.id)?.status !== "ready",
+  ).length;
   const generationReady = contentGenerationConfigured();
   const profilePersisted = Boolean(profileRow);
 
@@ -303,7 +341,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}><Sparkles size={14} /> Urava-first operating loop</span>
           <h1>Content Engine</h1>
-          <p>Orbit prepares the day, you approve it once, then publishing and performance move through a controlled queue.</p>
+          <p>Orbit prepares the day, you approve the copy and visuals once, then publishing and performance move through a controlled queue.</p>
           <div className={styles.loopLine} aria-label="Content Engine daily loop">
             {[
               ["01", "Brand Brain"],
@@ -325,7 +363,10 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
             pendingCount > 0 && canApprove ? (
               <form action={approveDailyBatch}>
                 <input name="batchId" type="hidden" value={batch.id} />
-                <button className={styles.approveDay} type="submit"><Check size={17} /> Approve today · {pendingCount}</button>
+                <button className={styles.approveDay} type="submit" disabled={mediaBlockedCount > 0}>
+                  {mediaBlockedCount ? <RefreshCw size={17} /> : <Check size={17} />}
+                  {mediaBlockedCount ? `Waiting for ${mediaBlockedCount} visual${mediaBlockedCount === 1 ? "" : "s"}` : `Approve today · ${pendingCount}`}
+                </button>
               </form>
             ) : (
               <span className={styles.completedAction}><CheckCircle2 size={17} /> Today’s review is clear</span>
@@ -358,7 +399,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
 
       <section className={styles.commandGrid}>
         <article><span>Today’s batch</span><strong>{drafts.length || "—"}</strong><small>{batch ? humanize(batch.status) : "Not generated"}</small></article>
-        <article><span>Needs approval</span><strong>{pendingCount}</strong><small>{pendingCount ? "Founder decision required" : "Review clear"}</small></article>
+        <article><span>Needs approval</span><strong>{pendingCount}</strong><small>{mediaBlockedCount ? `${mediaBlockedCount} visual${mediaBlockedCount === 1 ? "" : "s"} rendering` : pendingCount ? "Founder decision required" : "Review clear"}</small></article>
         <article><span>Approved</span><strong>{approvedCount}</strong><small>{blockedCount ? `${blockedCount} blocked downstream` : "Ready after provider checks"}</small></article>
         <article><span>Published</span><strong>{publishedCount}</strong><small>Provider-confirmed only</small></article>
         <article><span>Approved proof</span><strong>{approvedProofResult.count ?? 0}</strong><small>Safe for factual outcome claims</small></article>
@@ -378,7 +419,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
             <div className={styles.strategyMeta}>
               <span><BrainCircuit size={14} /> {profile.pillars.slice(0, 3).join(" · ") || "Add content pillars"}</span>
               <span><Gauge size={14} /> Target {profile.daily_target_count} pieces</span>
-              <span><ShieldCheck size={14} /> Daily approval required</span>
+              <span><ShieldCheck size={14} /> Copy + visual approval required</span>
             </div>
           </section>
 
@@ -386,8 +427,8 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
             <div className={styles.panelHeading}>
               <div>
                 <span className={styles.sectionLabel}><FileCheck2 size={13} /> Daily approval</span>
-                <h2>Review the content, not the machinery</h2>
-                <p>Every item carries its purpose, platform, timing and evidence state. Nothing moves to publishing without approval.</p>
+                <h2>Review the finished content, not the machinery</h2>
+                <p>Every item carries its copy, purpose, platform, timing, evidence state and required generated visual. Nothing moves to publishing before the founder can see what will ship.</p>
               </div>
               {drafts.length ? <span className={styles.batchPill}>{pendingCount} pending</span> : null}
             </div>
@@ -398,6 +439,8 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
                   const publication = publicationByContent.get(item.id);
                   const state = publicationStatusLabel(publication, item.status);
                   const isPending = item.status === "review" || item.status === "draft";
+                  const asset = assetByContent.get(item.id);
+                  const visualReady = item.channel !== "instagram" || asset?.status === "ready";
                   return (
                     <article className={styles.contentCard} key={item.id}>
                       <div className={styles.contentTop}>
@@ -416,6 +459,23 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
                         {item.cta ? <span className={styles.cta}>CTA · {item.cta}</span> : null}
                       </div>
 
+                      {item.channel === "instagram" ? (
+                        asset?.status === "ready" ? (
+                          <div className={mediaStyles.frame}>
+                            <div className={mediaStyles.visual}>
+                              <Image src={`/api/content-assets/${asset.id}`} alt={`Generated visual for ${item.title}`} width={1024} height={1024} unoptimized />
+                            </div>
+                            <div className={mediaStyles.copy}>
+                              <span className={mediaStyles.ready}><CheckCircle2 size={12} /> Visual ready for review</span>
+                              <strong>This image is part of your approval.</strong>
+                              <span>Approve only if the copy and generated visual work together. Editing the item automatically invalidates this visual and forces a fresh generation.</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={mediaStyles.waiting}><RefreshCw size={14} /><span><strong>Visual is still being prepared.</strong><br />Orbit keeps Instagram approval locked until the finished generated image is available here.</span></div>
+                        )
+                      ) : null}
+
                       <div className={styles.contentEvidence}>
                         <span><ShieldCheck size={13} /> {item.proofs?.title ? `Grounded in approved proof: ${item.proofs.title}` : "No outcome claim requires proof"}</span>
                         {item.media_brief ? <span><Sparkles size={13} /> {item.media_brief}</span> : null}
@@ -429,7 +489,8 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
                             <>
                               <form action={approveContentItem}>
                                 <input name="id" type="hidden" value={item.id} />
-                                <button className={styles.itemApprove} type="submit"><Check size={14} /> Approve</button>
+                                <button className={styles.itemApprove} type="submit" disabled={!visualReady}><Check size={14} /> Approve</button>
+                                {!visualReady ? <div className={mediaStyles.approvalLock}>Waiting for visual review</div> : null}
                               </form>
                               <details className={styles.actionDetail}>
                                 <summary><Pencil size={14} /> Edit</summary>
@@ -480,7 +541,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
 
         <aside className={styles.sideColumn}>
           <section className={styles.sidePanel}>
-            <div className={styles.sideHeading}><span><Rocket size={14} /> Publishing rail</span><Link href="/dashboard/plugins">Connections <ExternalLink size={12} /></Link></div>
+            <div className={styles.sideHeading}><span><Rocket size={14} /> Publishing rail</span><Link href="/dashboard/content/settings">Readiness <ExternalLink size={12} /></Link></div>
             <div className={styles.connectionList}>
               {providerCards.map((card) => {
                 const connection = connectionByProvider.get(card.provider);
@@ -574,7 +635,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
       </section>
 
       <section className={styles.guardrailBar}>
-        <span><ShieldCheck size={14} /> Human approval is mandatory</span>
+        <span><ShieldCheck size={14} /> Copy + generated visuals require human approval</span>
         <span><FileCheck2 size={14} /> Claims must trace to approved proof</span>
         <span><Clock3 size={14} /> Scheduling is separate from delivery confirmation</span>
         <span><BarChart3 size={14} /> Learning uses real metrics only</span>
