@@ -29,7 +29,7 @@ async function authorized(request: Request, admin: NonNullable<ReturnType<typeof
 async function handle(request: Request) {
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ error: "Metrics worker database is unavailable." }, { status: 503 });
-  if (!(await authorized(request, admin))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await authorized(request, admin))) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 
   const staleBefore = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
   const publishedSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -41,11 +41,22 @@ async function handle(request: Request) {
     .not("provider_post_id", "is", null)
     .gte("published_at", publishedSince)
     .order("published_at", { ascending: false })
-    .limit(30);
-  if (error) return NextResponse.json({ error: "Published Instagram items could not be loaded." }, { status: 500 });
+    .limit(40);
+  if (error) return NextResponse.json({ error: "Published Meta items could not be loaded." }, { status: 500, headers: { "Cache-Control": "no-store" } });
 
-  const results: Array<{ publicationId: string; status: "captured" | "fresh" | "failed"; detail?: string }> = [];
+  const results: Array<{ publicationId: string; status: "captured" | "fresh" | "skipped" | "failed"; detail?: string }> = [];
   for (const publication of publications ?? []) {
+    const { data: draft } = await admin
+      .from("content_drafts")
+      .select("channel")
+      .eq("workspace_id", publication.workspace_id)
+      .eq("id", publication.content_id)
+      .maybeSingle();
+    if (draft?.channel !== "instagram") {
+      results.push({ publicationId: publication.id, status: "skipped", detail: "No verified insights adapter exists for this channel yet." });
+      continue;
+    }
+
     const { data: latest } = await admin
       .from("content_metric_snapshots")
       .select("captured_at")
@@ -81,6 +92,7 @@ async function handle(request: Request) {
       checkedAt: new Date().toISOString(),
       captured: results.filter((item) => item.status === "captured").length,
       fresh: results.filter((item) => item.status === "fresh").length,
+      skipped: results.filter((item) => item.status === "skipped").length,
       failed: results.filter((item) => item.status === "failed").length,
       results,
     },
