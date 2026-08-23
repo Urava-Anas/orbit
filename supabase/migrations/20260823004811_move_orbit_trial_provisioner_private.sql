@@ -1,0 +1,4 @@
+-- Production first moved the privileged trial provisioner into the private schema here.
+-- The complete final definition and grants are asserted idempotently in the immediately
+-- following 20260823004814_priv... migration so fresh environments converge to the
+-- same secure state without exposing a SECURITY DEFINER function through public RPC.
