@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   contentGenerationConfigured,
@@ -9,7 +9,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 150;
+
+function sha256(value: string) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
 
 function safeMatch(received: string, expected: string) {
   const actual = Buffer.from(received);
@@ -17,7 +21,20 @@ function safeMatch(received: string, expected: string) {
   return actual.length === target.length && timingSafeEqual(actual, target);
 }
 
-function localHour(timezone: string, date = new Date()) {
+async function authorized(request: Request, admin: NonNullable<ReturnType<typeof createAdminClient>>) {
+  const header = request.headers.get("authorization") ?? "";
+  if (!header.startsWith("Bearer ")) return false;
+  const secret = header.slice("Bearer ".length).trim();
+  if (!secret || secret.length > 512) return false;
+  const { data, error } = await admin
+    .from("content_worker_auth")
+    .select("secret_hash")
+    .eq("id", "daily")
+    .maybeSingle();
+  return !error && Boolean(data?.secret_hash) && safeMatch(sha256(secret), data!.secret_hash);
+}
+
+function localHour(timezone: string, date: Date) {
   const value = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     hour: "2-digit",
@@ -27,27 +44,17 @@ function localHour(timezone: string, date = new Date()) {
 }
 
 async function handle(request: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json(
-      { error: "Content Engine scheduler is not configured." },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
-  const received = request.headers.get("authorization") ?? "";
-  if (!safeMatch(received, `Bearer ${secret}`)) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
   const admin = createAdminClient();
   if (!admin) {
     return NextResponse.json(
       { error: "Content Engine database worker is unavailable." },
       { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  if (!(await authorized(request, admin))) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -81,7 +88,7 @@ async function handle(request: Request) {
     }
   });
 
-  const results: Array<{ workspaceId: string; status: "generated" | "existing" | "failed"; detail?: string }> = [];
+  const results: Array<{ workspaceId: string; status: "generated" | "existing" | "in_progress" | "failed"; detail?: string }> = [];
   for (const profile of eligible) {
     const workspaceRelation = profile.workspaces as { name?: string } | { name?: string }[] | null;
     const workspaceName = Array.isArray(workspaceRelation)
@@ -105,14 +112,18 @@ async function handle(request: Request) {
         status: generated.reused ? "existing" : "generated",
       });
     } catch (workerError) {
-      console.error("Content Engine daily generation failed safely", {
-        workspaceId: profile.workspace_id,
-        error: workerError,
-      });
+      const detail = workerError instanceof Error ? workerError.message : "Unknown generation failure.";
+      const alreadyRunning = detail.includes("already being generated");
+      if (!alreadyRunning) {
+        console.error("Content Engine daily generation failed safely", {
+          workspaceId: profile.workspace_id,
+          error: workerError,
+        });
+      }
       results.push({
         workspaceId: profile.workspace_id,
-        status: "failed",
-        detail: workerError instanceof Error ? workerError.message : "Unknown generation failure.",
+        status: alreadyRunning ? "in_progress" : "failed",
+        detail: alreadyRunning ? "A generation lease is already active for this workspace/day." : "Daily generation failed safely.",
       });
     }
   }
@@ -124,6 +135,7 @@ async function handle(request: Request) {
       eligible: eligible.length,
       generated: results.filter((result) => result.status === "generated").length,
       existing: results.filter((result) => result.status === "existing").length,
+      inProgress: results.filter((result) => result.status === "in_progress").length,
       failed,
       results,
     },
