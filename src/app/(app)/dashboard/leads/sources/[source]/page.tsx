@@ -128,7 +128,7 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
   const [leadResult, assetResult] = await Promise.all([
     supabase
       .from("leads")
-      .select("id,name,company,email,phone,whatsapp,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
+      .select("id,name,company,email,phone,whatsapp,contact_person,contact_role,website_url,enrichment_status,enrichment_confidence,enrichment_source,enriched_at,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
       .eq("workspace_id", workspace.id)
       .in("source", [...config.aliases])
       .order("lead_score", { ascending: false, nullsFirst: false })
@@ -340,11 +340,12 @@ export default async function LeadSourcePage({ params, searchParams }: PageProps
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.leadTable}>
-              <thead><tr><th>Lead</th><th>Score</th><th>Status</th><th>Next action</th><th>Source link</th><th>Added</th></tr></thead>
+              <thead><tr><th>Lead</th><th>Contact</th><th>Score</th><th>Status</th><th>Next action</th><th>Source link</th><th>Added</th></tr></thead>
               <tbody>
                 {leads.map((lead) => (
                   <tr key={lead.id}>
                     <td><div className={styles.leadIdentity}><span>{initials(lead)}</span><div><strong>{lead.company ?? lead.name}</strong><small>{lead.niche ?? "Niche not set"}</small></div></div></td>
+                    <td><strong>{lead.contact_person ?? "Not verified"}</strong><small>{lead.contact_role ? humanize(lead.contact_role) : lead.phone ?? lead.email ?? "No public contact"}</small></td>
                     <td><span className={styles.scorePill}>{lead.lead_score ?? "—"}</span></td>
                     <td>{humanize(lead.stage)}</td>
                     <td><strong className={styles.nextActionText}>{lead.next_action ?? "Set next action"}</strong>{lead.next_action_at ? <small>{formatRelativeDate(lead.next_action_at)}</small> : null}</td>

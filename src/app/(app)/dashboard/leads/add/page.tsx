@@ -59,6 +59,10 @@ type FinderResult = {
   website_url: string | null;
   phone: string | null;
   email: string | null;
+  contact_person: string | null;
+  contact_role: string | null;
+  enrichment_status: string | null;
+  enrichment_confidence: number | null;
   niche: string;
   total_score: number | null;
   detected_weakness: string | null;
@@ -119,7 +123,7 @@ function sourceLabel(source: string) {
 }
 
 function sourceHref(source: string) {
-  const slug = source === "referral" ? "referrals" : source === "other" ? "cold-list" : source === "local_search" ? "local-search" : source;
+  const slug = source === "referral" ? "referrals" : source === "other" ? "cold-list" : source === "local_search" ? "google" : source;
   return `/dashboard/leads/sources/${slug}`;
 }
 
@@ -141,13 +145,13 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
   const [leadResult, resultQuery, searchQuery] = await Promise.all([
     supabase
       .from("leads")
-      .select("id,name,company,email,phone,whatsapp,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
+      .select("id,name,company,email,phone,whatsapp,contact_person,contact_role,website_url,enrichment_status,enrichment_confidence,enrichment_source,enriched_at,source,stage,niche,lead_score,estimated_value,currency,pain_point,next_action,next_action_at,google_maps_url,notes,legacy_notion_url,imported_at,created_at")
       .eq("workspace_id", workspace.id)
       .order("lead_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }),
     supabase
       .from("lead_finder_results")
-      .select("id,business_name,formatted_address,primary_type,business_status,google_maps_url,website_url,phone,email,niche,total_score,detected_weakness,recommended_offer,status,lead_id,created_at")
+      .select("id,business_name,formatted_address,primary_type,business_status,google_maps_url,website_url,phone,email,contact_person,contact_role,enrichment_status,enrichment_confidence,niche,total_score,detected_weakness,recommended_offer,status,lead_id,created_at")
       .eq("workspace_id", workspace.id)
       .gt("expires_at", nowIso)
       .order("created_at", { ascending: false })
@@ -171,7 +175,7 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
   const now = Date.now();
 
   const visibleLeads = leads.filter((lead) => {
-    const text = [lead.company, lead.name, lead.niche, lead.pain_point, lead.next_action].filter(Boolean).join(" ").toLowerCase();
+    const text = [lead.company, lead.name, lead.contact_person, lead.contact_role, lead.email, lead.phone, lead.niche, lead.pain_point, lead.next_action].filter(Boolean).join(" ").toLowerCase();
     if (q && !text.includes(q)) return false;
     if (stage !== "all" && lead.stage !== stage) return false;
     if (priority === "hot" && (lead.lead_score ?? 0) < 85) return false;
@@ -285,6 +289,7 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
                           <div className={styles.resultTitle}><div><h3>{result.business_name}</h3><p>{result.formatted_address ?? "Address not returned"}</p></div><span className={styles.status}>{humanize(result.status)}</span></div>
                           <div className={styles.resultMeta}>
                             <span>{result.niche}</span>
+                            <span>{result.contact_person ? `${result.contact_person}${result.contact_role ? ` · ${humanize(result.contact_role)}` : ""}` : "Owner/contact not verified"}</span>
                             <span>{result.phone ? "Phone found" : "No phone"}</span>
                             <span>{result.email ? "Email found" : "No email"}</span>
                             <span>{result.website_url ? "Website found" : "No website"}</span>
@@ -321,7 +326,7 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
           </div>
 
           <aside className={styles.sideColumn}>
-            <section className={styles.sideCard}><h2>What happens next?</h2><ol><li><span>1</span><div><strong>Find Businesses</strong><p>Orbit searches Geoapify Places using your niche, location and radius.</p></div></li><li><span>2</span><div><strong>Enrich & Score</strong><p>Public phone, email, website and place data are enriched when available.</p></div></li><li><span>3</span><div><strong>Review Results</strong><p>Duplicates are removed and you choose which businesses are worth keeping.</p></div></li><li><span>4</span><div><strong>Add to Lead Engine</strong><p>Only approved records move into the active pipeline.</p></div></li></ol></section>
+            <section className={styles.sideCard}><h2>What happens next?</h2><ol><li><span>1</span><div><strong>Find Businesses</strong><p>Orbit searches Geoapify Places using your niche, location and radius.</p></div></li><li><span>2</span><div><strong>Enrich & Score</strong><p>Orbit resolves public owner/contact person, role, phone, email and website before approval.</p></div></li><li><span>3</span><div><strong>Review Results</strong><p>Duplicates are removed and you choose which businesses are worth keeping.</p></div></li><li><span>4</span><div><strong>Add to Lead Engine</strong><p>Only approved records move into the active pipeline.</p></div></li></ol></section>
             <section className={styles.sideCard}><h2>Recent generations</h2>{searches.length ? <div className={styles.historyList}>{searches.map((search) => <div key={search.id}><strong>{search.query_text}</strong><span>{search.result_count} results · {humanize(search.status)}</span><small>{formatRelativeDate(search.created_at)}</small></div>)}</div> : <p className={styles.muted}>No local generation history yet.</p>}</section>
             <section className={styles.sideCard}><h2>Built-in guardrails</h2><div className={styles.guardList}><p><ShieldCheck size={15} /> Provider Place-ID duplicate prevention</p><p><ShieldCheck size={15} /> Founder review before pipeline entry</p><p><ShieldCheck size={15} /> Workspace-isolated records</p><p><ShieldCheck size={15} /> Rejected businesses are remembered</p></div></section>
           </aside>
@@ -387,7 +392,7 @@ export default async function AddLeadPage({ searchParams }: PageProps) {
                 const overdue = isOverdue(lead, now);
                 const score = lead.lead_score ?? 0;
                 return <tr key={lead.id}>
-                  <td><div className={engineStyles.leadIdentity}><span>{initials(lead)}</span><div><strong>{lead.company ?? lead.name}</strong><small>{lead.niche ?? "Niche not set"}</small></div></div></td>
+                  <td><div className={engineStyles.leadIdentity}><span>{initials(lead)}</span><div><strong>{lead.company ?? lead.name}</strong><small>{lead.contact_person ? `${lead.contact_person}${lead.contact_role ? ` · ${humanize(lead.contact_role)}` : ""}` : lead.niche ?? "Niche not set"}</small></div></div></td>
                   <td>{lead.google_maps_url ? <a href={lead.google_maps_url} target="_blank" rel="noreferrer">{sourceLabel(lead.source)} ↗</a> : <Link href={sourceHref(lead.source)}>{sourceLabel(lead.source)} →</Link>}</td>
                   <td><span className={engineStyles.scorePill}>{lead.lead_score ?? "—"}</span></td>
                   <td><span className={`${engineStyles.statusPill} ${engineStyles[`status_${stageTone(lead.stage)}`]}`}>{humanize(lead.stage)}</span></td>

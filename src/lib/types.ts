@@ -11,6 +11,13 @@ export type Lead = {
   email: string | null;
   phone: string | null;
   whatsapp: string | null;
+  contact_person: string | null;
+  contact_role: string | null;
+  website_url: string | null;
+  enrichment_status: string | null;
+  enrichment_confidence: number | null;
+  enrichment_source: string | null;
+  enriched_at: string | null;
   source: string;
   stage: string;
   niche: string | null;
