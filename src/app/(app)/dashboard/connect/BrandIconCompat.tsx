@@ -35,6 +35,15 @@ export function SiLinkedin(props: Props) {
   return <BrandLogo name="linkedin" className={props.className} />;
 }
 
+export function SiTiktok(props: Props) {
+  return (
+    <InlineBrandIcon
+      {...props}
+      path="M14 3v10.55A4 4 0 1 1 12 10V3h2Zm0 2.2a7.5 7.5 0 0 0 4 1.2v2.2a9.5 9.5 0 0 1-4-1.03V5.2Z"
+    />
+  );
+}
+
 export function SiOpenai(props: Props) {
   return <BrandLogo name="openai" className={props.className} />;
 }
