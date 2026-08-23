@@ -19,6 +19,11 @@ type DraftRow = {
   format: string;
 };
 
+type PublicationRow = {
+  content_id: string;
+  published_at: string | null;
+};
+
 type Aggregate = {
   items: Set<string>;
   reach: number;
@@ -28,7 +33,23 @@ type Aggregate = {
 };
 
 function numeric(value: number | string | null | undefined) {
-  return Number(value || 0);
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function metricDelta(latest: MetricRow, baseline: MetricRow | null): MetricRow {
+  return {
+    content_id: latest.content_id,
+    captured_at: latest.captured_at,
+    reach: Math.max(0, numeric(latest.reach) - numeric(baseline?.reach)),
+    engagements: Math.max(0, numeric(latest.engagements) - numeric(baseline?.engagements)),
+    clicks: Math.max(0, numeric(latest.clicks) - numeric(baseline?.clicks)),
+    leads: Math.max(0, numeric(latest.leads) - numeric(baseline?.leads)),
+  };
+}
+
+function hasObservedMovement(metric: MetricRow) {
+  return numeric(metric.reach) + numeric(metric.engagements) + numeric(metric.clicks) + numeric(metric.leads) > 0;
 }
 
 function addMetric(target: Aggregate, contentId: string, metric: MetricRow) {
@@ -80,30 +101,61 @@ export async function deriveContentLearnings({
     .select("content_id,captured_at,reach,engagements,clicks,leads")
     .eq("workspace_id", workspaceId)
     .gte("captured_at", since)
-    .order("captured_at", { ascending: false });
+    .order("captured_at", { ascending: true });
   if (metricError) throw new Error("Content performance could not be loaded for learning.");
 
-  const latestMetricByContent = new Map<string, MetricRow>();
-  for (const metric of (metricRows ?? []) as MetricRow[]) {
-    if (!latestMetricByContent.has(metric.content_id)) latestMetricByContent.set(metric.content_id, metric);
+  const snapshots = (metricRows ?? []) as MetricRow[];
+  if (!snapshots.length) return { status: "no_data" as const, inserted: 0 };
+
+  const snapshotsByContent = new Map<string, MetricRow[]>();
+  for (const snapshot of snapshots) {
+    const group = snapshotsByContent.get(snapshot.content_id) ?? [];
+    group.push(snapshot);
+    snapshotsByContent.set(snapshot.content_id, group);
   }
-  const metrics = [...latestMetricByContent.values()];
-  if (!metrics.length) return { status: "no_data" as const, inserted: 0 };
+  const contentIds = [...snapshotsByContent.keys()];
 
-  const contentIds = metrics.map((item) => item.content_id);
-  const { data: draftRows, error: draftError } = await supabase
-    .from("content_drafts")
-    .select("id,channel,goal,format")
-    .eq("workspace_id", workspaceId)
-    .in("id", contentIds);
-  if (draftError) throw new Error("Content metadata could not be loaded for learning.");
+  const [draftResult, publicationResult] = await Promise.all([
+    supabase
+      .from("content_drafts")
+      .select("id,channel,goal,format")
+      .eq("workspace_id", workspaceId)
+      .in("id", contentIds),
+    supabase
+      .from("content_publications")
+      .select("content_id,published_at")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "published")
+      .in("content_id", contentIds),
+  ]);
+  if (draftResult.error) throw new Error("Content metadata could not be loaded for learning.");
+  if (publicationResult.error) throw new Error("Content publication timing could not be loaded for learning.");
 
-  const drafts = (draftRows ?? []) as DraftRow[];
+  const drafts = (draftResult.data ?? []) as DraftRow[];
+  const publications = (publicationResult.data ?? []) as PublicationRow[];
   const draftById = new Map(drafts.map((item) => [item.id, item]));
+  const publishedAtByContent = new Map(publications.map((item) => [item.content_id, item.published_at]));
+
+  const periodMetrics: MetricRow[] = [];
+  for (const [contentId, group] of snapshotsByContent) {
+    const latest = group[group.length - 1];
+    const publishedAt = publishedAtByContent.get(contentId);
+    const publishedWithinWindow = Boolean(publishedAt && publishedAt >= since);
+
+    // For a post published during the window, its lifetime counter is also its in-window counter.
+    // For older posts, require at least two observations and learn only from movement between them.
+    if (!publishedWithinWindow && group.length < 2) continue;
+    const baseline = publishedWithinWindow ? null : group[0];
+    const delta = metricDelta(latest, baseline);
+    if (hasObservedMovement(delta)) periodMetrics.push(delta);
+  }
+
+  if (!periodMetrics.length) return { status: "no_data" as const, inserted: 0 };
+
   const byChannel = new Map<string, Aggregate>();
   const byGoal = new Map<string, Aggregate>();
 
-  for (const metric of metrics) {
+  for (const metric of periodMetrics) {
     const draft = draftById.get(metric.content_id);
     if (!draft) continue;
     const channel = byChannel.get(draft.channel) ?? { items: new Set<string>(), reach: 0, engagements: 0, clicks: 0, leads: 0 };
@@ -124,19 +176,19 @@ export async function deriveContentLearnings({
       workspace_id: workspaceId,
       learned_on: learnedOn,
       signal_type: "performance",
-      insight: `${humanize(channel)} produced the strongest weighted response across ${value.items.size} recently measured content item${value.items.size === 1 ? "" : "s"}.`,
+      insight: `${humanize(channel)} produced the strongest observed weighted gain over the last 7 days across ${value.items.size} measured content item${value.items.size === 1 ? "" : "s"}.`,
       action: `Keep ${humanize(channel)} in tomorrow's mix and test one variation of the strongest concept instead of simply increasing volume.`,
       confidence: confidence(value),
       source_metrics: {
         window_days: 7,
-        snapshot_policy: "latest_per_content",
+        snapshot_policy: "observed_delta; zero baseline only for posts published inside window",
         dimension: "channel",
         value: channel,
         measured_items: value.items.size,
-        reach: value.reach,
-        engagements: value.engagements,
-        clicks: value.clicks,
-        leads: value.leads,
+        reach_gain: value.reach,
+        engagement_gain: value.engagements,
+        click_gain: value.clicks,
+        lead_gain: value.leads,
         weighted_score: score(value),
       },
       created_by: null,
@@ -149,19 +201,19 @@ export async function deriveContentLearnings({
       workspace_id: workspaceId,
       learned_on: learnedOn,
       signal_type: "topic",
-      insight: `${humanize(goal)} content is currently the strongest objective across recently measured provider results.`,
+      insight: `${humanize(goal)} content produced the strongest observed objective-level gain over the last 7 days.`,
       action: `Give ${humanize(goal)} one deliberate slot in the next daily strategy while preserving a balanced mix of other objectives.`,
       confidence: confidence(value),
       source_metrics: {
         window_days: 7,
-        snapshot_policy: "latest_per_content",
+        snapshot_policy: "observed_delta; zero baseline only for posts published inside window",
         dimension: "goal",
         value: goal,
         measured_items: value.items.size,
-        reach: value.reach,
-        engagements: value.engagements,
-        clicks: value.clicks,
-        leads: value.leads,
+        reach_gain: value.reach,
+        engagement_gain: value.engagements,
+        click_gain: value.clicks,
+        lead_gain: value.leads,
         weighted_score: score(value),
       },
       created_by: null,
@@ -179,7 +231,7 @@ export async function deriveContentLearnings({
       content_id: null,
       event_type: "learning_recorded",
       actor_id: null,
-      details: { learning_note_id: note.id, learned_on: learnedOn, source: "latest_7_day_metric_snapshots" },
+      details: { learning_note_id: note.id, learned_on: learnedOn, source: "observed_7_day_metric_delta" },
     })),
   );
   if (auditError) console.error("Content learning was saved but its audit event could not be appended", auditError);
