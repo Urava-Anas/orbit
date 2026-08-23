@@ -16,8 +16,8 @@ as $$
   ), false);
 $$;
 
-revoke execute on function private.orbit_workspace_can_write(uuid) from public, anon;
-grant execute on function private.orbit_workspace_can_write(uuid) to authenticated;
+revoke all on function private.orbit_workspace_can_write(uuid) from public;
+grant execute on function private.orbit_workspace_can_write(uuid) to authenticated, service_role;
 
 create or replace function public.start_orbit_trial(workspace_name text)
 returns table(workspace_id uuid, trial_ends_at timestamptz)
@@ -88,29 +88,30 @@ begin
 end;
 $$;
 
-revoke execute on function public.start_orbit_trial(text) from public, anon;
+revoke all on function public.start_orbit_trial(text) from public;
 grant execute on function public.start_orbit_trial(text) to authenticated;
 
--- Add a restrictive subscription gate to every existing workspace-scoped table.
--- Billing tables are intentionally excluded so an expired workspace can still
--- read its subscription and submit a plan-selection request.
+-- Add a restrictive billing gate to every existing RLS-protected workspace-scoped
+-- table except the billing tables themselves. Existing permissive role/capability
+-- policies still decide WHO may write; this gate additionally decides WHETHER the
+-- workspace subscription currently permits writes.
 do $$
 declare
   target record;
 begin
   for target in
-    select distinct c.table_name
-    from information_schema.columns c
-    join information_schema.tables t
-      on t.table_schema = c.table_schema
-     and t.table_name = c.table_name
-    where c.table_schema = 'public'
-      and c.column_name = 'workspace_id'
-      and t.table_type = 'BASE TABLE'
-      and c.table_name not in (
-        'orbit_workspace_subscriptions',
-        'orbit_plan_change_requests'
-      )
+    select c.relname as table_name
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    join information_schema.columns col
+      on col.table_schema = n.nspname
+     and col.table_name = c.relname
+     and col.column_name = 'workspace_id'
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and c.relrowsecurity
+      and c.relname not in ('orbit_workspace_subscriptions', 'orbit_plan_change_requests')
+    order by c.relname
   loop
     execute format('drop policy if exists orbit_subscription_insert_gate on public.%I', target.table_name);
     execute format(
@@ -135,9 +136,9 @@ $$;
 
 drop policy if exists orbit_subscription_update_gate on public.workspaces;
 create policy orbit_subscription_update_gate
-  on public.workspaces
-  as restrictive
-  for update
-  to authenticated
-  using ((select private.orbit_workspace_can_write(id)))
-  with check ((select private.orbit_workspace_can_write(id)));
+on public.workspaces
+as restrictive
+for update
+to authenticated
+using ((select private.orbit_workspace_can_write(id)))
+with check ((select private.orbit_workspace_can_write(id)));
