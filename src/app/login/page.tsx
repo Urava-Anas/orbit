@@ -19,14 +19,21 @@ type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
     notice?: string;
+    next?: string;
   }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const context = await getOrbitAccess();
-  if (context) redirect(orbitHomePath(context.access));
-
   const params = await searchParams;
+  const nextPath = params.next === "/trial" ? "/trial" : null;
+  const context = await getOrbitAccess();
+
+  if (context) {
+    if (nextPath) redirect(nextPath);
+    redirect(orbitHomePath(context.access));
+  }
+
+  const isTrialIntent = nextPath === "/trial";
 
   return (
     <main className="auth-shell">
@@ -36,13 +43,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </Link>
 
         <div className="auth-form">
-          <span className="eyebrow">Your Orbit workspace</span>
-          <h1>Welcome back.</h1>
-          <p>Continue once. Orbit will identify your organisation and role automatically.</p>
+          <span className="eyebrow">
+            {isTrialIntent ? "Start your 15-day Business trial" : "Your Orbit workspace"}
+          </span>
+          <h1>{isTrialIntent ? "Enter Orbit." : "Welcome back."}</h1>
+          <p>
+            {isTrialIntent
+              ? "Sign in once, then create the organisation workspace your trial will run on."
+              : "Continue once. Orbit will identify your organisation and role automatically."}
+          </p>
 
           <Notice error={params.error} notice={params.notice} />
 
           <form className="oauth-form" action={signInWithGoogle}>
+            {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
             <GoogleSignInButton />
           </form>
 
@@ -51,6 +65,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
 
           <form className="form-stack" action={login}>
+            {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
             <div className="field">
               <label htmlFor="email">Email</label>
               <input
@@ -76,8 +91,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               />
             </div>
             <SubmitButton
-              idleLabel="Continue to Orbit"
-              pendingLabel="Opening your workspace…"
+              idleLabel={isTrialIntent ? "Continue to trial setup" : "Continue to Orbit"}
+              pendingLabel={isTrialIntent ? "Preparing your trial…" : "Opening your workspace…"}
             />
           </form>
 
@@ -94,10 +109,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
-          <span className="eyebrow">Sign in → role → workspace</span>
-          <p>One entrance. No second open button. No detour through the marketing site.</p>
+          <span className="eyebrow">
+            {isTrialIntent ? "15 days · Business · real workspace" : "Sign in → role → workspace"}
+          </span>
+          <p>
+            {isTrialIntent
+              ? "Test the operating system with the same Business layer you would actually run."
+              : "One entrance. No second open button. No detour through the marketing site."}
+          </p>
           <span className="system-state">
-            <Sparkles size={13} /> Orbit routes you automatically
+            <Sparkles size={13} /> {isTrialIntent ? "No payment method required yet" : "Orbit routes you automatically"}
           </span>
         </div>
       </aside>
