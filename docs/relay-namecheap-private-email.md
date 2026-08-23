@@ -25,3 +25,5 @@ Namecheap Private Email settings used by Relay:
 - Passwords are encrypted using Orbit's independent integration secret domain and are not exposed to workspace users through RLS.
 - Disconnect removes the stored credential while retaining synced business history.
 - Outbound communication remains subject to Orbit's Green/Amber/Red authority model; this connector does not bypass approval controls.
+
+Deployment marker: Relay Namecheap authentication release.
