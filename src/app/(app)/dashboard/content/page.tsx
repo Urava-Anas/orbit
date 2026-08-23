@@ -132,6 +132,8 @@ type Learning = {
 };
 
 type Metric = {
+  content_id: string;
+  captured_at: string;
   impressions: number;
   reach: number;
   engagements: number;
@@ -243,9 +245,10 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
       .limit(4),
     supabase
       .from("content_metric_snapshots")
-      .select("impressions,reach,engagements,clicks,leads")
+      .select("content_id,captured_at,impressions,reach,engagements,clicks,leads")
       .eq("workspace_id", workspace.id)
-      .gte("captured_at", metricsWindowStart.toISOString()),
+      .gte("captured_at", metricsWindowStart.toISOString())
+      .order("captured_at", { ascending: false }),
     supabase
       .from("proofs")
       .select("id", { count: "exact", head: true })
@@ -301,13 +304,21 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
   const connections = (connectionsResult.data ?? []) as Connection[];
   const connectionByProvider = new Map(connections.map((item) => [item.provider, item]));
   const learnings = (learningsResult.data ?? []) as Learning[];
-  const metrics = (metricsResult.data ?? []).map((row) => ({
-    impressions: Number(row.impressions || 0),
-    reach: Number(row.reach || 0),
-    engagements: Number(row.engagements || 0),
-    clicks: Number(row.clicks || 0),
-    leads: Number(row.leads || 0),
-  })) as Metric[];
+  const latestMetricByContent = new Map<string, Metric>();
+  for (const row of metricsResult.data ?? []) {
+    const contentId = String(row.content_id);
+    if (latestMetricByContent.has(contentId)) continue;
+    latestMetricByContent.set(contentId, {
+      content_id: contentId,
+      captured_at: String(row.captured_at),
+      impressions: Number(row.impressions || 0),
+      reach: Number(row.reach || 0),
+      engagements: Number(row.engagements || 0),
+      clicks: Number(row.clicks || 0),
+      leads: Number(row.leads || 0),
+    });
+  }
+  const metrics = [...latestMetricByContent.values()];
   const totals = metrics.reduce(
     (sum, row) => ({
       impressions: sum.impressions + row.impressions,
@@ -574,7 +585,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
           </section>
 
           <section className={styles.sidePanel}>
-            <div className={styles.sideHeading}><span><BarChart3 size={14} /> Last 7 days</span><small>Provider data only</small></div>
+            <div className={styles.sideHeading}><span><BarChart3 size={14} /> Last 7 days</span><small>Latest provider snapshot per post</small></div>
             <div className={styles.metricGrid}>
               <div><span>Reach</span><strong>{metricNumber(totals.reach)}</strong></div>
               <div><span>Engagement</span><strong>{metricNumber(totals.engagements)}</strong></div>
