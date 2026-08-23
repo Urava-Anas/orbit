@@ -11,8 +11,15 @@ import {
 import { requireWorkspace } from "@/lib/workspace";
 
 const contentPath = "/dashboard/content";
+const contentSettingsPath = "/dashboard/content/settings";
 const idSchema = z.string().uuid();
 type WorkspaceSupabase = Awaited<ReturnType<typeof requireWorkspace>>["supabase"];
+
+type MetaAsset = {
+  kind?: string;
+  id?: string;
+  page_id?: string | null;
+};
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -30,9 +37,24 @@ function fail(message: string): never {
   redirect(`${contentPath}?error=${encodeURIComponent(message)}`);
 }
 
+function failSettings(message: string): never {
+  redirect(`${contentSettingsPath}?error=${encodeURIComponent(message)}`);
+}
+
 function succeed(message: string): never {
   revalidatePath(contentPath);
+  revalidatePath(`${contentPath}/calendar`);
+  revalidatePath(`${contentPath}/library`);
+  revalidatePath(`${contentPath}/activity`);
+  revalidatePath(contentSettingsPath);
   redirect(`${contentPath}?notice=${encodeURIComponent(message)}`);
+}
+
+function succeedSettings(message: string): never {
+  revalidatePath(contentPath);
+  revalidatePath(contentSettingsPath);
+  revalidatePath(`${contentPath}/activity`);
+  redirect(`${contentSettingsPath}?notice=${encodeURIComponent(message)}`);
 }
 
 async function requireContentAdmin() {
@@ -145,12 +167,53 @@ export async function saveBrandBrain(formData: FormData) {
   succeed("Brand Brain saved. Future batches will use these rules.");
 }
 
+export async function setPublishingMode(formData: FormData) {
+  const enabled = formData.get("publishingEnabled") === "on";
+  const context = await requireWorkspace();
+  if (context.role !== "owner" && context.role !== "admin") {
+    failSettings("Founder or admin access is required to change publishing mode.");
+  }
+  const { supabase, workspace, user } = context;
+
+  const { data: profile, error: profileError } = await supabase
+    .from("content_brand_profiles")
+    .select("workspace_id")
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (profileError) failSettings("Publishing settings could not be loaded.");
+  if (!profile) failSettings("Save Brand Brain before enabling automatic publishing.");
+
+  const { error } = await supabase
+    .from("content_brand_profiles")
+    .update({ publishing_enabled: enabled })
+    .eq("workspace_id", workspace.id);
+  if (error) failSettings("Publishing mode could not be changed.");
+
+  if (!enabled) {
+    await supabase
+      .from("content_publications")
+      .update({ status: "blocked", last_error: "Automatic publishing was turned off by a workspace admin." })
+      .eq("workspace_id", workspace.id)
+      .in("status", ["queued", "failed"]);
+  }
+
+  await appendAuditEvent(supabase, {
+    workspaceId: workspace.id,
+    eventType: "brand_brain_updated",
+    actorId: user.id,
+    details: { publishing_enabled: enabled, setting: "publishing_kill_switch" },
+  });
+
+  succeedSettings(enabled ? "Automatic publishing is armed behind provider and safety checks." : "Automatic publishing is off. Approved content will remain safely blocked.");
+}
+
 export async function generateTodayBatch() {
   const { supabase, user, workspace } = await requireContentAdmin();
   if (!contentGenerationConfigured()) {
     fail("AI generation is not configured on the server yet. Add OPENAI_API_KEY to enable daily generation.");
   }
 
+  let message = "Today’s content batch is ready for review.";
   try {
     const result = await generateDailyContentBatch({
       supabase,
@@ -158,32 +221,81 @@ export async function generateTodayBatch() {
       workspaceName: workspace.name,
       actorId: user.id,
     });
-    succeed(result.reused ? "Today’s batch already exists." : "Today’s content batch is ready for review.");
+    if (result.reused) message = "Today’s batch already exists.";
   } catch (error) {
     fail(error instanceof Error ? error.message : "Orbit could not generate today’s batch.");
   }
+  succeed(message);
+}
+
+function requiredCapability(channel: string) {
+  if (channel === "instagram") return "instagram.publish";
+  if (channel === "facebook") return "facebook.publish";
+  return null;
+}
+
+function supportedAutomaticChannel(channel: string) {
+  return channel === "instagram" || channel === "facebook";
 }
 
 async function publicationReadiness(supabase: WorkspaceSupabase, workspaceId: string, channel: string) {
   const provider = providerForChannel(channel);
-  if (provider === "manual" || provider === "website") {
-    return { provider, ready: false, reason: "This channel needs a publishing adapter before automatic delivery." };
-  }
+  const capability = requiredCapability(channel);
 
-  const { data: connection } = await supabase
-    .from("integration_connections")
-    .select("status")
-    .eq("workspace_id", workspaceId)
-    .eq("provider", provider)
-    .maybeSingle();
-
-  if (connection?.status !== "connected") {
-    const label = provider === "meta" ? "Meta" : provider === "linkedin" ? "LinkedIn" : "TikTok";
-    return { provider, ready: false, reason: `Connect ${label} in Plugins before auto-posting.` };
+  if (!supportedAutomaticChannel(channel) || provider !== "meta" || !capability) {
+    return {
+      provider,
+      ready: false,
+      reason: `${channel === "linkedin" ? "LinkedIn" : channel === "tiktok" ? "TikTok" : "This channel"} automatic publishing is not verified yet. The approved item stays in Content Library for controlled distribution.`,
+    };
   }
 
   if (process.env.CONTENT_PUBLISHING_ENABLED !== "true") {
-    return { provider, ready: false, reason: "Provider is connected, but the production publishing worker is not enabled." };
+    return { provider, ready: false, reason: "The deployment-wide publishing master switch is off." };
+  }
+
+  const [{ data: profile }, { data: connection }] = await Promise.all([
+    supabase
+      .from("content_brand_profiles")
+      .select("publishing_enabled")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle(),
+    supabase
+      .from("integration_connections")
+      .select("status,metadata,selected_assets")
+      .eq("workspace_id", workspaceId)
+      .eq("provider", provider)
+      .maybeSingle(),
+  ]);
+
+  if (profile?.publishing_enabled !== true) {
+    return { provider, ready: false, reason: "Automatic publishing is off in Content Engine settings." };
+  }
+
+  if (connection?.status !== "connected") {
+    return { provider, ready: false, reason: "Connect Meta in Plugins before automatic publishing." };
+  }
+
+  const metadata = (connection.metadata ?? {}) as Record<string, unknown>;
+  const capabilities = Array.isArray(metadata.verifiedCapabilities)
+    ? metadata.verifiedCapabilities.map(String)
+    : [];
+  if (!capabilities.includes(capability)) {
+    return { provider, ready: false, reason: `Meta has not verified the ${capability} capability. Reconnect the account after permissions are approved.` };
+  }
+
+  const assets = Array.isArray(connection.selected_assets) ? (connection.selected_assets as MetaAsset[]) : [];
+  if (channel === "instagram") {
+    const instagramAccounts = assets.filter((asset) => asset.kind === "instagram_account" && asset.id && asset.page_id);
+    if (instagramAccounts.length !== 1) {
+      return { provider, ready: false, reason: instagramAccounts.length ? "Select exactly one Instagram Professional account for publishing." : "No publishable Instagram Professional account is selected." };
+    }
+  }
+  if (channel === "facebook") {
+    const pages = assets.filter((asset) => asset.kind === "facebook_page" && asset.id);
+    if (pages.length !== 1) {
+      return { provider, ready: false, reason: pages.length ? "Select exactly one Facebook Page for publishing." : "No publishable Facebook Page is selected." };
+    }
   }
 
   return { provider, ready: true, reason: null };
@@ -196,34 +308,37 @@ async function upsertPublication(
   content: { id: string; channel: string; scheduled_for: string | null; batch_id?: string | null },
 ) {
   const readiness = await publicationReadiness(supabase, workspaceId, content.channel);
-  const status = readiness.ready ? "queued" : "blocked";
-  const { error } = await supabase.from("content_publications").upsert(
+  const requestedStatus = readiness.ready ? "queued" : "blocked";
+  const { data: publication, error } = await supabase.from("content_publications").upsert(
     {
       workspace_id: workspaceId,
       content_id: content.id,
       provider: readiness.provider,
-      status,
+      status: requestedStatus,
       scheduled_for: content.scheduled_for,
       last_error: readiness.reason,
       idempotency_key: `${content.id}:${readiness.provider}`,
     },
     { onConflict: "workspace_id,content_id" },
-  );
-  if (error) throw new Error("Publishing queue could not be prepared.");
+  ).select("status,last_error").single();
+  if (error || !publication) throw new Error("Publishing queue could not be prepared.");
 
+  const actuallyQueued = publication.status === "queued";
+  const reason = actuallyQueued ? null : publication.last_error || readiness.reason || "A publishing guard blocked this item.";
   await appendAuditEvent(supabase, {
     workspaceId,
     batchId: content.batch_id ?? null,
     contentId: content.id,
-    eventType: readiness.ready ? "publication_queued" : "publication_blocked",
+    eventType: actuallyQueued ? "publication_queued" : "publication_blocked",
     actorId,
     details: {
       provider: readiness.provider,
+      channel: content.channel,
       scheduled_for: content.scheduled_for,
-      reason: readiness.reason,
+      reason,
     },
   });
-  return readiness.ready;
+  return actuallyQueued;
 }
 
 export async function approveContentItem(formData: FormData) {
@@ -242,12 +357,7 @@ export async function approveContentItem(formData: FormData) {
   const approvedAt = new Date().toISOString();
   const { error } = await supabase
     .from("content_drafts")
-    .update({
-      status: "approved",
-      approved_at: approvedAt,
-      approved_by: user.id,
-      rejection_reason: null,
-    })
+    .update({ status: "approved", approved_at: approvedAt, approved_by: user.id, rejection_reason: null })
     .eq("id", content.id)
     .eq("workspace_id", workspace.id);
   if (error) fail("Content item could not be approved.");
@@ -261,12 +371,13 @@ export async function approveContentItem(formData: FormData) {
     details: { approved_at: approvedAt },
   });
 
+  let ready = false;
   try {
-    const ready = await upsertPublication(supabase, workspace.id, user.id, content);
-    succeed(ready ? "Approved and added to the publishing queue." : "Approved. Auto-posting is blocked until its provider is ready.");
+    ready = await upsertPublication(supabase, workspace.id, user.id, content);
   } catch (queueError) {
     fail(queueError instanceof Error ? queueError.message : "Publishing queue could not be prepared.");
   }
+  succeed(ready ? "Approved and added to the publishing queue." : "Approved. The item is safely blocked until its publishing rail is ready.");
 }
 
 export async function rejectContentItem(formData: FormData) {
@@ -286,12 +397,7 @@ export async function rejectContentItem(formData: FormData) {
     .maybeSingle();
   const { error } = await supabase
     .from("content_drafts")
-    .update({
-      status: "rejected",
-      rejection_reason: reason,
-      approved_at: null,
-      approved_by: null,
-    })
+    .update({ status: "rejected", rejection_reason: reason, approved_at: null, approved_by: null })
     .eq("id", parsed.data.id)
     .eq("workspace_id", workspace.id);
   if (error) fail("Content item could not be rejected.");
@@ -309,7 +415,6 @@ export async function rejectContentItem(formData: FormData) {
     actorId: user.id,
     details: { reason },
   });
-
   succeed("Content rejected. It will not enter the publishing queue.");
 }
 
@@ -369,7 +474,6 @@ export async function updateContentItem(formData: FormData) {
     actorId: user.id,
     details: { approval_reset: true },
   });
-
   succeed("Edits saved. The item requires approval again.");
 }
 
@@ -397,7 +501,7 @@ export async function approveDailyBatch(formData: FormData) {
     .eq("workspace_id", workspace.id);
   if (approvalError) fail("The batch could not be approved.");
 
-  await supabase.from("content_review_events").insert(
+  const { error: eventError } = await supabase.from("content_review_events").insert(
     items.map((item) => ({
       workspace_id: workspace.id,
       batch_id: parsed.data,
@@ -407,6 +511,7 @@ export async function approveDailyBatch(formData: FormData) {
       details: { approved_at: approvedAt, approval_mode: "batch" },
     })),
   );
+  if (eventError) console.error("Batch approval events could not be appended", eventError);
 
   let queueReady = 0;
   let queueBlocked = 0;
@@ -414,8 +519,17 @@ export async function approveDailyBatch(formData: FormData) {
     try {
       if (await upsertPublication(supabase, workspace.id, user.id, item)) queueReady += 1;
       else queueBlocked += 1;
-    } catch {
+    } catch (error) {
+      console.error("Content Engine could not prepare a batch publication", { contentId: item.id, error });
       queueBlocked += 1;
+      await appendAuditEvent(supabase, {
+        workspaceId: workspace.id,
+        batchId: parsed.data,
+        contentId: item.id,
+        eventType: "publication_blocked",
+        actorId: user.id,
+        details: { reason: error instanceof Error ? error.message : "Publishing queue preparation failed." },
+      });
     }
   }
 
@@ -441,7 +555,7 @@ export async function approveDailyBatch(formData: FormData) {
 
   succeed(
     queueBlocked
-      ? `Daily batch approved. ${queueBlocked} item${queueBlocked === 1 ? " is" : "s are"} blocked until publishing connections are ready.`
+      ? `Daily batch approved. ${queueBlocked} item${queueBlocked === 1 ? " is" : "s are"} safely blocked until its publishing rail is ready.`
       : "Daily batch approved and queued for automatic publishing.",
   );
 }
