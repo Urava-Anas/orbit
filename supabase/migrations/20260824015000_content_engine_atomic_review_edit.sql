@@ -44,7 +44,7 @@ begin
 
   select d.status, d.batch_id
     into current_status, current_batch
-  from public.content_drafts d
+  from public.content_drafts as d
   where d.workspace_id = p_workspace_id
     and d.id = p_content_id
   for update;
@@ -56,7 +56,7 @@ begin
     raise exception 'Only review-stage content can be edited' using errcode = '55000';
   end if;
 
-  update public.content_drafts
+  update public.content_drafts as d
   set title = trim(p_title),
       hook = nullif(trim(coalesce(p_hook, '')), ''),
       body = trim(p_body),
@@ -66,23 +66,23 @@ begin
       approved_at = null,
       approved_by = null,
       rejection_reason = null
-  where workspace_id = p_workspace_id
-    and id = p_content_id;
+  where d.workspace_id = p_workspace_id
+    and d.id = p_content_id;
 
-  update public.content_assets
+  update public.content_assets as a
   set status = 'archived'
-  where workspace_id = p_workspace_id
-    and content_id = p_content_id
-    and source = 'generated'
-    and asset_type = 'image'
-    and status in ('pending', 'generating', 'ready');
+  where a.workspace_id = p_workspace_id
+    and a.content_id = p_content_id
+    and a.source = 'generated'
+    and a.asset_type = 'image'
+    and a.status in ('pending', 'generating', 'ready');
 
-  update public.content_publications
+  update public.content_publications as p
   set status = 'cancelled',
       last_error = 'Content changed before approval.'
-  where workspace_id = p_workspace_id
-    and content_id = p_content_id
-    and status <> 'published';
+  where p.workspace_id = p_workspace_id
+    and p.content_id = p_content_id
+    and p.status <> 'published';
 
   insert into public.content_review_events (
     workspace_id,
