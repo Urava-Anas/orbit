@@ -11,6 +11,9 @@ export const metadata: Metadata = {
     "Orbit plans for founders and organisations, with a 15-day Business trial.",
 };
 
+const trialHref =
+  "/login?notice=Your%2015-day%20Business%20trial%20begins%20when%20your%20workspace%20is%20provisioned.";
+
 export default function PricingPage() {
   return (
     <main className={styles.pricingPage}>
@@ -25,7 +28,7 @@ export default function PricingPage() {
           <Link href="/login" className={styles.signInLink}>
             Sign in
           </Link>
-          <Link href="/login?next=/trial" className={styles.navCta}>
+          <Link href={trialHref} className={styles.navCta}>
             Start free trial
           </Link>
         </div>
