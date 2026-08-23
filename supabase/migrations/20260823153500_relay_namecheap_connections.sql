@@ -9,7 +9,7 @@ create unique index if not exists orbit_mailboxes_one_primary_per_workspace
   on public.orbit_mailboxes(workspace_id)
   where is_primary;
 
-create table if not exists private.orbit_mailbox_credentials (
+create table if not exists public.orbit_mailbox_credentials (
   mailbox_id uuid primary key references public.orbit_mailboxes(id) on delete cascade,
   username text not null,
   encrypted_password text not null,
@@ -18,7 +18,9 @@ create table if not exists private.orbit_mailbox_credentials (
   updated_at timestamptz not null default now()
 );
 
-revoke all on table private.orbit_mailbox_credentials from public, anon, authenticated;
+alter table public.orbit_mailbox_credentials enable row level security;
+revoke all on table public.orbit_mailbox_credentials from public, anon, authenticated;
+grant all on table public.orbit_mailbox_credentials to service_role;
 
 create policy orbit_mailboxes_delete_admin
   on public.orbit_mailboxes
