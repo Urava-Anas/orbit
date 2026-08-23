@@ -4,6 +4,14 @@
   "outputDirectory": ".next",
   "crons": [
     {
+      "path": "/api/internal/content-engine-learn",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/internal/content-engine-daily",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/internal/foundry-worker",
       "schedule": "0 2 * * *"
     }
