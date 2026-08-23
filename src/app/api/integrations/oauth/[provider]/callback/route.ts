@@ -27,6 +27,22 @@ type ProviderIdentity = {
   accountType: string;
   assets: Array<Record<string, unknown>>;
   verifiedCapabilities: string[];
+  connectionReady?: boolean;
+  connectionIssue?: string | null;
+};
+
+type MetaInstagramAccount = {
+  id?: string;
+  username?: string;
+  name?: string;
+  profile_picture_url?: string;
+};
+
+type MetaPage = {
+  id?: string;
+  name?: string;
+  tasks?: string[];
+  instagram_business_account?: MetaInstagramAccount;
 };
 
 const supported = new Set<SupportedProvider>([
@@ -52,6 +68,14 @@ function callbackUrl(provider: SupportedProvider) {
   return `${orbitBaseUrl()}/api/integrations/oauth/${provider}/callback`;
 }
 
+function metaGraphVersion() {
+  return process.env.META_GRAPH_API_VERSION?.trim() || "v25.0";
+}
+
+function metaGraphUrl(path: string) {
+  return `https://graph.facebook.com/${metaGraphVersion()}/${path.replace(/^\//, "")}`;
+}
+
 async function providerFetch(url: string, init: RequestInit = {}) {
   return fetch(url, {
     ...init,
@@ -59,6 +83,29 @@ async function providerFetch(url: string, init: RequestInit = {}) {
     redirect: "error",
     signal: AbortSignal.timeout(12_000),
   });
+}
+
+async function exchangeMetaLongLivedToken(shortLivedToken: TokenResponse) {
+  const clientId = process.env.META_APP_ID;
+  const clientSecret = process.env.META_APP_SECRET;
+  if (!clientId || !clientSecret || !shortLivedToken.access_token) {
+    throw new Error("Meta OAuth credentials are missing.");
+  }
+
+  const url = new URL(metaGraphUrl("oauth/access_token"));
+  url.searchParams.set("grant_type", "fb_exchange_token");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("client_secret", clientSecret);
+  url.searchParams.set("fb_exchange_token", shortLivedToken.access_token);
+  const response = await providerFetch(url.toString());
+  if (!response.ok) throw new Error("Meta long-lived token exchange failed.");
+  const longLived = (await response.json()) as TokenResponse;
+  if (!longLived.access_token) throw new Error("Meta long-lived token response was incomplete.");
+  return {
+    ...shortLivedToken,
+    ...longLived,
+    scope: longLived.scope ?? shortLivedToken.scope,
+  } satisfies TokenResponse;
 }
 
 async function exchangeCode(provider: SupportedProvider, code: string) {
@@ -87,7 +134,7 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
     const clientId = process.env.META_APP_ID;
     const clientSecret = process.env.META_APP_SECRET;
     if (!clientId || !clientSecret) throw new Error("Meta OAuth credentials are missing.");
-    const response = await providerFetch("https://graph.facebook.com/oauth/access_token", {
+    const response = await providerFetch(metaGraphUrl("oauth/access_token"), {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -98,7 +145,7 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
       }),
     });
     if (!response.ok) throw new Error("Meta token exchange failed.");
-    return (await response.json()) as TokenResponse;
+    return exchangeMetaLongLivedToken((await response.json()) as TokenResponse);
   }
 
   const clientId = process.env.LINKEDIN_CLIENT_ID;
@@ -119,7 +166,28 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
   return (await response.json()) as TokenResponse;
 }
 
-async function providerIdentity(provider: SupportedProvider, token: string): Promise<ProviderIdentity> {
+async function grantedScopes(provider: SupportedProvider, token: TokenResponse) {
+  if (provider !== "meta" || !token.access_token) {
+    return (token.scope ?? "").split(/[ ,]+/).filter(Boolean);
+  }
+
+  const response = await providerFetch(metaGraphUrl("me/permissions"), {
+    headers: { Authorization: `Bearer ${token.access_token}` },
+  });
+  if (!response.ok) return (token.scope ?? "").split(/[ ,]+/).filter(Boolean);
+  const payload = (await response.json()) as {
+    data?: Array<{ permission?: string; status?: string }>;
+  };
+  return (payload.data ?? [])
+    .filter((item) => item.status === "granted" && item.permission)
+    .map((item) => String(item.permission));
+}
+
+async function providerIdentity(
+  provider: SupportedProvider,
+  token: string,
+  scopes: string[],
+): Promise<ProviderIdentity> {
   if (provider === "google_search_console" || provider === "google_analytics") {
     const response = await providerFetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${token}` },
@@ -179,26 +247,72 @@ async function providerIdentity(provider: SupportedProvider, token: string): Pro
 
   if (provider === "meta") {
     const [profileResponse, pagesResponse] = await Promise.all([
-      providerFetch("https://graph.facebook.com/me?fields=id,name", {
+      providerFetch(`${metaGraphUrl("me")}?fields=id,name`, {
         headers: { Authorization: `Bearer ${token}` },
       }),
-      providerFetch("https://graph.facebook.com/me/accounts?fields=id,name&limit=100", {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
+      providerFetch(
+        `${metaGraphUrl("me/accounts")}?fields=id,name,tasks,instagram_business_account{id,username,name,profile_picture_url}&limit=100`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      ),
     ]);
     if (!profileResponse.ok || !pagesResponse.ok) {
-      throw new Error("Meta Page capability verification failed.");
+      throw new Error("Meta Page or Instagram capability verification failed.");
     }
     const profile = (await profileResponse.json()) as Record<string, unknown>;
-    const pages = (await pagesResponse.json()) as { data?: Array<{ id?: string; name?: string }> };
+    const pages = (await pagesResponse.json()) as { data?: MetaPage[] };
     const accountId = typeof profile.id === "string" ? profile.id : null;
     if (!accountId) throw new Error("Meta account identity is incomplete.");
+
+    const pageRows = pages.data ?? [];
+    const instagramRows = pageRows
+      .filter((page) => page.instagram_business_account?.id)
+      .map((page) => ({ page, instagram: page.instagram_business_account as MetaInstagramAccount }));
+    const assets: Array<Record<string, unknown>> = [];
+    for (const page of pageRows) {
+      assets.push({
+        kind: "facebook_page",
+        id: page.id ?? "page",
+        name: page.name ?? "Facebook Page",
+        tasks: page.tasks ?? [],
+        instagram_business_account_id: page.instagram_business_account?.id ?? null,
+      });
+    }
+    for (const item of instagramRows) {
+      assets.push({
+        kind: "instagram_account",
+        id: item.instagram.id,
+        username: item.instagram.username ?? null,
+        name: item.instagram.name ?? null,
+        profile_picture_url: item.instagram.profile_picture_url ?? null,
+        page_id: item.page.id ?? null,
+        page_name: item.page.name ?? null,
+      });
+    }
+
+    const hasInstagramPublishScope = scopes.includes("instagram_content_publish");
+    const hasInstagramInsightsScope = scopes.includes("instagram_manage_insights");
+    const hasFacebookPublishScope = scopes.includes("pages_manage_posts");
+    const verifiedCapabilities = ["identity", "pages.list", "pages.engagement.read"];
+    if (instagramRows.length) verifiedCapabilities.push("instagram.account.linked");
+    if (instagramRows.length && hasInstagramPublishScope) verifiedCapabilities.push("instagram.publish");
+    if (instagramRows.length && hasInstagramInsightsScope) verifiedCapabilities.push("instagram.insights.read");
+    if (pageRows.length && hasFacebookPublishScope) verifiedCapabilities.push("facebook.publish");
+
+    const connectionReady = instagramRows.length > 0 && hasInstagramPublishScope;
+    const connectionIssue = !instagramRows.length
+      ? "No Professional Instagram account is linked to an approved Facebook Page."
+      : !hasInstagramPublishScope
+        ? "Instagram publishing permission was not granted."
+        : null;
+
     return {
       accountName: String(profile.name ?? "Meta account"),
       accountId,
-      accountType: "meta",
-      assets: (pages.data ?? []).map((page) => ({ id: page.id ?? "page", name: page.name ?? "Meta Page" })),
-      verifiedCapabilities: ["identity", "pages.list", "pages.engagement.read"],
+      accountType: "meta_business",
+      assets,
+      verifiedCapabilities,
+      connectionReady,
+      connectionIssue,
     };
   }
 
@@ -244,22 +358,25 @@ export async function GET(request: Request, { params }: RouteContext) {
     }
     if (!token.access_token) return back(request, provider, "error", "oauth_exchange_failed");
 
+    const scopes = await grantedScopes(provider, token);
     let identity: ProviderIdentity;
     try {
-      identity = await providerIdentity(provider, token.access_token);
+      identity = await providerIdentity(provider, token.access_token, scopes);
     } catch {
       return back(request, provider, "error", "oauth_capability_verification_failed");
     }
 
     const now = new Date().toISOString();
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null;
-    const scopes = (token.scope ?? "").split(/[ ,]+/).filter(Boolean);
+    const status = provider === "meta" && identity.connectionReady === false ? "attention" : "connected";
+    const instagramAssets = identity.assets.filter((asset) => asset.kind === "instagram_account");
+    const facebookAssets = identity.assets.filter((asset) => asset.kind === "facebook_page");
 
     const { error } = await supabase.from("integration_connections").upsert(
       {
         workspace_id: workspace.id,
         provider,
-        status: "connected",
+        status,
         provider_installation_id: null,
         provider_account_id: identity.accountId,
         provider_account_name: identity.accountName,
@@ -270,9 +387,13 @@ export async function GET(request: Request, { params }: RouteContext) {
         scopes,
         selected_assets: identity.assets,
         metadata: {
-          credentialModel: "oauth2_authorization_code",
+          credentialModel: provider === "meta" ? "oauth2_long_lived_user_token" : "oauth2_authorization_code",
           verifiedCapabilities: identity.verifiedCapabilities,
           capabilitiesVerifiedAt: now,
+          connectionIssue: identity.connectionIssue ?? null,
+          metaGraphVersion: provider === "meta" ? metaGraphVersion() : null,
+          linkedInstagramAccounts: provider === "meta" ? instagramAssets.length : null,
+          facebookPages: provider === "meta" ? facebookAssets.length : null,
         },
         connected_by: user.id,
         connected_at: now,
@@ -283,7 +404,12 @@ export async function GET(request: Request, { params }: RouteContext) {
     );
     if (error) return back(request, provider, "error", "oauth_save_failed");
 
-    return back(request, provider, "notice", `${provider}_connected`);
+    return back(
+      request,
+      provider,
+      "notice",
+      provider === "meta" && status === "attention" ? "meta_connected_attention" : `${provider}_connected`,
+    );
   } catch (error) {
     console.error("OAuth provider callback failed", provider, error);
     return back(request, provider, "error", "oauth_callback_failed");
