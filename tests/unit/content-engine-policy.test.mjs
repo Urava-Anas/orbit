@@ -78,3 +78,14 @@ test("provider-confirmed evidence cannot be manufactured by authenticated worksp
   assert.match(impact, /latestMetricByContent/);
   assert.match(impact, /provider-confirmed|Provider-confirmed/i);
 });
+
+test("learning ranks observed period movement instead of cumulative lifetime counters", async () => {
+  const learning = await read("src/lib/content-engine-learning.ts");
+
+  assert.match(learning, /function metricDelta/);
+  assert.match(learning, /publishedWithinWindow/);
+  assert.match(learning, /if \(!publishedWithinWindow && group\.length < 2\) continue/);
+  assert.match(learning, /const baseline = publishedWithinWindow \? null : group\[0\]/);
+  assert.match(learning, /observed_7_day_metric_delta/);
+  assert.doesNotMatch(learning, /snapshot_policy:\s*"latest_per_content"/);
+});
