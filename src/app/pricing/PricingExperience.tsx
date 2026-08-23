@@ -14,6 +14,11 @@ import {
 } from "@/lib/orbit-plans";
 import styles from "./pricing.module.css";
 
+const trialHref =
+  "/login?notice=Your%2015-day%20Business%20trial%20begins%20when%20your%20workspace%20is%20provisioned.";
+const enterpriseHref =
+  "/login?notice=Enterprise%20access%20is%20arranged%20with%20the%20Orbit%20team.";
+
 function displayPrice(value: number | null) {
   if (value === null) return "Custom";
   return `$${value}`;
@@ -95,12 +100,12 @@ export function PricingExperience() {
                 <div className={styles.savingLine}>
                   {plan.key === "enterprise"
                     ? "Designed around your organisation"
-                    : "Cancel or change plan when billing goes live"}
+                    : "Plan activation is manual until checkout goes live"}
                 </div>
               )}
 
               <Link
-                href={plan.key === "enterprise" ? "/login?next=/trial" : "/login?next=/trial"}
+                href={plan.key === "enterprise" ? enterpriseHref : trialHref}
                 className={`${styles.planCta} ${plan.recommended ? styles.primaryCta : ""}`}
               >
                 {plan.key === "enterprise" ? "Talk to Orbit" : `Start ${ORBIT_TRIAL_DAYS}-day trial`}
@@ -130,7 +135,7 @@ export function PricingExperience() {
           with real workflows, real team structure and real founder visibility before
           choosing a paid plan.
         </p>
-        <Link href="/login?next=/trial" className={styles.bandCta}>
+        <Link href={trialHref} className={styles.bandCta}>
           Start free trial <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </section>
@@ -170,7 +175,7 @@ export function PricingExperience() {
         <span>Founder-first. Organisation-ready.</span>
         <h2>Run the company. Not the chaos.</h2>
         <p>Open a Business trial now and decide the permanent plan after Orbit proves its value.</p>
-        <Link href="/login?next=/trial" className={styles.bottomButton}>
+        <Link href={trialHref} className={styles.bottomButton}>
           Start {ORBIT_TRIAL_DAYS}-day trial <ArrowRight size={17} aria-hidden="true" />
         </Link>
       </section>
