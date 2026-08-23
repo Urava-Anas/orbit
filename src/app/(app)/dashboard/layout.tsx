@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { OrbitMark } from "@/components/OrbitMark";
 import { AppNavigation } from "@/components/AppNavigation";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { humanize } from "@/lib/format";
+import { readWorkspaceSubscription } from "@/lib/subscription";
 import { listFounderWorkspaces, requireWorkspace } from "@/lib/workspace";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
 import experienceStyles from "./WorkspaceExperience.module.css";
@@ -10,8 +12,11 @@ import layoutStyles from "./DashboardLayout.module.css";
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { user, role, workspace } = await requireWorkspace();
-  const workspaceOptions = await listFounderWorkspaces();
+  const { supabase, user, role, workspace } = await requireWorkspace();
+  const [workspaceOptions, subscription] = await Promise.all([
+    listFounderWorkspaces(),
+    readWorkspaceSubscription(supabase, workspace.id),
+  ]);
   const profile = getWorkspaceProfile(workspace);
   const initial = (user.user_metadata.full_name ?? user.email ?? "O")
     .slice(0, 1)
@@ -20,6 +25,9 @@ export default async function DashboardLayout({
     profile.experience === "apex"
       ? `app-shell ${experienceStyles.apexWorkspace}`
       : "app-shell";
+  const billingAttention = ["expired", "past_due", "cancelled"].includes(
+    subscription.effectiveStatus,
+  );
 
   return (
     <div className={shellClassName} data-workspace-experience={profile.experience}>
@@ -71,6 +79,27 @@ export default async function DashboardLayout({
             </span>
           </div>
         </header>
+
+        {subscription.isTrial || billingAttention ? (
+          <Link
+            href="/dashboard/billing"
+            className={`${layoutStyles.subscriptionStrip} ${
+              billingAttention ? layoutStyles.subscriptionAttention : ""
+            }`}
+          >
+            <span>
+              {subscription.isTrial
+                ? `Business trial · ${subscription.trialDaysRemaining ?? 0} days left`
+                : subscription.effectiveStatus === "expired"
+                  ? "Trial ended · workspace writes are paused"
+                  : subscription.effectiveStatus === "past_due"
+                    ? "Billing needs attention"
+                    : "Subscription cancelled · workspace writes are paused"}
+            </span>
+            <strong>{subscription.isTrial ? "Choose plan" : "Open Plan & Billing"} →</strong>
+          </Link>
+        ) : null}
+
         {children}
       </main>
     </div>
