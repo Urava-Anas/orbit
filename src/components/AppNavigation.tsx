@@ -77,7 +77,6 @@ export function AppNavigation({
 }: AppNavigationProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const links = experience === "apex" ? apexLinks : orbitLinks;
@@ -85,8 +84,6 @@ export function AppNavigation({
   const primaryLinks = links.slice(0, primaryCutoff);
   const systemLinks = links.slice(primaryCutoff);
 
-  useEffect(() => { setMounted(true); }, []);
-  useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
@@ -112,7 +109,7 @@ export function AppNavigation({
   }
 
   const closeMenu = () => setOpen(false);
-  const drawer = mounted && open ? createPortal(<>
+  const drawer = open ? createPortal(<>
     <button type="button" className={styles.backdrop} aria-label="Close navigation" onClick={() => { closeMenu(); requestAnimationFrame(() => triggerRef.current?.focus()); }} />
     <aside className={`${styles.drawer} ${experience === "apex" ? styles.apexDrawer : ""}`} role="dialog" aria-modal="true" aria-label={`${workspaceName} navigation`}>
       <div className={styles.drawerHeader}>
