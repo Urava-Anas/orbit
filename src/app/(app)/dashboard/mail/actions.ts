@@ -146,13 +146,16 @@ export async function syncRelayMailbox(formData: FormData) {
   const mailbox = await mailboxForWorkspace(supabase, workspace.id, mailboxId);
   if (!mailbox) redirect("/dashboard/mail?error=Mailbox%20not%20found");
 
+  let imported = 0;
   try {
     const result = await syncNamecheapMailbox({ workspaceId: workspace.id, mailboxId });
-    revalidatePath("/dashboard/mail");
-    redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(`${result.imported} new message${result.imported === 1 ? "" : "s"} synced.`)}`);
+    imported = result.imported;
   } catch (error) {
     redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&error=${encodeURIComponent(error instanceof Error ? error.message : "Mailbox sync failed")}`);
   }
+
+  revalidatePath("/dashboard/mail");
+  redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(`${imported} new message${imported === 1 ? "" : "s"} synced.`)}`);
 }
 
 export async function disconnectRelayMailbox(formData: FormData) {
