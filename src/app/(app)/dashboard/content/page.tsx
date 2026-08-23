@@ -121,11 +121,11 @@ type Learning = {
 };
 
 type Metric = {
-  impressions: number | string;
-  reach: number | string;
-  engagements: number | string;
-  clicks: number | string;
-  leads: number | string;
+  impressions: number;
+  reach: number;
+  engagements: number;
+  clicks: number;
+  leads: number;
 };
 
 const defaultUravaProfile: BrandProfile = {
@@ -266,14 +266,20 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
   const connections = (connectionsResult.data ?? []) as Connection[];
   const connectionByProvider = new Map(connections.map((item) => [item.provider, item]));
   const learnings = (learningsResult.data ?? []) as Learning[];
-  const metrics = (metricsResult.data ?? []) as Metric[];
+  const metrics = (metricsResult.data ?? []).map((row) => ({
+    impressions: Number(row.impressions || 0),
+    reach: Number(row.reach || 0),
+    engagements: Number(row.engagements || 0),
+    clicks: Number(row.clicks || 0),
+    leads: Number(row.leads || 0),
+  })) as Metric[];
   const totals = metrics.reduce(
     (sum, row) => ({
-      impressions: sum.impressions + Number(row.impressions || 0),
-      reach: sum.reach + Number(row.reach || 0),
-      engagements: sum.engagements + Number(row.engagements || 0),
-      clicks: sum.clicks + Number(row.clicks || 0),
-      leads: sum.leads + Number(row.leads || 0),
+      impressions: sum.impressions + row.impressions,
+      reach: sum.reach + row.reach,
+      engagements: sum.engagements + row.engagements,
+      clicks: sum.clicks + row.clicks,
+      leads: sum.leads + row.leads,
     }),
     { impressions: 0, reach: 0, engagements: 0, clicks: 0, leads: 0 },
   );
