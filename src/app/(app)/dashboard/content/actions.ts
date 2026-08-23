@@ -8,6 +8,7 @@ import {
   generateDailyContentBatch,
   providerForChannel,
 } from "@/lib/content-engine";
+import { promoteApprovedAssetForPublishing } from "@/lib/content-engine-media";
 import { requireWorkspace } from "@/lib/workspace";
 
 const contentPath = "/dashboard/content";
@@ -99,6 +100,40 @@ async function appendAuditEvent(
       error,
     });
   }
+}
+
+async function readyGeneratedImageIds(
+  supabase: WorkspaceSupabase,
+  workspaceId: string,
+  contentIds: string[],
+) {
+  if (!contentIds.length) return new Set<string>();
+  const { data, error } = await supabase
+    .from("content_assets")
+    .select("content_id")
+    .eq("workspace_id", workspaceId)
+    .eq("source", "generated")
+    .eq("asset_type", "image")
+    .eq("status", "ready")
+    .in("content_id", contentIds);
+  if (error) throw new Error("Generated visual readiness could not be verified.");
+  return new Set((data ?? []).map((item) => String(item.content_id)));
+}
+
+async function archiveGeneratedVisuals(
+  supabase: WorkspaceSupabase,
+  workspaceId: string,
+  contentId: string,
+) {
+  const { error } = await supabase
+    .from("content_assets")
+    .update({ status: "archived" })
+    .eq("workspace_id", workspaceId)
+    .eq("content_id", contentId)
+    .eq("source", "generated")
+    .eq("asset_type", "image")
+    .in("status", ["pending", "generating", "ready"]);
+  if (error) throw new Error("The old generated visual could not be invalidated safely.");
 }
 
 export async function saveBrandBrain(formData: FormData) {
@@ -354,6 +389,17 @@ export async function approveContentItem(formData: FormData) {
     .single();
 
   if (contentError || !content) fail("Content item was not found.");
+  if (content.channel === "instagram") {
+    try {
+      const readyIds = await readyGeneratedImageIds(supabase, workspace.id, [content.id]);
+      if (!readyIds.has(content.id)) {
+        fail("Instagram approval is locked until its generated visual is ready for founder review.");
+      }
+    } catch (assetError) {
+      fail(assetError instanceof Error ? assetError.message : "Instagram visual readiness could not be verified.");
+    }
+  }
+
   const approvedAt = new Date().toISOString();
   const { error } = await supabase
     .from("content_drafts")
@@ -362,13 +408,26 @@ export async function approveContentItem(formData: FormData) {
     .eq("workspace_id", workspace.id);
   if (error) fail("Content item could not be approved.");
 
+  if (content.channel === "instagram") {
+    try {
+      await promoteApprovedAssetForPublishing(workspace.id, content.id);
+    } catch (promotionError) {
+      await supabase
+        .from("content_drafts")
+        .update({ status: "review", approved_at: null, approved_by: null })
+        .eq("workspace_id", workspace.id)
+        .eq("id", content.id);
+      fail(promotionError instanceof Error ? promotionError.message : "Instagram visual could not be prepared for publishing.");
+    }
+  }
+
   await appendAuditEvent(supabase, {
     workspaceId: workspace.id,
     batchId: content.batch_id,
     contentId: content.id,
     eventType: "content_approved",
     actorId: user.id,
-    details: { approved_at: approvedAt },
+    details: { approved_at: approvedAt, visual_review_required: content.channel === "instagram" },
   });
 
   let ready = false;
@@ -445,6 +504,13 @@ export async function updateContentItem(formData: FormData) {
     .eq("id", parsed.data.id)
     .eq("workspace_id", workspace.id)
     .maybeSingle();
+
+  try {
+    await archiveGeneratedVisuals(supabase, workspace.id, parsed.data.id);
+  } catch (archiveError) {
+    fail(archiveError instanceof Error ? archiveError.message : "The old generated visual could not be invalidated safely.");
+  }
+
   const { error } = await supabase
     .from("content_drafts")
     .update({
@@ -472,9 +538,9 @@ export async function updateContentItem(formData: FormData) {
     contentId: parsed.data.id,
     eventType: "content_edited",
     actorId: user.id,
-    details: { approval_reset: true },
+    details: { approval_reset: true, generated_visual_invalidated: true },
   });
-  succeed("Edits saved. The item requires approval again.");
+  succeed("Edits saved. The item and its generated visual require review again.");
 }
 
 export async function approveDailyBatch(formData: FormData) {
@@ -492,6 +558,19 @@ export async function approveDailyBatch(formData: FormData) {
   if (itemError) fail("Today’s batch could not be loaded.");
   if (!items?.length) fail("There are no pending items left to approve.");
 
+  const instagramIds = items.filter((item) => item.channel === "instagram").map((item) => item.id);
+  if (instagramIds.length) {
+    try {
+      const readyIds = await readyGeneratedImageIds(supabase, workspace.id, instagramIds);
+      const missing = instagramIds.filter((id) => !readyIds.has(id));
+      if (missing.length) {
+        fail(`${missing.length} Instagram visual${missing.length === 1 ? " is" : "s are"} still being prepared. Review every visual before approving the day.`);
+      }
+    } catch (assetError) {
+      fail(assetError instanceof Error ? assetError.message : "Instagram visual readiness could not be verified.");
+    }
+  }
+
   const ids = items.map((item) => item.id);
   const approvedAt = new Date().toISOString();
   const { error: approvalError } = await supabase
@@ -501,6 +580,19 @@ export async function approveDailyBatch(formData: FormData) {
     .eq("workspace_id", workspace.id);
   if (approvalError) fail("The batch could not be approved.");
 
+  try {
+    for (const contentId of instagramIds) {
+      await promoteApprovedAssetForPublishing(workspace.id, contentId);
+    }
+  } catch (promotionError) {
+    await supabase
+      .from("content_drafts")
+      .update({ status: "review", approved_at: null, approved_by: null })
+      .in("id", ids)
+      .eq("workspace_id", workspace.id);
+    fail(promotionError instanceof Error ? promotionError.message : "One or more Instagram visuals could not be prepared for publishing.");
+  }
+
   const { error: eventError } = await supabase.from("content_review_events").insert(
     items.map((item) => ({
       workspace_id: workspace.id,
@@ -508,7 +600,7 @@ export async function approveDailyBatch(formData: FormData) {
       content_id: item.id,
       event_type: "content_approved",
       actor_id: user.id,
-      details: { approved_at: approvedAt, approval_mode: "batch" },
+      details: { approved_at: approvedAt, approval_mode: "batch", visual_review_required: item.channel === "instagram" },
     })),
   );
   if (eventError) console.error("Batch approval events could not be appended", eventError);
@@ -550,6 +642,7 @@ export async function approveDailyBatch(formData: FormData) {
       queue_ready: queueReady,
       queue_blocked: queueBlocked,
       batch_status: batchStatus,
+      instagram_visuals_reviewed: instagramIds.length,
     },
   });
 
