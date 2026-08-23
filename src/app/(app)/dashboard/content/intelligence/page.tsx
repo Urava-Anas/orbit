@@ -56,20 +56,20 @@ export default async function ContentIntelligencePage() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <div><span className={styles.eyebrow}><BarChart3 size={13} /> Real performance only</span><h1>Content Intelligence</h1><p>Orbit measures what actually happened, then turns repeated signals into tomorrow’s content decisions. Each post contributes only its latest provider snapshot, so cumulative platform metrics are never double-counted.</p></div>
-        <span className={styles.headerMeta}>Rolling 30 days · {metrics.length} measured post{metrics.length === 1 ? "" : "s"}</span>
+        <div><span className={styles.eyebrow}><BarChart3 size={13} /> Real performance only</span><h1>Content Intelligence</h1><p>Orbit shows the latest provider-confirmed state for posts measured during the last 30 days. Cumulative provider counters are deduplicated to one latest snapshot per post; the learning engine separately uses observed seven-day movement so older posts do not win simply because they have existed longer.</p></div>
+        <span className={styles.headerMeta}>Latest provider state · {metrics.length} post{metrics.length === 1 ? "" : "s"} measured recently</span>
       </header>
 
       <section className={styles.grid}>
-        <article className={styles.metric}><span>Reach</span><strong>{compact(totals.reach)}</strong><small>Latest provider snapshot per post</small></article>
-        <article className={styles.metric}><span>Engagements</span><strong>{compact(totals.engagements)}</strong><small>Measured interactions</small></article>
-        <article className={styles.metric}><span>Clicks</span><strong>{compact(totals.clicks)}</strong><small>Measured outbound intent</small></article>
-        <article className={styles.metric}><span>Leads</span><strong>{compact(totals.leads)}</strong><small>Attributed conversions</small></article>
+        <article className={styles.metric}><span>Current reach</span><strong>{compact(totals.reach)}</strong><small>Latest cumulative provider snapshot per post</small></article>
+        <article className={styles.metric}><span>Current engagements</span><strong>{compact(totals.engagements)}</strong><small>Provider-confirmed interactions</small></article>
+        <article className={styles.metric}><span>Attributed clicks</span><strong>{compact(totals.clicks)}</strong><small>Only trusted attribution data</small></article>
+        <article className={styles.metric}><span>Attributed leads</span><strong>{compact(totals.leads)}</strong><small>Only trusted conversion data</small></article>
       </section>
 
       <section className={styles.split}>
         <article className={styles.panel}>
-          <div className={styles.panelHeading}><h2>Platform response</h2><small>Weighted by leads, clicks, engagement and reach</small></div>
+          <div className={styles.panelHeading}><h2>Current platform response</h2><small>Latest state, weighted by leads, clicks, engagement and reach</small></div>
           {channelRows.length ? <div className={styles.bars}>{channelRows.map((item) => (
             <div className={styles.barRow} key={item.channel}><span>{humanize(item.channel)}</span><div className={styles.barTrack}><div className={styles.barFill} style={{ width: `${Math.max(4, Math.round((item.score / maxScore) * 100))}%` }} /></div><strong>{compact(item.leads)} leads</strong></div>
           ))}</div> : <div className={styles.empty}><strong>No performance data yet</strong><p>Once real provider metrics arrive, this view will rank platforms without guessing or backfilling fake analytics.</p></div>}
