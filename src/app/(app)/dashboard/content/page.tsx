@@ -219,6 +219,8 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
 
   const profile = (profileRow as BrandProfile | null) ?? (workspace.name === "Urava" ? defaultUravaProfile : { ...defaultUravaProfile, timezone: "UTC", daily_generation_enabled: false });
   const today = localDate(profile.timezone);
+  const metricsWindowStart = new Date(`${today}T00:00:00.000Z`);
+  metricsWindowStart.setUTCDate(metricsWindowStart.getUTCDate() - 6);
 
   const [batchResult, connectionsResult, learningsResult, metricsResult, approvedProofResult] = await Promise.all([
     supabase
@@ -243,7 +245,7 @@ export default async function ContentEnginePage({ searchParams }: { searchParams
       .from("content_metric_snapshots")
       .select("impressions,reach,engagements,clicks,leads")
       .eq("workspace_id", workspace.id)
-      .gte("captured_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("captured_at", metricsWindowStart.toISOString()),
     supabase
       .from("proofs")
       .select("id", { count: "exact", head: true })
