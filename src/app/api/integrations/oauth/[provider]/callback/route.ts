@@ -6,6 +6,7 @@ import {
   verifyIntegrationState,
   type OAuthProvider,
 } from "@/lib/integration-connections";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -21,11 +22,19 @@ type TokenResponse = {
   token_type?: string;
 };
 
+type AssetCredential = {
+  assetId: string;
+  assetKind: "facebook_page";
+  credential: string;
+  metadata: Record<string, unknown>;
+};
+
 type ProviderIdentity = {
   accountName: string;
   accountId: string | null;
   accountType: string;
   assets: Array<Record<string, unknown>>;
+  assetCredentials?: AssetCredential[];
   verifiedCapabilities: string[];
   connectionReady?: boolean;
   connectionIssue?: string | null;
@@ -41,6 +50,7 @@ type MetaInstagramAccount = {
 type MetaPage = {
   id?: string;
   name?: string;
+  access_token?: string;
   tasks?: string[];
   instagram_business_account?: MetaInstagramAccount;
 };
@@ -251,7 +261,7 @@ async function providerIdentity(
         headers: { Authorization: `Bearer ${token}` },
       }),
       providerFetch(
-        `${metaGraphUrl("me/accounts")}?fields=id,name,tasks,instagram_business_account{id,username,name,profile_picture_url}&limit=100`,
+        `${metaGraphUrl("me/accounts")}?fields=id,name,access_token,tasks,instagram_business_account{id,username,name,profile_picture_url}&limit=100`,
         { headers: { Authorization: `Bearer ${token}` } },
       ),
     ]);
@@ -268,6 +278,8 @@ async function providerIdentity(
       .filter((page) => page.instagram_business_account?.id)
       .map((page) => ({ page, instagram: page.instagram_business_account as MetaInstagramAccount }));
     const assets: Array<Record<string, unknown>> = [];
+    const assetCredentials: AssetCredential[] = [];
+
     for (const page of pageRows) {
       assets.push({
         kind: "facebook_page",
@@ -276,6 +288,17 @@ async function providerIdentity(
         tasks: page.tasks ?? [],
         instagram_business_account_id: page.instagram_business_account?.id ?? null,
       });
+      if (page.id && page.access_token) {
+        assetCredentials.push({
+          assetId: page.id,
+          assetKind: "facebook_page",
+          credential: page.access_token,
+          metadata: {
+            name: page.name ?? null,
+            instagram_business_account_id: page.instagram_business_account?.id ?? null,
+          },
+        });
+      }
     }
     for (const item of instagramRows) {
       assets.push({
@@ -292,24 +315,28 @@ async function providerIdentity(
     const hasInstagramPublishScope = scopes.includes("instagram_content_publish");
     const hasInstagramInsightsScope = scopes.includes("instagram_manage_insights");
     const hasFacebookPublishScope = scopes.includes("pages_manage_posts");
+    const publishableInstagramRows = instagramRows.filter((item) => item.page.id && item.page.access_token);
     const verifiedCapabilities = ["identity", "pages.list", "pages.engagement.read"];
     if (instagramRows.length) verifiedCapabilities.push("instagram.account.linked");
-    if (instagramRows.length && hasInstagramPublishScope) verifiedCapabilities.push("instagram.publish");
+    if (publishableInstagramRows.length && hasInstagramPublishScope) verifiedCapabilities.push("instagram.publish");
     if (instagramRows.length && hasInstagramInsightsScope) verifiedCapabilities.push("instagram.insights.read");
     if (pageRows.length && hasFacebookPublishScope) verifiedCapabilities.push("facebook.publish");
 
-    const connectionReady = instagramRows.length > 0 && hasInstagramPublishScope;
+    const connectionReady = publishableInstagramRows.length > 0 && hasInstagramPublishScope;
     const connectionIssue = !instagramRows.length
       ? "No Professional Instagram account is linked to an approved Facebook Page."
-      : !hasInstagramPublishScope
-        ? "Instagram publishing permission was not granted."
-        : null;
+      : !publishableInstagramRows.length
+        ? "The linked Instagram account does not have a usable Page publishing credential."
+        : !hasInstagramPublishScope
+          ? "Instagram publishing permission was not granted."
+          : null;
 
     return {
       accountName: String(profile.name ?? "Meta account"),
       accountId,
       accountType: "meta_business",
       assets,
+      assetCredentials,
       verifiedCapabilities,
       connectionReady,
       connectionIssue,
@@ -330,6 +357,36 @@ async function providerIdentity(
     assets: [],
     verifiedCapabilities: ["identity"],
   };
+}
+
+async function persistMetaAssetCredentials(
+  workspaceId: string,
+  userId: string,
+  credentials: AssetCredential[],
+) {
+  const admin = createAdminClient();
+  if (!admin) throw new Error("Orbit provider credential vault is unavailable.");
+
+  const { error: deleteError } = await admin
+    .from("integration_asset_credentials")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("provider", "meta");
+  if (deleteError) throw new Error("Existing Meta asset credentials could not be rotated.");
+
+  if (!credentials.length) return;
+  const { error: insertError } = await admin.from("integration_asset_credentials").insert(
+    credentials.map((credential) => ({
+      workspace_id: workspaceId,
+      provider: "meta",
+      asset_id: credential.assetId,
+      asset_kind: credential.assetKind,
+      credential_ciphertext: encryptIntegrationSecret(credential.credential),
+      metadata: credential.metadata,
+      connected_by: userId,
+    })),
+  );
+  if (insertError) throw new Error("Meta asset credentials could not be stored securely.");
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
@@ -366,6 +423,15 @@ export async function GET(request: Request, { params }: RouteContext) {
       return back(request, provider, "error", "oauth_capability_verification_failed");
     }
 
+    if (provider === "meta") {
+      try {
+        await persistMetaAssetCredentials(workspace.id, user.id, identity.assetCredentials ?? []);
+      } catch (error) {
+        console.error("Meta asset credential persistence failed", error);
+        return back(request, provider, "error", "oauth_asset_credential_save_failed");
+      }
+    }
+
     const now = new Date().toISOString();
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null;
     const status = provider === "meta" && identity.connectionReady === false ? "attention" : "connected";
@@ -387,7 +453,7 @@ export async function GET(request: Request, { params }: RouteContext) {
         scopes,
         selected_assets: identity.assets,
         metadata: {
-          credentialModel: provider === "meta" ? "oauth2_long_lived_user_token" : "oauth2_authorization_code",
+          credentialModel: provider === "meta" ? "oauth2_long_lived_user_plus_page_tokens" : "oauth2_authorization_code",
           verifiedCapabilities: identity.verifiedCapabilities,
           capabilitiesVerifiedAt: now,
           connectionIssue: identity.connectionIssue ?? null,
