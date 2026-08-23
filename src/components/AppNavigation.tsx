@@ -29,7 +29,7 @@ const orbitLinks = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
   { href: "/dashboard/foundry", label: "Foundry", icon: GraduationCap },
   { href: "/dashboard/leads", label: "Lead Engine", icon: UsersRound },
-  { href: "/dashboard/content", label: "Content Engine", icon: MessageSquareText },
+  { href: "/content-engine", label: "Content Engine", icon: MessageSquareText },
   { href: "/dashboard/mail", label: "Relay", icon: Mail },
   { href: "/dashboard/sales", label: "Sales", icon: Crosshair },
   { href: "/dashboard/projects", label: "Studio & Delivery", icon: FolderKanban },
@@ -76,8 +76,8 @@ export function AppNavigation({
   productLabel = "Organisation workspace",
 }: AppNavigationProps) {
   const pathname = usePathname();
-  const [openForPath, setOpenForPath] = useState<string | null>(null);
-  const open = openForPath === pathname;
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const links = experience === "apex" ? apexLinks : orbitLinks;
@@ -85,6 +85,8 @@ export function AppNavigation({
   const primaryLinks = links.slice(0, primaryCutoff);
   const systemLinks = links.slice(primaryCutoff);
 
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
@@ -92,7 +94,7 @@ export function AppNavigation({
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpenForPath(null);
+        setOpen(false);
         requestAnimationFrame(() => triggerRef.current?.focus());
       }
     };
@@ -109,8 +111,8 @@ export function AppNavigation({
     </nav>;
   }
 
-  const closeMenu = () => setOpenForPath(null);
-  const drawer = open && typeof document !== "undefined" ? createPortal(<>
+  const closeMenu = () => setOpen(false);
+  const drawer = mounted && open ? createPortal(<>
     <button type="button" className={styles.backdrop} aria-label="Close navigation" onClick={() => { closeMenu(); requestAnimationFrame(() => triggerRef.current?.focus()); }} />
     <aside className={`${styles.drawer} ${experience === "apex" ? styles.apexDrawer : ""}`} role="dialog" aria-modal="true" aria-label={`${workspaceName} navigation`}>
       <div className={styles.drawerHeader}>
@@ -129,5 +131,5 @@ export function AppNavigation({
     </aside>
   </>, document.body) : null;
 
-  return <div className={`mobile-nav ${styles.mobileNav}`}><button ref={triggerRef} type="button" className={styles.menuButton} aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} onClick={() => setOpenForPath((current) => current === pathname ? null : pathname)}><Menu size={21} strokeWidth={1.8} aria-hidden="true" /></button>{drawer}</div>;
+  return <div className={`mobile-nav ${styles.mobileNav}`}><button ref={triggerRef} type="button" className={styles.menuButton} aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} onClick={() => setOpen((current) => !current)}><Menu size={21} strokeWidth={1.8} aria-hidden="true" /></button>{drawer}</div>;
 }
