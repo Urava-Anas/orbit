@@ -69,7 +69,7 @@ export async function deriveContentLearnings({
     .select("id")
     .eq("workspace_id", workspaceId)
     .eq("learned_on", learnedOn)
-    .in("signal_type", ["performance", "timing"])
+    .in("signal_type", ["performance", "topic"])
     .limit(1);
   if (existing?.length) return { status: "existing" as const, inserted: 0 };
 
@@ -141,7 +141,7 @@ export async function deriveContentLearnings({
     notes.push({
       workspace_id: workspaceId,
       learned_on: learnedOn,
-      signal_type: "timing",
+      signal_type: "topic",
       insight: `${humanize(goal)} content is currently the strongest objective by measured response over the last 7 days.`,
       action: `Give ${humanize(goal)} one deliberate slot in the next daily strategy while preserving a balanced mix of other objectives.`,
       confidence: confidence(value),
