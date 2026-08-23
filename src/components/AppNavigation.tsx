@@ -29,7 +29,7 @@ const orbitLinks = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
   { href: "/dashboard/foundry", label: "Foundry", icon: GraduationCap },
   { href: "/dashboard/leads", label: "Lead Engine", icon: UsersRound },
-  { href: "/content-engine", label: "Content Engine", icon: MessageSquareText },
+  { href: "/dashboard/content", label: "Content Engine", icon: MessageSquareText },
   { href: "/dashboard/mail", label: "Relay", icon: Mail },
   { href: "/dashboard/sales", label: "Sales", icon: Crosshair },
   { href: "/dashboard/projects", label: "Studio & Delivery", icon: FolderKanban },
