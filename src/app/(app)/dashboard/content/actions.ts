@@ -425,7 +425,9 @@ export async function approveContentItem(formData: FormData) {
         .update({ status: "review", approved_at: null, approved_by: null })
         .eq("workspace_id", workspace.id)
         .eq("id", content.id)
-        .eq("status", "approved");
+        .eq("status", "approved")
+        .eq("approved_by", user.id)
+        .eq("approved_at", approvedAt);
       fail(promotionError instanceof Error ? promotionError.message : "Instagram visual could not be prepared for publishing.");
     }
   }
@@ -602,7 +604,18 @@ export async function approveDailyBatch(formData: FormData) {
     .select("id");
   if (approvalError) fail("The batch could not be approved.");
   if ((approvedRows?.length ?? 0) !== ids.length) {
-    fail("One or more content items changed during review. Reload the batch before approving the day.");
+    const changedIds = (approvedRows ?? []).map((row) => String(row.id));
+    if (changedIds.length) {
+      await supabase
+        .from("content_drafts")
+        .update({ status: "review", approved_at: null, approved_by: null })
+        .in("id", changedIds)
+        .eq("workspace_id", workspace.id)
+        .eq("status", "approved")
+        .eq("approved_by", user.id)
+        .eq("approved_at", approvedAt);
+    }
+    fail("One or more content items changed during review. The partial approval was rolled back; reload the batch before approving the day.");
   }
 
   try {
@@ -615,7 +628,9 @@ export async function approveDailyBatch(formData: FormData) {
       .update({ status: "review", approved_at: null, approved_by: null })
       .in("id", ids)
       .eq("workspace_id", workspace.id)
-      .eq("status", "approved");
+      .eq("status", "approved")
+      .eq("approved_by", user.id)
+      .eq("approved_at", approvedAt);
     fail(promotionError instanceof Error ? promotionError.message : "One or more Instagram visuals could not be prepared for publishing.");
   }
 
@@ -652,11 +667,19 @@ export async function approveDailyBatch(formData: FormData) {
   }
 
   const batchStatus = queueReady === items.length ? "scheduled" : "approved";
-  await supabase
+  const { error: batchUpdateError } = await supabase
     .from("content_batches")
     .update({ status: batchStatus, approved_at: approvedAt, approved_by: user.id })
     .eq("workspace_id", workspace.id)
     .eq("id", parsed.data);
+  if (batchUpdateError) {
+    console.error("Content Engine approved the daily items but could not finalize the batch state", {
+      workspaceId: workspace.id,
+      batchId: parsed.data,
+      batchStatus,
+      error: batchUpdateError,
+    });
+  }
   await appendAuditEvent(supabase, {
     workspaceId: workspace.id,
     batchId: parsed.data,
@@ -668,13 +691,16 @@ export async function approveDailyBatch(formData: FormData) {
       queue_ready: queueReady,
       queue_blocked: queueBlocked,
       batch_status: batchStatus,
+      batch_state_saved: !batchUpdateError,
       instagram_visuals_reviewed: instagramIds.length,
     },
   });
 
   succeed(
-    queueBlocked
-      ? `Daily batch approved. ${queueBlocked} item${queueBlocked === 1 ? " is" : "s are"} safely blocked until its publishing rail is ready.`
-      : "Daily batch approved and queued for automatic publishing.",
+    batchUpdateError
+      ? "Daily content was approved safely, but the batch summary needs a refresh before further action."
+      : queueBlocked
+        ? `Daily batch approved. ${queueBlocked} item${queueBlocked === 1 ? " is" : "s are"} safely blocked until its publishing rail is ready.`
+        : "Daily batch approved and queued for automatic publishing.",
   );
 }
