@@ -37,6 +37,22 @@ function callbackUrl(provider: SupportedProvider) {
   return `${orbitBaseUrl()}/api/integrations/oauth/${provider}/callback`;
 }
 
+function recoverMisroutedOAuthResponse(request: Request, provider: SupportedProvider) {
+  const incoming = new URL(request.url);
+  const hasOAuthResponse =
+    incoming.searchParams.has("code") ||
+    incoming.searchParams.has("state") ||
+    incoming.searchParams.has("error") ||
+    incoming.searchParams.has("error_code") ||
+    incoming.searchParams.has("error_reason");
+
+  if (!hasOAuthResponse) return null;
+
+  const callback = new URL(`/api/integrations/oauth/${provider}/callback`, request.url);
+  incoming.searchParams.forEach((value, key) => callback.searchParams.append(key, value));
+  return NextResponse.redirect(callback, 307);
+}
+
 function metaGraphVersion() {
   return process.env.META_GRAPH_API_VERSION?.trim() || "v25.0";
 }
@@ -101,6 +117,9 @@ function authorizationUrl(provider: SupportedProvider, state: string) {
 export async function GET(request: Request, { params }: RouteContext) {
   const { provider } = await params;
   if (!isSupported(provider)) return back(request, provider, "unsupported_integration");
+
+  const recoveredResponse = recoverMisroutedOAuthResponse(request, provider);
+  if (recoveredResponse) return recoveredResponse;
 
   const { workspace, user, role } = await requireWorkspace();
   if (role !== "owner" && role !== "admin") return back(request, provider, "integration_permission_required");
