@@ -123,7 +123,7 @@ function sourceLabel(source: string) {
 }
 
 function sourceHref(source: string) {
-  const slug = source === "referral" ? "referrals" : source === "other" ? "cold-list" : source === "local_search" ? "local-search" : source;
+  const slug = source === "referral" ? "referrals" : source === "other" ? "cold-list" : source === "local_search" ? "google" : source;
   return `/dashboard/leads/sources/${slug}`;
 }
 
