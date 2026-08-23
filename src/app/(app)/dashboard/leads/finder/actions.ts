@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getGeoapifyApiKey } from "@/lib/geoapify";
+import { enrichPublicBusinessContact } from "@/lib/lead-enrichment";
 import { requireWorkspace } from "@/lib/workspace";
 
 const PROVIDER = "geoapify" as const;
@@ -54,6 +55,11 @@ type LeadPlace = {
   phone: string | null;
   email: string | null;
   website: string | null;
+  contactPerson: string | null;
+  contactRole: string | null;
+  enrichmentStatus: "pending" | "enriched" | "partial" | "unresolved";
+  enrichmentConfidence: number | null;
+  enrichmentSource: string | null;
   openingHours: string | null;
   brand: string | null;
   lat: number | null;
@@ -68,6 +74,9 @@ type FinderResult = {
   formatted_address: string | null;
   primary_type: string | null;
   google_maps_url: string | null;
+  phone: string | null;
+  email: string | null;
+  website_url: string | null;
   niche: string;
   target_problem: string | null;
   status: string;
@@ -156,6 +165,11 @@ function basePlace(feature: GeoapifyFeature): LeadPlace | null {
     phone: null,
     email: null,
     website: null,
+    contactPerson: null,
+    contactRole: null,
+    enrichmentStatus: "pending",
+    enrichmentConfidence: null,
+    enrichmentSource: null,
     openingHours: null,
     brand: null,
     lat,
@@ -248,13 +262,28 @@ async function placeDetails(key: string, placeId: string) {
 
 async function enrichCandidates(key: string, candidates: PlaceCandidate[]) {
   const enriched: PlaceCandidate[] = [];
-  for (let index = 0; index < candidates.length; index += 10) {
-    const batch = candidates.slice(index, index + 10);
+  for (let index = 0; index < candidates.length; index += 5) {
+    const batch = candidates.slice(index, index + 5);
     const values = await Promise.all(batch.map(async (candidate) => {
       try {
-        return { ...candidate, place: mergeDetails(candidate.place, await placeDetails(key, candidate.place.id)) };
+        const detailed = mergeDetails(candidate.place, await placeDetails(key, candidate.place.id));
+        const contact = await enrichPublicBusinessContact({ website: detailed.website, phone: detailed.phone, email: detailed.email });
+        return {
+          ...candidate,
+          place: {
+            ...detailed,
+            phone: contact.phone ?? detailed.phone,
+            email: contact.email ?? detailed.email,
+            website: contact.website ?? detailed.website,
+            contactPerson: contact.contactPerson,
+            contactRole: contact.contactRole,
+            enrichmentStatus: contact.status,
+            enrichmentConfidence: contact.confidence,
+            enrichmentSource: contact.source,
+          },
+        };
       } catch {
-        return candidate;
+        return { ...candidate, place: { ...candidate.place, enrichmentStatus: "unresolved" as const, enrichmentConfidence: 0, enrichmentSource: "none" } };
       }
     }));
     enriched.push(...values);
@@ -413,6 +442,12 @@ export async function searchPlaces(formData: FormData) {
           website_url: clip(place.website, 1000),
           phone: clip(place.phone, 60),
           email: clip(place.email, 254),
+          contact_person: clip(place.contactPerson, 120),
+          contact_role: clip(place.contactRole, 120),
+          enrichment_status: place.enrichmentStatus,
+          enrichment_confidence: place.enrichmentConfidence,
+          enrichment_source: clip(place.enrichmentSource, 120),
+          enriched_at: new Date().toISOString(),
           rating: null,
           review_count: null,
           niche,
@@ -467,7 +502,7 @@ export async function analyzeFinderResult(formData: FormData) {
   const { supabase, workspace } = await requireWorkspace();
   const { data, error } = await supabase
     .from("lead_finder_results")
-    .select("id,provider,provider_place_id,business_name,formatted_address,primary_type,google_maps_url,niche,target_problem,status")
+    .select("id,provider,provider_place_id,business_name,formatted_address,primary_type,google_maps_url,phone,email,website_url,niche,target_problem,status")
     .eq("id", id.data)
     .eq("workspace_id", workspace.id)
     .single();
@@ -490,25 +525,48 @@ export async function analyzeFinderResult(formData: FormData) {
     formattedAddress: result.formatted_address,
     primaryType: result.primary_type,
     mapUrl: result.google_maps_url,
-    phone: null,
-    email: null,
-    website: null,
+    phone: result.phone,
+    email: result.email,
+    website: result.website_url,
+    contactPerson: null,
+    contactRole: null,
+    enrichmentStatus: "pending",
+    enrichmentConfidence: null,
+    enrichmentSource: null,
     openingHours: null,
     brand: null,
     lat: null,
     lon: null,
   }, details);
-  const score = calculateScore(merged, result.niche, result.target_problem);
+  const contact = await enrichPublicBusinessContact({ website: merged.website, phone: merged.phone, email: merged.email });
+  const enrichedMerged: LeadPlace = {
+    ...merged,
+    phone: contact.phone ?? merged.phone,
+    email: contact.email ?? merged.email,
+    website: contact.website ?? merged.website,
+    contactPerson: contact.contactPerson,
+    contactRole: contact.contactRole,
+    enrichmentStatus: contact.status,
+    enrichmentConfidence: contact.confidence,
+    enrichmentSource: contact.source,
+  };
+  const score = calculateScore(enrichedMerged, result.niche, result.target_problem);
   const { error: updateError } = await supabase
     .from("lead_finder_results")
     .update({
-      business_name: merged.name.slice(0, 200),
-      formatted_address: clip(merged.formattedAddress, 500),
-      primary_type: clip(merged.primaryType, 120),
-      google_maps_url: clip(merged.mapUrl, 1000),
-      phone: clip(merged.phone, 60),
-      email: clip(merged.email, 254),
-      website_url: clip(merged.website, 1000),
+      business_name: enrichedMerged.name.slice(0, 200),
+      formatted_address: clip(enrichedMerged.formattedAddress, 500),
+      primary_type: clip(enrichedMerged.primaryType, 120),
+      google_maps_url: clip(enrichedMerged.mapUrl, 1000),
+      phone: clip(enrichedMerged.phone, 60),
+      email: clip(enrichedMerged.email, 254),
+      website_url: clip(enrichedMerged.website, 1000),
+      contact_person: clip(enrichedMerged.contactPerson, 120),
+      contact_role: clip(enrichedMerged.contactRole, 120),
+      enrichment_status: enrichedMerged.enrichmentStatus,
+      enrichment_confidence: enrichedMerged.enrichmentConfidence,
+      enrichment_source: clip(enrichedMerged.enrichmentSource, 120),
+      enriched_at: new Date().toISOString(),
       fit_score: score.fit,
       problem_score: score.problem,
       contactability_score: score.contactability,
@@ -530,10 +588,29 @@ export async function analyzeFinderResult(formData: FormData) {
 
 async function approveResult(context: WorkspaceContext, id: string) {
   const { supabase, user, workspace } = context;
-  const { data, error } = await supabase.from("lead_finder_results").select("*").eq("id", id).eq("workspace_id", workspace.id).single();
+  const { data: fetched, error } = await supabase.from("lead_finder_results").select("*").eq("id", id).eq("workspace_id", workspace.id).single();
+  let data = fetched;
   if (error || !data) return { outcome: "failed" as const, businessName: "Lead" };
   if (data.status === "approved") return { outcome: "approved" as const, businessName: data.business_name };
   if (data.status !== "analyzed") return { outcome: "not_ready" as const, businessName: data.business_name };
+
+  if (data.provider === PROVIDER && !data.enriched_at) {
+    const contact = await enrichPublicBusinessContact({ website: data.website_url, phone: data.phone, email: data.email });
+    const enrichmentPatch = {
+      phone: clip(contact.phone, 60),
+      email: clip(contact.email, 254),
+      website_url: clip(contact.website, 1000),
+      contact_person: clip(contact.contactPerson, 120),
+      contact_role: clip(contact.contactRole, 120),
+      enrichment_status: contact.status,
+      enrichment_confidence: contact.confidence,
+      enrichment_source: clip(contact.source, 120),
+      enriched_at: new Date().toISOString(),
+    };
+    const { error: enrichmentError } = await supabase.from("lead_finder_results").update(enrichmentPatch).eq("id", data.id).eq("workspace_id", workspace.id);
+    if (enrichmentError) return { outcome: "failed" as const, businessName: data.business_name };
+    data = { ...data, ...enrichmentPatch };
+  }
 
   let duplicate: { id: string } | null = null;
   if (data.provider === "google_places") {
@@ -568,6 +645,7 @@ async function approveResult(context: WorkspaceContext, id: string) {
   const notes = [
     data.score_reason,
     data.formatted_address ? `Address: ${data.formatted_address}` : null,
+    data.contact_person ? `Decision maker: ${data.contact_person}${data.contact_role ? ` · ${data.contact_role}` : ""}` : "Decision maker: not publicly verified",
     `Discovered through Orbit Lead Finder. ${providerLabel} Place ID: ${data.provider_place_id}`,
   ].filter(Boolean).join("\n\n").slice(0, 4000);
 
@@ -580,6 +658,13 @@ async function approveResult(context: WorkspaceContext, id: string) {
       email: clip(data.email, 254),
       phone: clip(data.phone, 40),
       whatsapp: clip(data.phone, 40),
+      contact_person: clip(data.contact_person, 120),
+      contact_role: clip(data.contact_role, 120),
+      website_url: clip(data.website_url, 1000),
+      enrichment_status: data.enrichment_status ?? "unresolved",
+      enrichment_confidence: data.enrichment_confidence,
+      enrichment_source: clip(data.enrichment_source, 120),
+      enriched_at: data.enriched_at ?? new Date().toISOString(),
       source: data.provider === "google_places" ? "google" : "local_search",
       stage: "scored",
       niche: clip(data.niche, 100),
