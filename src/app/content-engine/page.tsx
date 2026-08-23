@@ -10,7 +10,7 @@ import {
   Clock3,
   Facebook,
   Instagram,
-  Linkedin,
+  Link,
   Pencil,
   RefreshCw,
   Sparkles,
@@ -201,7 +201,7 @@ export default function ContentEnginePage() {
             <div className={styles.schedule}>
               {items.map((item) => (
                 <div className={styles.scheduleRow} key={item.id}>
-                  <span className={styles.platformIcon}>{item.platform === 'Instagram' ? <Instagram size={15} /> : item.platform === 'Facebook' ? <Facebook size={15} /> : <Linkedin size={15} />}</span>
+                  <span className={styles.platformIcon}>{item.platform === 'Instagram' ? <Instagram size={15} /> : item.platform === 'Facebook' ? <Facebook size={15} /> : <Link size={15} />}</span>
                   <div><strong>{item.time}</strong><small>{item.platform} · {item.format}</small></div>
                   <span className={item.status === 'approved' ? styles.ready : styles.waiting}>{item.status === 'approved' ? 'Ready' : 'Waiting'}</span>
                 </div>
