@@ -15,6 +15,14 @@ function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+function safeAuthNext(next: string) {
+  return next === "/trial" ? "/trial" : null;
+}
+
+function loginPath(next: string | null) {
+  return next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+}
+
 function messagePath(path: string, type: "error" | "notice", message: string) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${type}=${encodeURIComponent(message)}`;
@@ -41,13 +49,15 @@ async function requestSubject(email: string) {
 }
 
 export async function login(formData: FormData) {
+  const next = safeAuthNext(value(formData, "next"));
+  const returnToLogin = loginPath(next);
   const parsed = z.object({ email: emailSchema, password: passwordSchema }).safeParse({
     email: value(formData, "email"),
     password: value(formData, "password"),
   });
 
   if (!parsed.success) {
-    redirect(messagePath("/login", "error", "Use a valid email and 12+ character password."));
+    redirect(messagePath(returnToLogin, "error", "Use a valid email and 12+ character password."));
   }
 
   const quota = await consumeRateLimit({
@@ -57,19 +67,22 @@ export async function login(formData: FormData) {
     windowSeconds: 600,
   });
   if (!quota.allowed) {
-    redirect(messagePath("/login", "error", "Too many sign-in attempts. Try again later."));
+    redirect(messagePath(returnToLogin, "error", "Too many sign-in attempts. Try again later."));
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) redirect(messagePath("/login", "error", "Email or password is incorrect."));
+  if (error) redirect(messagePath(returnToLogin, "error", "Email or password is incorrect."));
 
   const context = await getOrbitAccess();
-  if (!context) redirect(messagePath("/login", "error", "Sign-in session could not be verified."));
+  if (!context) redirect(messagePath(returnToLogin, "error", "Sign-in session could not be verified."));
+  if (next) redirect(next);
   redirect(orbitHomePath(context.access));
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(formData: FormData) {
+  const next = safeAuthNext(value(formData, "next"));
+  const returnToLogin = loginPath(next);
   const requestHeaders = await headers();
   const subject = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const quota = await consumeRateLimit({
@@ -78,21 +91,24 @@ export async function signInWithGoogle() {
     limit: 20,
     windowSeconds: 600,
   });
-  if (!quota.allowed) redirect(messagePath("/login", "error", "Too many sign-in attempts. Try again later."));
+  if (!quota.allowed) redirect(messagePath(returnToLogin, "error", "Too many sign-in attempts. Try again later."));
 
   const origin = await requestOrigin();
+  const callback = new URL("/auth/callback", origin);
+  if (next) callback.searchParams.set("next", next);
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${origin}/auth/callback`,
+      redirectTo: callback.toString(),
       queryParams: { prompt: "select_account" },
     },
   });
 
   if (error || !data.url) {
     console.error("Orbit Google sign-in failed", { code: error?.code, status: error?.status });
-    redirect(messagePath("/login", "error", "Google sign-in is unavailable right now. Use email or try again."));
+    redirect(messagePath(returnToLogin, "error", "Google sign-in is unavailable right now. Use email or try again."));
   }
   redirect(data.url);
 }
