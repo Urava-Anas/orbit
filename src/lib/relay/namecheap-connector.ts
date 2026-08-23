@@ -1,19 +1,16 @@
 import "server-only";
 
-import tls from "node:tls";
+import * as tls from "node:tls";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  decryptIntegrationSecret,
-  encryptIntegrationSecret,
-} from "@/lib/integration-connections";
+import { decryptIntegrationSecret, encryptIntegrationSecret } from "@/lib/integration-connections";
 
 const HOST = "mail.privateemail.com";
 const IMAP_PORT = 993;
 const SMTP_PORT = 465;
-const SOCKET_TIMEOUT_MS = 12_000;
-const MAX_IMAP_RESPONSE_BYTES = 8 * 1024 * 1024;
-const MAX_SYNC_MESSAGES = 30;
+const TIMEOUT = 12_000;
+const MAX_RESPONSE = 8 * 1024 * 1024;
+const MAX_SYNC = 30;
 
 export type RelayConnectionTest = {
   ok: boolean;
@@ -35,25 +32,20 @@ type ParsedMail = {
   receivedAt: string;
 };
 
-function safeQuoted(value: string) {
+function quoted(value: string) {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-function createTlsSocket(port: number) {
+function openTls(port: number) {
   return new Promise<tls.TLSSocket>((resolve, reject) => {
-    const socket = tls.connect({
-      host: HOST,
-      port,
-      servername: HOST,
-      rejectUnauthorized: true,
-    });
+    const socket = tls.connect({ host: HOST, port, servername: HOST, rejectUnauthorized: true });
     const timer = setTimeout(() => {
       socket.destroy();
       reject(new Error("Mail server connection timed out."));
-    }, SOCKET_TIMEOUT_MS);
+    }, TIMEOUT);
     socket.once("secureConnect", () => {
       clearTimeout(timer);
-      socket.setTimeout(SOCKET_TIMEOUT_MS, () => socket.destroy(new Error("Mail server timed out.")));
+      socket.setTimeout(TIMEOUT, () => socket.destroy(new Error("Mail server timed out.")));
       resolve(socket);
     });
     socket.once("error", (error) => {
@@ -63,92 +55,70 @@ function createTlsSocket(port: number) {
   });
 }
 
-function readUntil(socket: tls.TLSSocket, done: (text: string) => boolean, maxBytes = MAX_IMAP_RESPONSE_BYTES) {
+function readUntil(socket: tls.TLSSocket, done: (text: string) => boolean, maxBytes = MAX_RESPONSE) {
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
-    let bytes = 0;
+    let size = 0;
     let settled = false;
-    const timer = setTimeout(() => finish(new Error("Mail server response timed out.")), SOCKET_TIMEOUT_MS);
-
-    function cleanup() {
+    const timer = setTimeout(() => finish(new Error("Mail server response timed out.")), TIMEOUT);
+    const cleanup = () => {
       clearTimeout(timer);
       socket.off("data", onData);
       socket.off("error", onError);
       socket.off("close", onClose);
-    }
-    function finish(error?: Error) {
+    };
+    const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       cleanup();
       if (error) reject(error);
       else resolve(Buffer.concat(chunks));
-    }
-    function onError(error: Error) { finish(error); }
-    function onClose() { finish(new Error("Mail server closed the connection.")); }
-    function onData(chunk: Buffer) {
+    };
+    const onError = (error: Error) => finish(error);
+    const onClose = () => finish(new Error("Mail server closed the connection."));
+    const onData = (chunk: Buffer) => {
       chunks.push(chunk);
-      bytes += chunk.length;
-      if (bytes > maxBytes) return finish(new Error("Mail message exceeded Relay's safe sync size."));
+      size += chunk.length;
+      if (size > maxBytes) return finish(new Error("Mail message exceeded Relay's safe sync size."));
       if (done(Buffer.concat(chunks).toString("latin1"))) finish();
-    }
-
+    };
     socket.on("data", onData);
     socket.once("error", onError);
     socket.once("close", onClose);
   });
 }
 
-async function imapGreeting(socket: tls.TLSSocket) {
-  const response = await readUntil(socket, (text) => /\r\n$/.test(text), 64 * 1024);
-  if (!/^\* OK/i.test(response.toString("utf8"))) {
-    throw new Error("Namecheap IMAP did not accept the connection.");
-  }
-}
-
 async function imapCommand(socket: tls.TLSSocket, tag: string, command: string) {
   socket.write(`${tag} ${command}\r\n`);
-  const response = await readUntil(
-    socket,
-    (text) => new RegExp(`(?:^|\\r\\n)${tag} (?:OK|NO|BAD)`, "i").test(text),
-  );
-  const text = response.toString("latin1");
-  const status = text.match(new RegExp(`(?:^|\\r\\n)${tag} (OK|NO|BAD)`, "i"))?.[1]?.toUpperCase();
+  const response = await readUntil(socket, (text) => new RegExp(`(?:^|\\r\\n)${tag} (?:OK|NO|BAD)`, "i").test(text));
+  const status = response.toString("latin1").match(new RegExp(`(?:^|\\r\\n)${tag} (OK|NO|BAD)`, "i"))?.[1]?.toUpperCase();
   if (status !== "OK") throw new Error(`Namecheap IMAP rejected the request (${status ?? "unknown"}).`);
   return response;
 }
 
 async function imapLogin(socket: tls.TLSSocket, email: string, password: string) {
-  await imapGreeting(socket);
-  await imapCommand(socket, "A001", `LOGIN ${safeQuoted(email)} ${safeQuoted(password)}`);
+  const greeting = await readUntil(socket, (text) => /\r\n$/.test(text), 64 * 1024);
+  if (!/^\* OK/i.test(greeting.toString("utf8"))) throw new Error("Namecheap IMAP did not accept the connection.");
+  await imapCommand(socket, "A001", `LOGIN ${quoted(email)} ${quoted(password)}`);
 }
 
-function smtpRead(socket: tls.TLSSocket, expectedCode: number) {
-  return readUntil(
-    socket,
-    (text) => text.split("\r\n").some((line) => line.startsWith(`${expectedCode} `)),
-    256 * 1024,
-  ).then((buffer) => {
-    const text = buffer.toString("utf8");
-    if (!text.split("\r\n").some((line) => line.startsWith(`${expectedCode} `))) {
-      throw new Error("Namecheap SMTP returned an unexpected response.");
-    }
-    return text;
-  });
+function smtpRead(socket: tls.TLSSocket, code: number) {
+  return readUntil(socket, (text) => text.split("\r\n").some((line) => line.startsWith(`${code} `)), 256 * 1024);
 }
 
-async function smtpCommand(socket: tls.TLSSocket, command: string, expectedCode: number) {
+async function smtpCommand(socket: tls.TLSSocket, command: string, code: number) {
   socket.write(`${command}\r\n`);
-  return smtpRead(socket, expectedCode);
+  await smtpRead(socket, code);
 }
 
 async function testImap(email: string, password: string) {
-  const socket = await createTlsSocket(IMAP_PORT);
+  const socket = await openTls(IMAP_PORT);
   try {
     await imapLogin(socket, email, password);
     const response = (await imapCommand(socket, "A002", 'STATUS "INBOX" (MESSAGES UNSEEN UIDNEXT)')).toString("utf8");
+    await imapCommand(socket, "A003", "LOGOUT").catch(() => undefined);
     const messages = Number(response.match(/MESSAGES\s+(\d+)/i)?.[1] ?? NaN);
     const unseen = Number(response.match(/UNSEEN\s+(\d+)/i)?.[1] ?? NaN);
-    await imapCommand(socket, "A003", "LOGOUT").catch(() => undefined);
     return {
       messages: Number.isFinite(messages) ? messages : null,
       unseen: Number.isFinite(unseen) ? unseen : null,
@@ -159,7 +129,7 @@ async function testImap(email: string, password: string) {
 }
 
 async function testSmtp(email: string, password: string) {
-  const socket = await createTlsSocket(SMTP_PORT);
+  const socket = await openTls(SMTP_PORT);
   try {
     await smtpRead(socket, 220);
     await smtpCommand(socket, "EHLO orbit.relay", 250);
@@ -231,93 +201,86 @@ async function getMailboxCredential(mailboxId: string) {
   };
 }
 
-function decodeQuotedPrintable(value: string) {
-  return value
-    .replace(/=\r?\n/g, "")
-    .replace(/=([0-9A-F]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+function qp(value: string) {
+  return value.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
 }
 
-function decodeHeaderWords(value: string) {
+function decodeHeader(value: string) {
   return value.replace(/=\?([^?]+)\?([bq])\?([^?]+)\?=/gi, (_, _charset: string, mode: string, body: string) => {
     try {
-      if (mode.toLowerCase() === "b") return Buffer.from(body, "base64").toString("utf8");
-      return Buffer.from(decodeQuotedPrintable(body.replace(/_/g, " ")), "latin1").toString("utf8");
+      return mode.toLowerCase() === "b"
+        ? Buffer.from(body, "base64").toString("utf8")
+        : Buffer.from(qp(body.replace(/_/g, " ")), "latin1").toString("utf8");
     } catch {
       return body;
     }
   });
 }
 
-function parseHeaders(rawHeaders: string) {
-  const unfolded = rawHeaders.replace(/\r?\n[ \t]+/g, " ");
+function headers(raw: string) {
   const map = new Map<string, string>();
-  for (const line of unfolded.split(/\r?\n/)) {
-    const idx = line.indexOf(":");
-    if (idx <= 0) continue;
-    const key = line.slice(0, idx).trim().toLowerCase();
-    if (!map.has(key)) map.set(key, line.slice(idx + 1).trim());
+  for (const line of raw.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/)) {
+    const index = line.indexOf(":");
+    if (index > 0) {
+      const key = line.slice(0, index).trim().toLowerCase();
+      if (!map.has(key)) map.set(key, line.slice(index + 1).trim());
+    }
   }
   return map;
 }
 
-function extractEmails(value: string | undefined) {
-  if (!value) return [];
-  return Array.from(new Set(value.toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? []));
+function emails(value?: string) {
+  return Array.from(new Set(value?.toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? []));
 }
 
 function decodeBody(body: string, encoding: string) {
   if (/base64/i.test(encoding)) {
     try { return Buffer.from(body.replace(/\s/g, ""), "base64").toString("utf8"); } catch { return body; }
   }
-  if (/quoted-printable/i.test(encoding)) return Buffer.from(decodeQuotedPrintable(body), "latin1").toString("utf8");
-  return body;
+  return /quoted-printable/i.test(encoding) ? Buffer.from(qp(body), "latin1").toString("utf8") : body;
 }
 
-function pickTextBody(headers: Map<string, string>, body: string) {
-  const contentType = headers.get("content-type") ?? "text/plain";
-  const transfer = headers.get("content-transfer-encoding") ?? "";
+function textBody(headerMap: Map<string, string>, body: string) {
+  const contentType = headerMap.get("content-type") ?? "text/plain";
+  const encoding = headerMap.get("content-transfer-encoding") ?? "";
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
   const boundary = boundaryMatch?.[1] ?? boundaryMatch?.[2];
   if (/multipart\//i.test(contentType) && boundary) {
     for (const part of body.split(`--${boundary}`)) {
-      const split = part.search(/\r?\n\r?\n/);
-      if (split < 0) continue;
-      const partHeaders = parseHeaders(part.slice(0, split));
-      const partBody = part.slice(split).replace(/^\r?\n\r?\n/, "");
-      if (/text\/plain/i.test(partHeaders.get("content-type") ?? "")) {
-        return decodeBody(partBody, partHeaders.get("content-transfer-encoding") ?? "").trim();
-      }
+      const index = part.search(/\r?\n\r?\n/);
+      if (index < 0) continue;
+      const partHeaders = headers(part.slice(0, index));
+      if (!/text\/plain/i.test(partHeaders.get("content-type") ?? "")) continue;
+      return decodeBody(part.slice(index).replace(/^\r?\n\r?\n/, ""), partHeaders.get("content-transfer-encoding") ?? "").trim();
     }
     return "";
   }
-  if (/text\/html/i.test(contentType)) {
-    return decodeBody(body, transfer).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  return decodeBody(body, transfer).trim();
+  const decoded = decodeBody(body, encoding);
+  return /text\/html/i.test(contentType)
+    ? decoded.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    : decoded.trim();
 }
 
-function parseRawMail(raw: Buffer): ParsedMail {
-  const text = raw.toString("utf8");
-  const split = text.search(/\r?\n\r?\n/);
-  const headerText = split >= 0 ? text.slice(0, split) : text;
-  const body = split >= 0 ? text.slice(split).replace(/^\r?\n\r?\n/, "") : "";
-  const headers = parseHeaders(headerText);
-  const subject = decodeHeaderWords(headers.get("subject") ?? "(no subject)").slice(0, 240);
-  const dateText = headers.get("date");
-  const parsedDate = dateText ? new Date(dateText) : new Date();
+function parseRaw(raw: Buffer): ParsedMail {
+  const value = raw.toString("utf8");
+  const index = value.search(/\r?\n\r?\n/);
+  const headerText = index >= 0 ? value.slice(0, index) : value;
+  const body = index >= 0 ? value.slice(index).replace(/^\r?\n\r?\n/, "") : "";
+  const map = headers(headerText);
+  const parsedDate = new Date(map.get("date") ?? Date.now());
   return {
-    internetMessageId: headers.get("message-id")?.slice(0, 500) ?? null,
-    inReplyTo: headers.get("in-reply-to")?.slice(0, 500) ?? null,
-    from: extractEmails(headers.get("from"))[0] ?? "unknown@unknown.invalid",
-    to: extractEmails(headers.get("to")),
-    cc: extractEmails(headers.get("cc")),
-    subject,
-    bodyText: pickTextBody(headers, body).slice(0, 100_000),
+    internetMessageId: map.get("message-id")?.slice(0, 500) ?? null,
+    inReplyTo: map.get("in-reply-to")?.slice(0, 500) ?? null,
+    from: emails(map.get("from"))[0] ?? "unknown@unknown.invalid",
+    to: emails(map.get("to")),
+    cc: emails(map.get("cc")),
+    subject: decodeHeader(map.get("subject") ?? "(no subject)").slice(0, 240),
+    bodyText: textBody(map, body).slice(0, 100_000),
     receivedAt: Number.isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString(),
   };
 }
 
-function extractLiteral(response: Buffer) {
+function literal(response: Buffer) {
   const head = response.subarray(0, Math.min(response.length, 16_384)).toString("latin1");
   const marker = head.match(/\{(\d+)\}\r\n/);
   if (!marker || marker.index == null) throw new Error("Relay could not parse the IMAP message payload.");
@@ -327,11 +290,11 @@ function extractLiteral(response: Buffer) {
   return response.subarray(start, start + length);
 }
 
-function normalizedSubject(subject: string) {
+function subjectKey(subject: string) {
   return subject.toLowerCase().replace(/^\s*(re|fw|fwd):\s*/i, "").replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
-async function linkBusinessContext(admin: SupabaseClient, workspaceId: string, threadId: string, candidates: string[]) {
+async function linkContext(admin: SupabaseClient, workspaceId: string, threadId: string, candidates: string[]) {
   if (!candidates.length) return;
   const { data: lead } = await admin.from("leads").select("id").eq("workspace_id", workspaceId).in("email", candidates).limit(1).maybeSingle();
   if (lead?.id) {
@@ -339,46 +302,37 @@ async function linkBusinessContext(admin: SupabaseClient, workspaceId: string, t
     return;
   }
   const { data: form } = await admin.from("apex_online_form_submissions").select("id").eq("workspace_id", workspaceId).in("email", candidates).limit(1).maybeSingle();
-  if (form?.id) {
-    await admin.from("orbit_mail_threads").update({ business_context_type: "online_form", business_context_id: form.id }).eq("id", threadId);
-  }
+  if (form?.id) await admin.from("orbit_mail_threads").update({ business_context_type: "online_form", business_context_id: form.id }).eq("id", threadId);
 }
 
 export async function syncNamecheapMailbox(input: { workspaceId: string; mailboxId: string }) {
   const admin = createAdminClient();
   if (!admin) throw new Error("Relay sync service is unavailable.");
-
-  const { data: mailbox, error: mailboxError } = await admin.from("orbit_mailboxes")
+  const { data: mailbox } = await admin.from("orbit_mailboxes")
     .select("id,address,sync_cursor_uid")
     .eq("id", input.mailboxId)
     .eq("workspace_id", input.workspaceId)
     .maybeSingle();
-  if (mailboxError || !mailbox) throw new Error("Mailbox was not found in this workspace.");
+  if (!mailbox) throw new Error("Mailbox was not found in this workspace.");
 
   const credential = await getMailboxCredential(input.mailboxId);
-  const socket = await createTlsSocket(IMAP_PORT);
+  const socket = await openTls(IMAP_PORT);
   let imported = 0;
   let maxUid = Number(mailbox.sync_cursor_uid ?? 0);
   try {
     await imapLogin(socket, credential.email, credential.password);
     await imapCommand(socket, "A002", 'SELECT "INBOX"');
-    const searchResponse = (await imapCommand(socket, "A003", "UID SEARCH ALL")).toString("utf8");
-    const searchLine = searchResponse.split("\r\n").find((line) => /^\* SEARCH/i.test(line)) ?? "";
-    const allUids = searchLine.split(/\s+/).slice(2).map(Number).filter(Number.isFinite);
-    const pending = allUids.filter((uid) => uid > maxUid).slice(-MAX_SYNC_MESSAGES);
-
+    const search = (await imapCommand(socket, "A003", "UID SEARCH ALL")).toString("utf8");
+    const searchLine = search.split("\r\n").find((line) => /^\* SEARCH/i.test(line)) ?? "";
+    const pending = searchLine.split(/\s+/).slice(2).map(Number).filter(Number.isFinite).filter((uid) => uid > maxUid).slice(-MAX_SYNC);
     let commandNo = 4;
+
     for (const uid of pending) {
       const tag = `A${String(commandNo++).padStart(3, "0")}`;
-      const response = await imapCommand(socket, tag, `UID FETCH ${uid} (UID BODY.PEEK[])`);
-      const parsed = parseRawMail(extractLiteral(response));
+      const parsed = parseRaw(literal(await imapCommand(socket, tag, `UID FETCH ${uid} (UID BODY.PEEK[])`)));
       const providerMessageId = String(uid);
-
-      const { data: existing } = await admin.from("orbit_mail_messages")
-        .select("id")
-        .eq("mailbox_id", input.mailboxId)
-        .eq("provider_message_id", providerMessageId)
-        .maybeSingle();
+      const { data: existing } = await admin.from("orbit_mail_messages").select("id")
+        .eq("mailbox_id", input.mailboxId).eq("provider_message_id", providerMessageId).maybeSingle();
       if (existing) {
         maxUid = Math.max(maxUid, uid);
         continue;
@@ -386,40 +340,30 @@ export async function syncNamecheapMailbox(input: { workspaceId: string; mailbox
 
       let threadId: string | null = null;
       if (parsed.inReplyTo) {
-        const { data: replied } = await admin.from("orbit_mail_messages")
-          .select("thread_id")
-          .eq("mailbox_id", input.mailboxId)
-          .eq("internet_message_id", parsed.inReplyTo)
-          .limit(1)
-          .maybeSingle();
+        const { data: replied } = await admin.from("orbit_mail_messages").select("thread_id")
+          .eq("mailbox_id", input.mailboxId).eq("internet_message_id", parsed.inReplyTo).limit(1).maybeSingle();
         threadId = replied?.thread_id ?? null;
       }
       if (!threadId) {
-        const { data: subjectThread } = await admin.from("orbit_mail_threads")
-          .select("id")
-          .eq("mailbox_id", input.mailboxId)
-          .eq("normalized_subject", normalizedSubject(parsed.subject))
-          .order("latest_message_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        threadId = subjectThread?.id ?? null;
+        const { data: match } = await admin.from("orbit_mail_threads").select("id")
+          .eq("mailbox_id", input.mailboxId).eq("normalized_subject", subjectKey(parsed.subject))
+          .order("latest_message_at", { ascending: false }).limit(1).maybeSingle();
+        threadId = match?.id ?? null;
       }
 
-      const participants = Array.from(new Set(
-        [parsed.from, ...parsed.to, ...parsed.cc].filter((email) => email !== String(mailbox.address).toLowerCase()),
-      ));
+      const participants = Array.from(new Set([parsed.from, ...parsed.to, ...parsed.cc].filter((email) => email !== String(mailbox.address).toLowerCase())));
       if (!threadId) {
-        const { data: created, error: threadError } = await admin.from("orbit_mail_threads").insert({
+        const { data: created, error } = await admin.from("orbit_mail_threads").insert({
           workspace_id: input.workspaceId,
           mailbox_id: input.mailboxId,
           subject: parsed.subject,
-          normalized_subject: normalizedSubject(parsed.subject),
+          normalized_subject: subjectKey(parsed.subject),
           participant_emails: participants,
           folder: "inbox",
           is_unread: true,
           latest_message_at: parsed.receivedAt,
         }).select("id").single();
-        if (threadError || !created) throw new Error("Relay could not create the synced conversation.");
+        if (error || !created) throw new Error("Relay could not create the synced conversation.");
         threadId = created.id;
       } else {
         await admin.from("orbit_mail_threads").update({
@@ -432,10 +376,12 @@ export async function syncNamecheapMailbox(input: { workspaceId: string; mailbox
         }).eq("id", threadId);
       }
 
+      if (!threadId) throw new Error("Relay could not resolve the synced conversation.");
+      const resolvedThreadId = threadId;
       const { error: messageError } = await admin.from("orbit_mail_messages").insert({
         workspace_id: input.workspaceId,
         mailbox_id: input.mailboxId,
-        thread_id: threadId,
+        thread_id: resolvedThreadId,
         direction: "inbound",
         provider_message_id: providerMessageId,
         internet_message_id: parsed.internetMessageId,
@@ -450,7 +396,7 @@ export async function syncNamecheapMailbox(input: { workspaceId: string; mailbox
         received_at: parsed.receivedAt,
       });
       if (messageError) throw new Error("Relay could not store a synced message.");
-      await linkBusinessContext(admin, input.workspaceId, threadId, participants);
+      await linkContext(admin, input.workspaceId, resolvedThreadId, participants);
       maxUid = Math.max(maxUid, uid);
       imported += 1;
     }
