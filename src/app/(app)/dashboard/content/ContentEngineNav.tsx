@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, CalendarDays, Library, Sparkles } from "lucide-react";
+import { Activity, BarChart3, CalendarDays, Library, Settings2, Sparkles } from "lucide-react";
 import styles from "./ContentEngineNav.module.css";
 
 const links = [
@@ -11,6 +11,7 @@ const links = [
   { href: "/dashboard/content/library", label: "Library", icon: Library },
   { href: "/dashboard/content/intelligence", label: "Intelligence", icon: BarChart3 },
   { href: "/dashboard/content/activity", label: "Activity", icon: Activity },
+  { href: "/dashboard/content/settings", label: "Settings", icon: Settings2 },
 ] as const;
 
 export function ContentEngineNav() {
