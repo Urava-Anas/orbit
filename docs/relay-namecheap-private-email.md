@@ -4,7 +4,7 @@ Relay treats each business mailbox as an independently authenticated operating i
 
 ## Connection flow
 
-Workspace owner/admin → Relay → Connectors → Connect mailbox → enter full business email + mailbox password → Orbit verifies encrypted IMAP and SMTP → credential is encrypted server-side → recent inbox messages sync → user selects that mailbox in Relay.
+Workspace owner/admin → Relay → Connectors → Connect mailbox → enter full business email + mailbox password → Orbit verifies encrypted IMAP and SMTP → credential is stored in Supabase Vault → recent inbox messages sync → user selects that mailbox in Relay.
 
 Namecheap Private Email settings used by Relay:
 
@@ -22,8 +22,9 @@ Namecheap Private Email settings used by Relay:
 - Conversation context is linked to matching leads and online form submissions when possible.
 - Orbit Brief recommends next work from unread mail, missing business context, new forms, due lead follow-ups and stale sync state.
 - Credential management is owner/admin only.
-- Passwords are encrypted using Orbit's independent integration secret domain and are not exposed to workspace users through RLS.
+- Mailbox passwords are stored in Supabase Vault and are not exposed through normal workspace tables or browser state.
+- User-triggered sync runs through the authenticated Orbit workspace session and existing RLS policies.
 - Disconnect removes the stored credential while retaining synced business history.
 - Outbound communication remains subject to Orbit's Green/Amber/Red authority model; this connector does not bypass approval controls.
 
-Deployment marker: Relay Namecheap authentication release.
+Deployment marker: Relay Vault credential hotfix.
