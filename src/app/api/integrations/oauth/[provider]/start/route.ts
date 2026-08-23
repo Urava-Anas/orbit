@@ -37,6 +37,10 @@ function callbackUrl(provider: SupportedProvider) {
   return `${orbitBaseUrl()}/api/integrations/oauth/${provider}/callback`;
 }
 
+function metaGraphVersion() {
+  return process.env.META_GRAPH_API_VERSION?.trim() || "v25.0";
+}
+
 function authorizationUrl(provider: SupportedProvider, state: string) {
   const redirectUri = callbackUrl(provider);
 
@@ -61,11 +65,23 @@ function authorizationUrl(provider: SupportedProvider, state: string) {
   if (provider === "meta") {
     const clientId = process.env.META_APP_ID;
     if (!clientId) throw new Error("Meta App ID is not configured.");
-    const url = new URL("https://www.facebook.com/dialog/oauth");
+    const url = new URL(`https://www.facebook.com/${metaGraphVersion()}/dialog/oauth`);
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", "public_profile,pages_show_list,pages_read_engagement,instagram_basic");
+    url.searchParams.set(
+      "scope",
+      [
+        "public_profile",
+        "pages_show_list",
+        "pages_read_engagement",
+        "pages_manage_posts",
+        "instagram_basic",
+        "instagram_content_publish",
+        "instagram_manage_insights",
+      ].join(","),
+    );
+    url.searchParams.set("auth_type", "rerequest");
     url.searchParams.set("state", state);
     return url;
   }
