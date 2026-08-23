@@ -196,6 +196,7 @@ export default async function ContentImpactPage() {
   const queued = publications.filter((item) => item.status === "queued" || item.status === "publishing").length;
   const guarded = publications.filter((item) => item.status === "blocked" || item.status === "failed").length;
   const metricChecks = metrics.length;
+  const measuredPosts = latestMetrics.length;
   const learningSignals = learnings.length;
   const generatedDays = batches.filter((item) => Boolean(item.generated_at)).length;
   const approvedDays = batches.filter((item) => Boolean(item.approved_at)).length;
@@ -207,15 +208,35 @@ export default async function ContentImpactPage() {
     return event.details?.approval_mode !== "batch";
   }).length;
 
-  const automatedWorkUnits = generatedContent + readyVisuals + published + metricChecks + learningSignals;
+  // A repeated provider poll is operational work, but it should never inflate the headline leverage ratio.
+  // Each measured content item therefore contributes at most one unit here.
+  const automatedWorkUnits = generatedContent + readyVisuals + published + measuredPosts + learningSignals;
   const leverage = founderDecisions > 0 ? automatedWorkUnits / founderDecisions : 0;
 
   const draftStatusById = new Map(drafts.map((item) => [item.id, item.status]));
+  const missingPublicationContentIds = [...new Set(
+    publications
+      .map((publication) => publication.content_id)
+      .filter((contentId) => !draftStatusById.has(contentId)),
+  )];
+
+  if (missingPublicationContentIds.length) {
+    const missingDraftResult = await supabase
+      .from("content_drafts")
+      .select("id,status")
+      .eq("workspace_id", workspace.id)
+      .in("id", missingPublicationContentIds);
+    if (missingDraftResult.error) throw new Error("Content approval integrity could not be verified completely.");
+    for (const item of missingDraftResult.data ?? []) draftStatusById.set(String(item.id), String(item.status));
+  }
+
+  const unresolvedPublicationStates = publications.filter((publication) => !draftStatusById.has(publication.content_id)).length;
   const unsafePublicationStates = publications.filter((publication) => {
     if (!["queued", "publishing", "published"].includes(publication.status)) return false;
     const status = draftStatusById.get(publication.content_id);
-    return status !== "approved" && status !== "scheduled" && status !== "published";
+    return Boolean(status) && status !== "approved" && status !== "scheduled" && status !== "published";
   }).length;
+  const approvalBoundaryIntact = unsafePublicationStates === 0 && unresolvedPublicationStates === 0;
 
   const activeChannels = [...new Set(drafts.map((item) => item.channel))];
   const connectedProviders = connections.filter((item) => item.status === "connected").map((item) => item.provider);
@@ -271,11 +292,10 @@ export default async function ContentImpactPage() {
       <section className={styles.hero}>
         <div className={styles.heroGlow} aria-hidden="true" />
         <div className={styles.heroCopy}>
-          <span className={styles.eyebrow}><Gauge size={14} /> Real impact · rolling 30 days</span>
+          <span className={styles.eyebrow}><Gauge size={14} /> Real impact · recent automation + current outcomes</span>
           <h1>This is what Orbit is taking off your plate.</h1>
           <p>
-            Not a demo score. Every number below comes from Content Engine records, provider responses, approval history or measured platform data.
-            It shows the work Orbit completed, the decisions you still controlled, and the outcomes the connected channels actually returned.
+            Not a demo score. Automation counts below use the last 30 days of Orbit records. Provider outcomes use the latest cumulative snapshot for content measured during that window, so repeated metric polling never inflates reach, engagement or the leverage score.
           </p>
           <div className={styles.heroActions}>
             <Link className={styles.primaryAction} href="/dashboard/content">Open today’s engine <ArrowRight size={14} /></Link>
@@ -285,27 +305,27 @@ export default async function ContentImpactPage() {
         <div className={styles.leverageCard}>
           <span>System leverage</span>
           <strong>{ratio(leverage)}</strong>
-          <p>{automatedWorkUnits} recorded automation actions around {founderDecisions} founder decision{founderDecisions === 1 ? "" : "s"}.</p>
+          <p>{automatedWorkUnits} distinct recorded automation outcomes around {founderDecisions} founder decision{founderDecisions === 1 ? "" : "s"}.</p>
           <div className={styles.leverageBar}><span style={{ width: `${Math.min(100, Math.max(6, leverage * 10))}%` }} /></div>
-          <small>Transparent formula: generated content + generated visuals + confirmed publications + metric checks + learning signals ÷ founder review decisions.</small>
+          <small>Transparent formula: generated content + review-ready visuals + confirmed publications + measured posts + stored learnings ÷ founder review decisions. This is an activity-leverage measure, not a claim of hours or money saved.</small>
         </div>
       </section>
 
       <section className={styles.outcomeGrid} aria-label="Measured business outcomes">
         <article className={styles.outcomeCard}>
-          <span><BarChart3 size={14} /> Provider-confirmed reach</span>
+          <span><BarChart3 size={14} /> Current provider-confirmed reach</span>
           <strong>{outcomeDataAvailable ? compact(outcomes.reach) : "—"}</strong>
-          <small>{outcomeDataAvailable ? "Latest snapshot per measured post" : "Appears only after a provider returns real data"}</small>
+          <small>{outcomeDataAvailable ? "Latest cumulative snapshot per measured post" : "Appears only after a provider returns real data"}</small>
         </article>
         <article className={styles.outcomeCard}>
-          <span><Activity size={14} /> Engagements</span>
+          <span><Activity size={14} /> Current engagements</span>
           <strong>{outcomeDataAvailable ? compact(outcomes.engagements) : "—"}</strong>
-          <small>Measured interactions, never invented</small>
+          <small>Measured provider interactions, never invented</small>
         </article>
         <article className={styles.outcomeCard}>
-          <span><Target size={14} /> Clicks</span>
+          <span><Target size={14} /> Attributed clicks</span>
           <strong>{outcomeDataAvailable ? compact(outcomes.clicks) : "—"}</strong>
-          <small>Only attributed data supplied by connected rails</small>
+          <small>Only attribution supplied by a connected, trusted measurement rail</small>
         </article>
         <article className={`${styles.outcomeCard} ${styles.leadCard}`}>
           <span><Rocket size={14} /> Attributed leads</span>
@@ -314,13 +334,47 @@ export default async function ContentImpactPage() {
         </article>
       </section>
 
+      <section className={styles.comparisonPanel}>
+        <div className={styles.sectionHeading}>
+          <div>
+            <span className={styles.sectionEyebrow}><Gauge size={13} /> The difference</span>
+            <h2>From “using AI” to running a content operating system.</h2>
+          </div>
+          <small>No invented time-saved estimate · the workflow difference is the proof</small>
+        </div>
+        <div className={styles.comparisonGrid}>
+          <article className={styles.beforeCard}>
+            <span>Without Orbit</span>
+            <h3>The founder coordinates the machinery.</h3>
+            <div className={styles.comparisonSteps}>
+              <p><i>01</i><span><strong>Decide what to post</strong><small>Rebuild the plan across channels every day.</small></span></p>
+              <p><i>02</i><span><strong>Prompt and rewrite</strong><small>Move between AI chats, drafts and platform formats.</small></span></p>
+              <p><i>03</i><span><strong>Make or find visuals</strong><small>Keep copy and creative versions aligned manually.</small></span></p>
+              <p><i>04</i><span><strong>Remember approvals and timing</strong><small>Founder attention becomes the workflow engine.</small></span></p>
+              <p><i>05</i><span><strong>Post, check and remember results</strong><small>Performance context fragments across apps.</small></span></p>
+            </div>
+          </article>
+          <article className={styles.withCard}>
+            <span>With Orbit</span>
+            <h3>The founder controls judgment. Orbit runs the machinery.</h3>
+            <div className={styles.comparisonSteps}>
+              <p><i>01</i><span><strong>Brand Brain holds the standard</strong><small>Audience, voice, offers and claim rules persist.</small></span></p>
+              <p><i>02</i><span><strong>One daily batch arrives for review</strong><small>Channel-specific copy and visuals are prepared together.</small></span></p>
+              <p><i>03</i><span><strong>One approval boundary controls delivery</strong><small>Unapproved or unsupported work remains blocked.</small></span></p>
+              <p><i>04</i><span><strong>The queue handles publishing state</strong><small>Retries, idempotency and provider confirmation stay recorded.</small></span></p>
+              <p><i>05</i><span><strong>Real results become tomorrow’s memory</strong><small>Provider evidence and learnings compound inside the workspace.</small></span></p>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section className={styles.storyPanel}>
         <div className={styles.sectionHeading}>
           <div>
             <span className={styles.sectionEyebrow}><Sparkles size={13} /> The operating story</span>
             <h2>One controlled loop instead of six disconnected jobs.</h2>
           </div>
-          <small>{generatedDays} active content day{generatedDays === 1 ? "" : "s"} in this window</small>
+          <small>{generatedDays} active content day{generatedDays === 1 ? "" : "s"} in the last 30 days</small>
         </div>
         <div className={styles.loop}>
           {loop.map(({ label, value, detail, icon: Icon, state }, index) => (
@@ -340,12 +394,24 @@ export default async function ContentImpactPage() {
             <div><span className={styles.sectionEyebrow}><ShieldCheck size={13} /> Safety impact</span><h2>Automation that knows when to stop.</h2></div>
           </div>
           <div className={styles.safetyHero}>
-            <span className={unsafePublicationStates === 0 ? styles.safeMark : styles.dangerMark}>
-              {unsafePublicationStates === 0 ? <CheckCircle2 size={18} /> : <ShieldCheck size={18} />}
+            <span className={approvalBoundaryIntact ? styles.safeMark : styles.dangerMark}>
+              {approvalBoundaryIntact ? <CheckCircle2 size={18} /> : <ShieldCheck size={18} />}
             </span>
             <div>
-              <strong>{unsafePublicationStates === 0 ? "Approval boundary intact" : `${unsafePublicationStates} integrity issue${unsafePublicationStates === 1 ? "" : "s"}`}</strong>
-              <p>{unsafePublicationStates === 0 ? "No queued, publishing or published item in this window bypassed an approved content state." : "Orbit detected publication states that require engineering review before release."}</p>
+              <strong>
+                {approvalBoundaryIntact
+                  ? "Approval boundary intact"
+                  : unsafePublicationStates
+                    ? `${unsafePublicationStates} integrity issue${unsafePublicationStates === 1 ? "" : "s"}`
+                    : "Integrity check incomplete"}
+              </strong>
+              <p>
+                {approvalBoundaryIntact
+                  ? "Every recent queued, publishing or published record could be traced back to an approved content state."
+                  : unsafePublicationStates
+                    ? "Orbit detected publication states that require engineering review before release."
+                    : `${unresolvedPublicationStates} publication record${unresolvedPublicationStates === 1 ? " could" : "s could"} not be matched to its content state, so Orbit will not claim the boundary is intact.`}
+              </p>
             </div>
           </div>
           <div className={styles.safetyRows}>
@@ -361,10 +427,10 @@ export default async function ContentImpactPage() {
           </div>
           <div className={styles.removedWork}>
             <div><CheckCircle2 size={14} /><span><strong>Multi-channel planning</strong><small>Brand Brain + daily strategy turn one operating standard into a content day.</small></span></div>
-            <div><CheckCircle2 size={14} /><span><strong>First-draft production</strong><small>{generatedContent} generated piece{generatedContent === 1 ? "" : "s"} recorded in this window.</small></span></div>
+            <div><CheckCircle2 size={14} /><span><strong>First-draft production</strong><small>{generatedContent} generated piece{generatedContent === 1 ? "" : "s"} recorded in the last 30 days.</small></span></div>
             <div><CheckCircle2 size={14} /><span><strong>Visual preparation</strong><small>{readyVisuals} generated visual{readyVisuals === 1 ? "" : "s"} reached review-ready state.</small></span></div>
             <div><CheckCircle2 size={14} /><span><strong>Queue + delivery bookkeeping</strong><small>{publications.length} publication record{publications.length === 1 ? "" : "s"} managed with idempotency and delivery states.</small></span></div>
-            <div><CheckCircle2 size={14} /><span><strong>Performance collection</strong><small>{metricChecks} provider metric snapshot{metricChecks === 1 ? "" : "s"} captured automatically.</small></span></div>
+            <div><CheckCircle2 size={14} /><span><strong>Performance collection</strong><small>{metricChecks} provider snapshot check{metricChecks === 1 ? "" : "s"} captured automatically across {measuredPosts} measured post{measuredPosts === 1 ? "" : "s"}.</small></span></div>
             <div><CheckCircle2 size={14} /><span><strong>Learning memory</strong><small>{learningSignals} real signal{learningSignals === 1 ? "" : "s"} stored for future content decisions.</small></span></div>
           </div>
         </article>
@@ -373,13 +439,13 @@ export default async function ContentImpactPage() {
       <section className={styles.proofPanel}>
         <div>
           <span className={styles.sectionEyebrow}><BrainCircuit size={13} /> Why this compounds</span>
-          <h2>Every cycle leaves Orbit smarter than the previous one.</h2>
+          <h2>Every cycle can leave Orbit smarter than the previous one.</h2>
           <p>Creation is only the first layer. The durable advantage is that approval history, provider delivery, real metrics and learning notes remain attached to the workspace instead of disappearing across chats, spreadsheets and social apps.</p>
         </div>
         <div className={styles.proofStats}>
-          <span><strong>{activeChannels.length}</strong><small>channels used</small></span>
-          <span><strong>{latestMetrics.length}</strong><small>posts with current measured snapshots</small></span>
-          <span><strong>{learningSignals}</strong><small>learning signals stored</small></span>
+          <span><strong>{activeChannels.length}</strong><small>channels used recently</small></span>
+          <span><strong>{measuredPosts}</strong><small>posts with current provider snapshots</small></span>
+          <span><strong>{learningSignals}</strong><small>learning signals stored recently</small></span>
         </div>
       </section>
     </main>
