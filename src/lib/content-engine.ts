@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { validateGeneratedContentBatch } from "@/lib/content-engine-quality";
 
 export const CONTENT_CHANNELS = ["instagram", "facebook", "linkedin", "tiktok"] as const;
 export type ContentChannel = (typeof CONTENT_CHANNELS)[number];
@@ -251,6 +252,7 @@ Hard rules:
 - If proof_index is not null it must refer to one of the approved proof entries above and the content may not exceed that proof.
 - LinkedIn organic content must not be labelled as a carousel; use post or document when a multi-page concept is useful.
 - TikTok should be a short-form video concept with a concrete media brief.
+- Instagram and TikTok items must include a concrete media brief.
 - Keep hooks specific and human. Avoid generic AI marketing language, filler and excessive hashtags.
 - Every piece must have one clear goal and one clear CTA.
 - Spread scheduled_time across the working day; do not place two pieces at the same time.
@@ -326,6 +328,11 @@ export async function generateDailyContentBatch({
     generationPrompt(workspaceName, profile, proofs, learnings, targetCount),
     targetCount,
   );
+  const quality = validateGeneratedContentBatch({
+    items: generated.items,
+    targetCount,
+    proofCount: proofs.length,
+  });
 
   const { data: batch, error: batchError } = await supabase
     .from("content_batches")
@@ -346,8 +353,9 @@ export async function generateDailyContentBatch({
 
   if (batchError || !batch) throw new Error("Daily batch could not be saved.");
 
+  const generatedAt = new Date().toISOString();
   const drafts = generated.items.map((item, index) => {
-    const proof = item.proof_index === null ? null : proofs[item.proof_index] ?? null;
+    const proof = item.proof_index === null ? null : proofs[item.proof_index];
     return {
       workspace_id: workspaceId,
       batch_id: batch.id,
@@ -366,9 +374,10 @@ export async function generateDailyContentBatch({
       sort_order: index,
       generation_metadata: {
         model: contentGenerationModel(),
-        generated_at: new Date().toISOString(),
+        generated_at: generatedAt,
         local_time: item.scheduled_time,
         timezone: profile.timezone,
+        quality,
       },
       created_by: actorId,
     };
@@ -378,6 +387,23 @@ export async function generateDailyContentBatch({
   if (draftError) {
     await supabase.from("content_batches").update({ status: "blocked" }).eq("id", batch.id).eq("workspace_id", workspaceId);
     throw new Error("Generated content could not be saved.");
+  }
+
+  const { error: auditError } = await supabase.from("content_review_events").insert({
+    workspace_id: workspaceId,
+    batch_id: batch.id,
+    content_id: null,
+    event_type: "batch_generated",
+    actor_id: actorId,
+    details: {
+      model: contentGenerationModel(),
+      item_count: drafts.length,
+      quality_checks: quality.checks,
+      proof_count: proofs.length,
+    },
+  });
+  if (auditError) {
+    console.error("Content Engine generated a batch but could not append its audit event", auditError);
   }
 
   return { batchId: batch.id as string, reused: false };
