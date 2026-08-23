@@ -27,15 +27,15 @@ import styles from "./AppNavigation.module.css";
 
 const orbitLinks = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
-  { href: "/dashboard/foundry", label: "Foundry OS", icon: GraduationCap },
-  { href: "/dashboard/leads", label: "Growth", icon: UsersRound },
+  { href: "/dashboard/foundry", label: "Foundry", icon: GraduationCap },
+  { href: "/dashboard/leads", label: "Lead Engine", icon: UsersRound },
+  { href: "/content-engine", label: "Content Engine", icon: MessageSquareText },
   { href: "/dashboard/mail", label: "Relay", icon: Mail },
-  { href: "/dashboard/sales", label: "Sales Desk", icon: Crosshair },
-  { href: "/dashboard/projects", label: "Delivery", icon: FolderKanban },
+  { href: "/dashboard/sales", label: "Sales", icon: Crosshair },
+  { href: "/dashboard/projects", label: "Studio & Delivery", icon: FolderKanban },
   { href: "/dashboard/cash", label: "Finance", icon: Banknote },
-  { href: "/dashboard/proof", label: "Evidence", icon: FileCheck2 },
-  { href: "/dashboard/content", label: "Publishing", icon: MessageSquareText },
-  { href: "/dashboard/plugins", label: "Plugins", icon: Blocks },
+  { href: "/dashboard/proof", label: "Proof", icon: FileCheck2 },
+  { href: "/dashboard/plugins", label: "Plugins & Connections", icon: Blocks },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
   { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
   { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
@@ -66,7 +66,7 @@ type AppNavigationProps = {
 
 function isActive(pathname: string, href: string) {
   if (href === "/dashboard" || href === "/dashboard/leads") return pathname === href;
-  return pathname.startsWith(href);
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function AppNavigation({
