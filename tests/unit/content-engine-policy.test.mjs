@@ -21,19 +21,23 @@ test("Content Engine keeps founder approval and two independent publishing kill 
 });
 
 test("Instagram copy and generated visual must both be reviewable before approval", async () => {
-  const [actions, today, migration] = await Promise.all([
+  const [actions, today, publishGuard, atomicEdit] = await Promise.all([
     read("src/app/(app)/dashboard/content/actions.ts"),
     read("src/app/(app)/dashboard/content/page.tsx"),
     read("supabase/migrations/20260824012000_content_engine_publish_guardrails.sql"),
+    read("supabase/migrations/20260824015000_content_engine_atomic_review_edit.sql"),
   ]);
 
   assert.match(actions, /readyGeneratedImageIds/);
   assert.match(actions, /approval is locked until its generated visual is ready/);
   assert.match(actions, /promoteApprovedAssetForPublishing/);
-  assert.match(actions, /archiveGeneratedVisuals/);
+  assert.match(actions, /edit_content_review_item/);
+  assert.match(atomicEdit, /update public\.content_assets as a/);
+  assert.match(atomicEdit, /a\.status in \('pending', 'generating', 'ready'\)/);
+  assert.match(atomicEdit, /update public\.content_publications as p/);
   assert.match(today, /\/api\/content-assets\/\$\{asset\.id\}/);
   assert.match(today, /Review every visual|Visual ready for review|generated visual/i);
-  assert.match(migration, /Instagram requires an approved public image/);
+  assert.match(publishGuard, /Instagram requires an approved public image/);
 });
 
 test("automatic Meta delivery is limited to verified Instagram and Facebook rails", async () => {
@@ -60,4 +64,17 @@ test("unsupported provider metrics are skipped rather than fabricated", async ()
   assert.match(metrics, /draft\?\.channel !== "instagram"/);
   assert.match(metrics, /No verified insights adapter exists for this channel yet/);
   assert.match(metrics, /captureInstagramMediaInsights/);
+});
+
+test("provider-confirmed evidence cannot be manufactured by authenticated workspace admins", async () => {
+  const [provenance, impact] = await Promise.all([
+    read("supabase/migrations/20260824016500_content_engine_provider_provenance.sql"),
+    read("src/app/(app)/dashboard/content/impact/page.tsx"),
+  ]);
+
+  assert.match(provenance, /Only the publishing worker may confirm provider delivery/);
+  assert.match(provenance, /revoke insert, update, delete, truncate on table public\.content_metric_snapshots from anon, authenticated/);
+  assert.match(provenance, /publication_published/);
+  assert.match(impact, /latestMetricByContent/);
+  assert.match(impact, /provider-confirmed|Provider-confirmed/i);
 });
