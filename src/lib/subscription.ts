@@ -1,35 +1,47 @@
 import "server-only";
 
-import { ORBIT_PLAN_BY_KEY, type OrbitBillingInterval, type OrbitPlanKey } from "@/lib/orbit-plans";
+import {
+  ORBIT_PLAN_BY_KEY,
+  type OrbitBillingInterval,
+  type OrbitPlanKey,
+} from "@/lib/orbit-plans";
 import { createClient } from "@/lib/supabase/server";
 
 export type WorkspaceSubscriptionStatus =
   | "trialing"
   | "active"
-  | "managed"
+  | "comped"
   | "past_due"
-  | "canceled";
+  | "cancelled";
+
+export type WorkspaceSubscriptionInterval = OrbitBillingInterval | "custom";
 
 export type WorkspaceSubscriptionRow = {
   workspace_id: string;
   plan_key: OrbitPlanKey;
   status: WorkspaceSubscriptionStatus;
-  billing_interval: OrbitBillingInterval;
+  billing_interval: WorkspaceSubscriptionInterval;
   trial_started_at: string | null;
   trial_ends_at: string | null;
-  current_period_started_at: string | null;
   current_period_ends_at: string | null;
-  cancel_at_period_end: boolean;
   provider: string | null;
   provider_customer_id: string | null;
   provider_subscription_id: string | null;
-  provider_price_id: string | null;
-  requested_plan_key: OrbitPlanKey | null;
-  requested_billing_interval: OrbitBillingInterval | null;
-  upgrade_requested_at: string | null;
-  managed_reason: string | null;
+  price_snapshot: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type PlanChangeRequestRow = {
+  id: string;
+  workspace_id: string;
+  requested_plan_key: OrbitPlanKey;
+  billing_interval: WorkspaceSubscriptionInterval;
+  requested_by: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  note: string | null;
+  created_at: string;
+  resolved_at: string | null;
 };
 
 export type EffectiveSubscriptionStatus = WorkspaceSubscriptionStatus | "expired";
@@ -42,7 +54,7 @@ export type WorkspaceSubscriptionState = {
   trialEndsAt: Date | null;
   canWrite: boolean;
   isTrial: boolean;
-  isManaged: boolean;
+  isComped: boolean;
 };
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -57,18 +69,18 @@ export function deriveSubscriptionState(
   row: WorkspaceSubscriptionRow | null,
   now = new Date(),
 ): WorkspaceSubscriptionState {
-  // Safety fallback for legacy or partially migrated workspaces: do not lock a
-  // customer out just because a subscription row is temporarily unavailable.
+  // Migration-safe fallback: never lock a legacy workspace because a billing
+  // row is temporarily unavailable during a rolling deployment.
   if (!row) {
     return {
       row: null,
       plan: ORBIT_PLAN_BY_KEY.business,
-      effectiveStatus: "managed",
+      effectiveStatus: "comped",
       trialDaysRemaining: null,
       trialEndsAt: null,
       canWrite: true,
       isTrial: false,
-      isManaged: true,
+      isComped: true,
     };
   }
 
@@ -83,7 +95,9 @@ export function deriveSubscriptionState(
     row.status === "trialing" && trialEndsAt
       ? Math.max(
           0,
-          Math.ceil((trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
+          Math.ceil(
+            (trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+          ),
         )
       : null;
 
@@ -93,9 +107,9 @@ export function deriveSubscriptionState(
     effectiveStatus,
     trialDaysRemaining,
     trialEndsAt,
-    canWrite: ["active", "managed", "trialing"].includes(effectiveStatus),
+    canWrite: ["active", "comped", "trialing"].includes(effectiveStatus),
     isTrial: effectiveStatus === "trialing",
-    isManaged: effectiveStatus === "managed",
+    isComped: effectiveStatus === "comped",
   };
 }
 
@@ -104,16 +118,14 @@ export async function readWorkspaceSubscription(
   workspaceId: string,
 ) {
   const { data, error } = await supabase
-    .from("workspace_subscriptions")
+    .from("orbit_workspace_subscriptions")
     .select(
-      "workspace_id, plan_key, status, billing_interval, trial_started_at, trial_ends_at, current_period_started_at, current_period_ends_at, cancel_at_period_end, provider, provider_customer_id, provider_subscription_id, provider_price_id, requested_plan_key, requested_billing_interval, upgrade_requested_at, managed_reason, created_at, updated_at",
+      "workspace_id, plan_key, status, billing_interval, trial_started_at, trial_ends_at, current_period_ends_at, provider, provider_customer_id, provider_subscription_id, price_snapshot, created_at, updated_at",
     )
     .eq("workspace_id", workspaceId)
     .maybeSingle();
 
   if (error) {
-    // During a rolling deploy the app may briefly arrive before the migration.
-    // Keep the legacy workspace usable, but surface the absence in server logs.
     console.error("Orbit subscription lookup failed", {
       workspaceId,
       code: error.code,
@@ -123,4 +135,30 @@ export async function readWorkspaceSubscription(
   }
 
   return deriveSubscriptionState((data as WorkspaceSubscriptionRow | null) ?? null);
+}
+
+export async function readLatestPlanChangeRequest(
+  supabase: SupabaseServerClient,
+  workspaceId: string,
+) {
+  const { data, error } = await supabase
+    .from("orbit_plan_change_requests")
+    .select(
+      "id, workspace_id, requested_plan_key, billing_interval, requested_by, status, note, created_at, resolved_at",
+    )
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Orbit plan request lookup failed", {
+      workspaceId,
+      code: error.code,
+      message: error.message,
+    });
+    return null;
+  }
+
+  return (data as PlanChangeRequestRow | null) ?? null;
 }
