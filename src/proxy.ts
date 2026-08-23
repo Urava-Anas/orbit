@@ -10,6 +10,15 @@ const REVIEWED_ORBIT_PRODUCTION_ALIASES = new Set([
   "orbit-git-main-urava-pros.vercel.app",
 ]);
 
+const CONNECTION_START_PATHS = new Map<string, string>([
+  ["github", "/api/integrations/github/start"],
+  ["vercel", "/api/integrations/vercel/start"],
+  ["google_search_console", "/api/integrations/oauth/google_search_console/start"],
+  ["google_analytics", "/api/integrations/oauth/google_analytics/start"],
+  ["meta", "/api/integrations/oauth/meta/start"],
+  ["linkedin", "/api/integrations/oauth/linkedin/start"],
+]);
+
 function normalizedHost(value: string | null | undefined) {
   return value?.trim().toLowerCase().split(":")[0] || null;
 }
@@ -36,6 +45,20 @@ function configuredCanonicalHost(requestHost: string | null) {
   // Orbit aliases have a deterministic canonical host even when Vercel does not
   // expose NEXT_PUBLIC_APP_URL to the proxy runtime.
   return null;
+}
+
+function connectionStartRedirect(request: NextRequest) {
+  if (request.nextUrl.pathname !== "/dashboard/plugins") return null;
+  if (request.nextUrl.searchParams.has("error") || request.nextUrl.searchParams.has("notice")) return null;
+
+  const provider = request.nextUrl.searchParams.get("connect");
+  const plugin = request.nextUrl.searchParams.get("plugin");
+  if (!provider || plugin !== `app:${provider}`) return null;
+
+  const startPath = CONNECTION_START_PATHS.get(provider);
+  if (!startPath) return null;
+
+  return NextResponse.redirect(new URL(startPath, request.url), 307);
 }
 
 function contentSecurityPolicy(nonce: string) {
@@ -73,6 +96,9 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(destination, 308);
     }
   }
+
+  const connectionRedirect = connectionStartRedirect(request);
+  if (connectionRedirect) return connectionRedirect;
 
   const nonce = randomBytes(16).toString("base64");
   const csp = contentSecurityPolicy(nonce);
