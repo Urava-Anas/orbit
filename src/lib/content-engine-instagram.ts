@@ -28,6 +28,14 @@ type ContentDraft = {
   cta: string | null;
 };
 
+type PublishResult = {
+  providerPostId: string;
+  providerPostUrl: string | null;
+  username: string | null;
+  containerId: string | null;
+  reused: boolean;
+};
+
 type GraphResult = Record<string, unknown> & { id?: string; error?: { message?: string; code?: number; type?: string } };
 
 function graphVersion() {
@@ -38,7 +46,7 @@ function graphUrl(path: string) {
   return `https://graph.facebook.com/${graphVersion()}/${path.replace(/^\//, "")}`;
 }
 
-async function graphRequest(path: string, token: string, init: RequestInit = {}) {
+async function graphRequest(path: string, init: RequestInit = {}) {
   const response = await fetch(graphUrl(path), {
     ...init,
     cache: "no-store",
@@ -115,7 +123,7 @@ async function resolveInstagramCredential(workspaceId: string) {
 async function waitForContainer(containerId: string, pageToken: string) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const query = new URLSearchParams({ fields: "status_code,status", access_token: pageToken });
-    const payload = await graphRequest(`${containerId}?${query.toString()}`, pageToken);
+    const payload = await graphRequest(`${containerId}?${query.toString()}`);
     const statusCode = String(payload.status_code ?? "").toUpperCase();
     if (statusCode === "FINISHED") return;
     if (["ERROR", "EXPIRED"].includes(statusCode)) {
@@ -126,9 +134,15 @@ async function waitForContainer(containerId: string, pageToken: string) {
   throw new Error("Instagram media container did not become publishable before the worker timeout.");
 }
 
-export async function publishInstagramJob(job: PublicationJob) {
+export async function publishInstagramJob(job: PublicationJob): Promise<PublishResult> {
   if (job.provider_post_id) {
-    return { providerPostId: job.provider_post_id, providerPostUrl: null as string | null, reused: true };
+    return {
+      providerPostId: job.provider_post_id,
+      providerPostUrl: null,
+      username: null,
+      containerId: job.provider_container_id,
+      reused: true,
+    };
   }
 
   const { admin, igUserId, username, pageToken } = await resolveInstagramCredential(job.workspace_id);
@@ -164,7 +178,7 @@ export async function publishInstagramJob(job: PublicationJob) {
       caption: captionFor(draft as ContentDraft),
       access_token: pageToken,
     });
-    const container = await graphRequest(`${igUserId}/media`, pageToken, {
+    const container = await graphRequest(`${igUserId}/media`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
@@ -182,7 +196,7 @@ export async function publishInstagramJob(job: PublicationJob) {
   await waitForContainer(containerId, pageToken);
 
   const publishBody = new URLSearchParams({ creation_id: containerId, access_token: pageToken });
-  const published = await graphRequest(`${igUserId}/media_publish`, pageToken, {
+  const published = await graphRequest(`${igUserId}/media_publish`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: publishBody,
@@ -193,7 +207,7 @@ export async function publishInstagramJob(job: PublicationJob) {
   let providerPostUrl: string | null = null;
   try {
     const query = new URLSearchParams({ fields: "permalink", access_token: pageToken });
-    const details = await graphRequest(`${providerPostId}?${query.toString()}`, pageToken);
+    const details = await graphRequest(`${providerPostId}?${query.toString()}`);
     providerPostUrl = typeof details.permalink === "string" ? details.permalink : null;
   } catch {
     // Publication is still confirmed by the returned media ID. Permalink enrichment is non-critical.
