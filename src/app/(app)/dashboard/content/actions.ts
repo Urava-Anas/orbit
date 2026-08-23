@@ -124,22 +124,6 @@ async function readyGeneratedImageIds(
   return new Set((data ?? []).map((item) => String(item.content_id)));
 }
 
-async function archiveGeneratedVisuals(
-  supabase: WorkspaceSupabase,
-  workspaceId: string,
-  contentId: string,
-) {
-  const { error } = await supabase
-    .from("content_assets")
-    .update({ status: "archived" })
-    .eq("workspace_id", workspaceId)
-    .eq("content_id", contentId)
-    .eq("source", "generated")
-    .eq("asset_type", "image")
-    .in("status", ["pending", "generating", "ready"]);
-  if (error) throw new Error("The old generated visual could not be invalidated safely.");
-}
-
 export async function saveBrandBrain(formData: FormData) {
   const parsed = z
     .object({
@@ -514,55 +498,20 @@ export async function updateContentItem(formData: FormData) {
     });
   if (!parsed.success) fail("Check the content edits and try again.");
 
-  const { supabase, workspace, user } = await requireContentAdmin();
-  const { data: content, error: contentError } = await supabase
-    .from("content_drafts")
-    .select("batch_id,status")
-    .eq("id", parsed.data.id)
-    .eq("workspace_id", workspace.id)
-    .maybeSingle();
-  if (contentError || !content) fail("Content item was not found.");
-  if (!isReviewState(content.status)) fail("Approved or published content cannot be edited in place. Create a new revision instead.");
-
-  try {
-    await archiveGeneratedVisuals(supabase, workspace.id, parsed.data.id);
-  } catch (archiveError) {
-    fail(archiveError instanceof Error ? archiveError.message : "The old generated visual could not be invalidated safely.");
-  }
-
-  const { data: updated, error } = await supabase
-    .from("content_drafts")
-    .update({
-      title: parsed.data.title,
-      hook: parsed.data.hook || null,
-      body: parsed.data.body,
-      cta: parsed.data.cta || null,
-      media_brief: parsed.data.mediaBrief || null,
-      status: "review",
-      approved_at: null,
-      approved_by: null,
-    })
-    .eq("id", parsed.data.id)
-    .eq("workspace_id", workspace.id)
-    .in("status", ["review", "draft"])
-    .select("id")
-    .maybeSingle();
-  if (error || !updated) fail("Content item changed while you were editing it. Reload before trying again.");
-
-  await supabase
-    .from("content_publications")
-    .update({ status: "cancelled", last_error: "Content changed before approval." })
-    .eq("workspace_id", workspace.id)
-    .eq("content_id", parsed.data.id);
-  await appendAuditEvent(supabase, {
-    workspaceId: workspace.id,
-    batchId: content.batch_id,
-    contentId: parsed.data.id,
-    eventType: "content_edited",
-    actorId: user.id,
-    details: { approval_reset: true, generated_visual_invalidated: true },
+  const { supabase, workspace } = await requireContentAdmin();
+  const { data, error } = await supabase.rpc("edit_content_review_item", {
+    p_workspace_id: workspace.id,
+    p_content_id: parsed.data.id,
+    p_title: parsed.data.title,
+    p_hook: parsed.data.hook,
+    p_body: parsed.data.body,
+    p_cta: parsed.data.cta,
+    p_media_brief: parsed.data.mediaBrief,
   });
-  succeed("Edits saved. The item and its generated visual require review again.");
+  if (error || !data || (Array.isArray(data) && data.length === 0)) {
+    fail("Content item changed during review or could not be edited safely. Reload before trying again.");
+  }
+  succeed("Edits saved atomically. The item and its generated visual require review again.");
 }
 
 export async function approveDailyBatch(formData: FormData) {
