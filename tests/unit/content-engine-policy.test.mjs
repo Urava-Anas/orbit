@@ -20,6 +20,22 @@ test("Content Engine keeps founder approval and two independent publishing kill 
   assert.match(migration, /profile\.publishing_enabled = true/);
 });
 
+test("Instagram copy and generated visual must both be reviewable before approval", async () => {
+  const [actions, today, migration] = await Promise.all([
+    read("src/app/(app)/dashboard/content/actions.ts"),
+    read("src/app/(app)/dashboard/content/page.tsx"),
+    read("supabase/migrations/20260824012000_content_engine_publish_guardrails.sql"),
+  ]);
+
+  assert.match(actions, /readyGeneratedImageIds/);
+  assert.match(actions, /approval is locked until its generated visual is ready/);
+  assert.match(actions, /promoteApprovedAssetForPublishing/);
+  assert.match(actions, /archiveGeneratedVisuals/);
+  assert.match(today, /\/api\/content-assets\/\$\{asset\.id\}/);
+  assert.match(today, /Review every visual|Visual ready for review|generated visual/i);
+  assert.match(migration, /Instagram requires an approved public image/);
+});
+
 test("automatic Meta delivery is limited to verified Instagram and Facebook rails", async () => {
   const [actions, worker, migration, oauth] = await Promise.all([
     read("src/app/(app)/dashboard/content/actions.ts"),
