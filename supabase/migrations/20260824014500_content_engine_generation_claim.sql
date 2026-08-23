@@ -21,6 +21,7 @@ set search_path = pg_catalog, public, private
 as $$
 declare
   caller uuid := auth.uid();
+  caller_role text := coalesce(auth.role(), '');
   existing_id uuid;
   existing_status text;
   existing_lock uuid;
@@ -28,12 +29,17 @@ declare
   draft_count bigint;
   next_lock uuid := gen_random_uuid();
 begin
-  if caller is null then
-    raise exception 'Authentication required' using errcode = '42501';
+  if not private.orbit_workspace_can_write(p_workspace_id) then
+    raise exception 'Content generation is unavailable for this workspace' using errcode = '42501';
   end if;
-  if not private.is_workspace_admin(p_workspace_id)
-     or not private.orbit_workspace_can_write(p_workspace_id) then
-    raise exception 'Content generation permission denied' using errcode = '42501';
+
+  if caller_role <> 'service_role' then
+    if caller is null then
+      raise exception 'Authentication required' using errcode = '42501';
+    end if;
+    if not private.is_workspace_admin(p_workspace_id) then
+      raise exception 'Content generation permission denied' using errcode = '42501';
+    end if;
   end if;
 
   select b.id, b.status, b.generation_lock_token, b.generation_locked_at
@@ -98,7 +104,7 @@ end;
 $$;
 
 revoke all on function public.claim_content_batch_generation(uuid, date) from public, anon;
-grant execute on function public.claim_content_batch_generation(uuid, date) to authenticated;
+grant execute on function public.claim_content_batch_generation(uuid, date) to authenticated, service_role;
 
 comment on function public.claim_content_batch_generation(uuid, date) is
-  'Admin-only atomic lease for one Content Engine generation per workspace/day. Fresh leases block duplicate generation; existing drafts are reused.';
+  'Atomic lease for one Content Engine generation per workspace/day. Workspace admins and the service-role scheduler may claim; expired/read-only workspaces fail closed.';
