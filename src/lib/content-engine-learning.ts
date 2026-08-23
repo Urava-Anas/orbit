@@ -5,6 +5,7 @@ import { localDate } from "@/lib/content-engine";
 
 type MetricRow = {
   content_id: string;
+  captured_at: string;
   reach: number | string;
   engagements: number | string;
   clicks: number | string;
@@ -76,15 +77,20 @@ export async function deriveContentLearnings({
   const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data: metricRows, error: metricError } = await supabase
     .from("content_metric_snapshots")
-    .select("content_id,reach,engagements,clicks,leads")
+    .select("content_id,captured_at,reach,engagements,clicks,leads")
     .eq("workspace_id", workspaceId)
-    .gte("captured_at", since);
+    .gte("captured_at", since)
+    .order("captured_at", { ascending: false });
   if (metricError) throw new Error("Content performance could not be loaded for learning.");
 
-  const metrics = (metricRows ?? []) as MetricRow[];
+  const latestMetricByContent = new Map<string, MetricRow>();
+  for (const metric of (metricRows ?? []) as MetricRow[]) {
+    if (!latestMetricByContent.has(metric.content_id)) latestMetricByContent.set(metric.content_id, metric);
+  }
+  const metrics = [...latestMetricByContent.values()];
   if (!metrics.length) return { status: "no_data" as const, inserted: 0 };
 
-  const contentIds = [...new Set(metrics.map((item) => item.content_id))];
+  const contentIds = metrics.map((item) => item.content_id);
   const { data: draftRows, error: draftError } = await supabase
     .from("content_drafts")
     .select("id,channel,goal,format")
@@ -118,11 +124,12 @@ export async function deriveContentLearnings({
       workspace_id: workspaceId,
       learned_on: learnedOn,
       signal_type: "performance",
-      insight: `${humanize(channel)} produced the strongest weighted response over the last 7 days across ${value.items.size} measured content item${value.items.size === 1 ? "" : "s"}.`,
+      insight: `${humanize(channel)} produced the strongest weighted response across ${value.items.size} recently measured content item${value.items.size === 1 ? "" : "s"}.`,
       action: `Keep ${humanize(channel)} in tomorrow's mix and test one variation of the strongest concept instead of simply increasing volume.`,
       confidence: confidence(value),
       source_metrics: {
         window_days: 7,
+        snapshot_policy: "latest_per_content",
         dimension: "channel",
         value: channel,
         measured_items: value.items.size,
@@ -142,11 +149,12 @@ export async function deriveContentLearnings({
       workspace_id: workspaceId,
       learned_on: learnedOn,
       signal_type: "topic",
-      insight: `${humanize(goal)} content is currently the strongest objective by measured response over the last 7 days.`,
+      insight: `${humanize(goal)} content is currently the strongest objective across recently measured provider results.`,
       action: `Give ${humanize(goal)} one deliberate slot in the next daily strategy while preserving a balanced mix of other objectives.`,
       confidence: confidence(value),
       source_metrics: {
         window_days: 7,
+        snapshot_policy: "latest_per_content",
         dimension: "goal",
         value: goal,
         measured_items: value.items.size,
@@ -171,7 +179,7 @@ export async function deriveContentLearnings({
       content_id: null,
       event_type: "learning_recorded",
       actor_id: null,
-      details: { learning_note_id: note.id, learned_on: learnedOn, source: "7_day_metric_rollup" },
+      details: { learning_note_id: note.id, learned_on: learnedOn, source: "latest_7_day_metric_snapshots" },
     })),
   );
   if (auditError) console.error("Content learning was saved but its audit event could not be appended", auditError);
