@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BarChart3, BrainCircuit } from "lucide-react";
 import { humanize } from "@/lib/format";
+import { serverTimeOffset } from "@/lib/server-clock";
 import { requireWorkspace } from "@/lib/workspace";
 import styles from "../ContentSection.module.css";
 
@@ -15,7 +16,7 @@ function compact(value: number) { return new Intl.NumberFormat("en", { notation:
 
 export default async function ContentIntelligencePage() {
   const { supabase, workspace } = await requireWorkspace();
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const since = serverTimeOffset(-30 * 24 * 60 * 60 * 1000).toISOString();
   const [metricResult, learningResult] = await Promise.all([
     supabase.from("content_metric_snapshots").select("content_id,reach,engagements,clicks,leads").eq("workspace_id", workspace.id).gte("captured_at", since),
     supabase.from("content_learning_notes").select("id,learned_on,signal_type,insight,action,confidence").eq("workspace_id", workspace.id).order("learned_on", { ascending: false }).order("created_at", { ascending: false }).limit(20),
