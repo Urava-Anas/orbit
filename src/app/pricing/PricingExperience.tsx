@@ -14,8 +14,7 @@ import {
 } from "@/lib/orbit-plans";
 import styles from "./pricing.module.css";
 
-const trialHref =
-  "/login?notice=Your%2015-day%20Business%20trial%20begins%20when%20your%20workspace%20is%20provisioned.";
+const trialHref = "/login?next=/trial";
 const enterpriseHref =
   "/login?notice=Enterprise%20access%20is%20arranged%20with%20the%20Orbit%20team.";
 
