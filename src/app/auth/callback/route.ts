@@ -2,17 +2,13 @@ import { NextResponse } from "next/server";
 import { getOrbitAccess, orbitHomePath } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 
-function safeRecoveryPath(value: string | null, origin: string) {
+function safeReturnPath(value: string | null, origin: string) {
   if (!value) return null;
 
   try {
     const destination = new URL(value, origin);
-    if (
-      destination.origin !== origin ||
-      destination.pathname !== "/reset-password"
-    ) {
-      return null;
-    }
+    if (destination.origin !== origin) return null;
+    if (!["/reset-password", "/trial"].includes(destination.pathname)) return null;
 
     return `${destination.pathname}${destination.search}${destination.hash}`;
   } catch {
@@ -29,15 +25,15 @@ export async function GET(request: Request) {
     process.env.NODE_ENV === "development" || !forwardedHost
       ? url.origin
       : `${forwardedProtocol}://${forwardedHost}`;
-  const recoveryPath = safeRecoveryPath(url.searchParams.get("next"), origin);
+  const returnPath = safeReturnPath(url.searchParams.get("next"), origin);
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      if (recoveryPath) {
-        return NextResponse.redirect(new URL(recoveryPath, origin));
+      if (returnPath) {
+        return NextResponse.redirect(new URL(returnPath, origin));
       }
 
       const context = await getOrbitAccess();
