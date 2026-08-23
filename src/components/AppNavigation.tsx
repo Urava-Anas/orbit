@@ -8,6 +8,7 @@ import {
   Banknote,
   Blocks,
   Building2,
+  ClipboardList,
   CreditCard,
   Crosshair,
   FileCheck2,
@@ -41,6 +42,7 @@ const orbitLinks = [
 const apexLinks = [
   { href: "/dashboard", label: "Founder Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/leads", label: "Carrier Pipeline", icon: UsersRound },
+  { href: "/dashboard/leads/forms", label: "Online Forms", icon: ClipboardList },
   { href: "/dashboard/sales", label: "Sales & Onboarding", icon: Crosshair },
   { href: "/dashboard/projects", label: "Dispatch Operations", icon: FolderKanban },
   { href: "/dashboard/cash", label: "Revenue", icon: Banknote },
@@ -60,7 +62,8 @@ type AppNavigationProps = {
 };
 
 function isActive(pathname: string, href: string) {
-  return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  if (href === "/dashboard" || href === "/dashboard/leads") return pathname === href;
+  return pathname.startsWith(href);
 }
 
 export function AppNavigation({
@@ -75,7 +78,7 @@ export function AppNavigation({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const links = experience === "apex" ? apexLinks : orbitLinks;
-  const primaryCutoff = experience === "apex" ? 6 : 8;
+  const primaryCutoff = experience === "apex" ? 7 : 8;
   const primaryLinks = links.slice(0, primaryCutoff);
   const systemLinks = links.slice(primaryCutoff);
 
