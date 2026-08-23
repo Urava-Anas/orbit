@@ -1,0 +1,200 @@
+.trialPage {
+  min-height: 100vh;
+  color: #f4f7fa;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(255, 93, 82, 0.12), transparent 25rem),
+    radial-gradient(circle at 92% 80%, rgba(91, 124, 255, 0.08), transparent 28rem),
+    #07090d;
+}
+
+.nav {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  min-height: 72px;
+  align-items: center;
+  padding: 0 clamp(18px, 4vw, 54px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.backLink,
+.secure {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #7f8b9b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.backLink { width: fit-content; }
+.secure { justify-self: end; }
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.72fr);
+  width: min(100% - 36px, 1180px);
+  min-height: calc(100vh - 72px);
+  margin: 0 auto;
+  padding: clamp(50px, 8vw, 96px) 0;
+  align-items: center;
+  gap: clamp(44px, 8vw, 100px);
+}
+
+.kicker,
+.cardHead > span {
+  color: #ff7068;
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.promise h1 {
+  max-width: 650px;
+  margin: 12px 0 0;
+  font-size: clamp(52px, 8vw, 82px);
+  font-weight: 610;
+  letter-spacing: -0.07em;
+  line-height: 0.94;
+}
+
+.promise > p {
+  max-width: 600px;
+  margin: 22px 0 0;
+  color: #8a96a5;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.promiseGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 620px;
+  margin-top: 32px;
+  gap: 10px;
+}
+
+.promiseGrid > div {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 50px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.022);
+  color: #abb4bf;
+  font-size: 10px;
+}
+
+.promiseGrid svg { color: #70d6a2; }
+
+.trustLine {
+  display: flex;
+  margin-top: 25px;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: #687586;
+  font-size: 9px;
+}
+
+.trustLine span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setupCard {
+  padding: clamp(24px, 4vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025));
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.32);
+}
+
+.cardHead h2 {
+  margin: 8px 0 0;
+  font-size: 28px;
+  letter-spacing: -0.045em;
+}
+
+.cardHead p {
+  margin: 8px 0 0;
+  color: #7f8b9b;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.form {
+  display: grid;
+  margin-top: 25px;
+  gap: 9px;
+}
+
+.form label {
+  color: #a7b0bc;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.form input {
+  width: 100%;
+  min-height: 49px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  outline: none;
+  background: rgba(7, 9, 13, 0.7);
+  color: #f4f7fa;
+  font: inherit;
+  font-size: 13px;
+}
+
+.form input:focus {
+  border-color: rgba(255, 112, 104, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 112, 104, 0.07);
+}
+
+.form > small {
+  margin-bottom: 9px;
+  color: #667383;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.termsNote {
+  margin: 18px 0 0;
+  padding-top: 17px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #647181;
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+    width: min(100% - 30px, 680px);
+    padding: 58px 0 70px;
+  }
+
+  .promise h1 { max-width: 620px; }
+  .setupCard { width: 100%; }
+}
+
+@media (max-width: 580px) {
+  .nav {
+    grid-template-columns: 1fr auto;
+    min-height: 64px;
+    padding: 0 14px;
+  }
+  .nav > :nth-child(2) { justify-self: end; }
+  .secure { display: none; }
+  .promise h1 { font-size: clamp(48px, 15vw, 64px); }
+  .promiseGrid { grid-template-columns: 1fr; }
+  .trustLine { display: grid; }
+  .setupCard { border-radius: 22px; }
+}
