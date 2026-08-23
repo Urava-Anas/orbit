@@ -37,6 +37,9 @@ export default async function HomePage({ searchParams }: Props) {
       <nav className="landing-nav" aria-label="Primary navigation">
         <OrbitMark />
         <div className="landing-nav-actions">
+          <Link className="button button-quiet" href="/pricing">
+            Pricing
+          </Link>
           <Link className="button button-quiet" href="/login">
             Sign in
           </Link>
@@ -62,6 +65,9 @@ export default async function HomePage({ searchParams }: Props) {
             <Link className="button button-primary" href="/login">
               Enter your workspace
               <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+            <Link className="button" href="/pricing">
+              See plans
             </Link>
           </div>
           <div className="hero-proof" aria-label="Product foundations">
