@@ -1,0 +1,1 @@
+Public website intake for Apex. JWT verification is disabled because the caller is the public Apex website; the function instead enforces an exact production-origin allowlist, validates/bounds payload fields, and writes through the server-side service role.
