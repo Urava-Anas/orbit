@@ -50,6 +50,13 @@ type LearningRow = {
   confidence: number | string;
 };
 
+type GenerationClaim = {
+  batch_id: string;
+  lock_token: string | null;
+  claimed: boolean;
+  reused: boolean;
+};
+
 export function contentGenerationConfigured() {
   return Boolean(process.env.OPENAI_API_KEY);
 }
@@ -118,7 +125,7 @@ function extractResponseText(payload: unknown) {
 }
 
 async function generateWithOpenAI(input: string, targetCount: number) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("AI generation is not configured.");
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -194,25 +201,31 @@ async function generateWithOpenAI(input: string, targetCount: number) {
       },
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(120_000),
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`AI generation failed (${response.status}): ${detail.slice(0, 300)}`);
+    console.error("OpenAI Content Engine generation failed", {
+      status: response.status,
+      requestId: response.headers.get("x-request-id"),
+    });
+    throw new Error(`AI generation failed with provider status ${response.status}.`);
   }
 
   const payload: unknown = await response.json();
   const text = extractResponseText(payload);
-  if (!text) throw new Error("AI generation returned no structured text.");
+  if (!text) throw new Error("AI generation returned no structured content.");
 
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(text);
   } catch {
-    throw new Error("AI generation returned invalid JSON.");
+    throw new Error("AI generation returned malformed structured content.");
   }
 
-  return generatedBatchSchema.parse(parsedJson);
+  const parsed = generatedBatchSchema.safeParse(parsedJson);
+  if (!parsed.success) throw new Error("AI generation did not match Orbit’s required content schema.");
+  return parsed.data;
 }
 
 function generationPrompt(
@@ -259,6 +272,25 @@ Hard rules:
 - This is a review batch. Nothing is published by this generation step.`;
 }
 
+async function releaseGenerationLease(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  batchId: string,
+  lockToken: string,
+) {
+  const { error } = await supabase
+    .from("content_batches")
+    .update({
+      status: "blocked",
+      generation_lock_token: null,
+      generation_locked_at: null,
+    })
+    .eq("id", batchId)
+    .eq("workspace_id", workspaceId)
+    .eq("generation_lock_token", lockToken);
+  if (error) console.error("Content Engine generation lease could not be released safely", { workspaceId, batchId, error });
+}
+
 export async function generateDailyContentBatch({
   supabase,
   workspaceId,
@@ -283,130 +315,133 @@ export async function generateDailyContentBatch({
 
   const profile = profileRow as BrandProfile;
   const date = batchDate || localDate(profile.timezone);
+  const { data: claimRows, error: claimError } = await supabase.rpc("claim_content_batch_generation", {
+    p_workspace_id: workspaceId,
+    p_batch_date: date,
+  });
+  const claim = (Array.isArray(claimRows) ? claimRows[0] : claimRows) as GenerationClaim | null;
+  if (claimError || !claim?.batch_id) throw new Error("Daily generation could not acquire its workspace lease.");
+  if (claim.reused) return { batchId: claim.batch_id, reused: true };
+  if (!claim.claimed || !claim.lock_token) {
+    throw new Error("Today’s content batch is already being generated. Reload shortly.");
+  }
 
-  const { data: existingBatch } = await supabase
-    .from("content_batches")
-    .select("id,status")
-    .eq("workspace_id", workspaceId)
-    .eq("batch_date", date)
-    .maybeSingle();
+  const batchId = claim.batch_id;
+  const lockToken = claim.lock_token;
 
-  if (existingBatch) {
+  try {
+    const [{ data: proofRows, error: proofError }, { data: learningRows, error: learningError }] = await Promise.all([
+      supabase
+        .from("proofs")
+        .select("id,title,result,permission_scope")
+        .eq("workspace_id", workspaceId)
+        .eq("status", "approved")
+        .in("permission_scope", ["anonymous", "public"])
+        .order("created_at", { ascending: false })
+        .limit(8),
+      supabase
+        .from("content_learning_notes")
+        .select("insight,action,confidence")
+        .eq("workspace_id", workspaceId)
+        .order("learned_on", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+
+    if (proofError) throw new Error("Approved proof could not be loaded.");
+    if (learningError) throw new Error("Content learnings could not be loaded.");
+
+    const proofs = (proofRows ?? []) as ProofRow[];
+    const learnings = (learningRows ?? []) as LearningRow[];
+    const targetCount = Math.max(1, Math.min(20, Number(profile.daily_target_count) || 5));
+    const generated = await generateWithOpenAI(
+      generationPrompt(workspaceName, profile, proofs, learnings, targetCount),
+      targetCount,
+    );
+    const quality = validateGeneratedContentBatch({
+      items: generated.items,
+      targetCount,
+      proofCount: proofs.length,
+    });
+
+    const generatedAt = new Date().toISOString();
+    const drafts = generated.items.map((item, index) => {
+      const proof = item.proof_index === null ? null : proofs[item.proof_index];
+      return {
+        workspace_id: workspaceId,
+        batch_id: batchId,
+        proof_id: proof?.id ?? null,
+        source_type: proof ? "proof" : "brand",
+        channel: item.channel,
+        format: item.format,
+        goal: item.goal,
+        title: item.title,
+        hook: item.hook,
+        body: item.body,
+        cta: item.cta,
+        media_brief: item.media_brief,
+        scheduled_for: localDateTimeToUtc(date, item.scheduled_time, profile.timezone),
+        status: "review",
+        sort_order: index,
+        generation_metadata: {
+          model: contentGenerationModel(),
+          generated_at: generatedAt,
+          local_time: item.scheduled_time,
+          timezone: profile.timezone,
+          quality,
+        },
+        created_by: actorId,
+      };
+    });
+
+    const { error: draftError } = await supabase.from("content_drafts").insert(drafts);
+    if (draftError) throw new Error("Generated content could not be saved.");
+
+    const { data: finalized, error: batchError } = await supabase
+      .from("content_batches")
+      .update({
+        status: "review",
+        focus: generated.focus,
+        strategy_notes: generated.strategy_notes,
+        generated_at: generatedAt,
+        generation_lock_token: null,
+        generation_locked_at: null,
+        created_by: actorId,
+      })
+      .eq("id", batchId)
+      .eq("workspace_id", workspaceId)
+      .eq("generation_lock_token", lockToken)
+      .select("id")
+      .maybeSingle();
+    if (batchError || !finalized) throw new Error("Daily batch could not be finalized safely.");
+
+    const { error: auditError } = await supabase.from("content_review_events").insert({
+      workspace_id: workspaceId,
+      batch_id: batchId,
+      content_id: null,
+      event_type: "batch_generated",
+      actor_id: actorId,
+      details: {
+        model: contentGenerationModel(),
+        item_count: drafts.length,
+        quality_checks: quality.checks,
+        proof_count: proofs.length,
+      },
+    });
+    if (auditError) {
+      console.error("Content Engine generated a batch but could not append its audit event", auditError);
+    }
+
+    return { batchId, reused: false };
+  } catch (error) {
     const { count } = await supabase
       .from("content_drafts")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", workspaceId)
-      .eq("batch_id", existingBatch.id);
-    if ((count ?? 0) > 0) return { batchId: existingBatch.id as string, reused: true };
+      .eq("batch_id", batchId);
+    if ((count ?? 0) === 0) await releaseGenerationLease(supabase, workspaceId, batchId, lockToken);
+    throw error;
   }
-
-  const [{ data: proofRows, error: proofError }, { data: learningRows, error: learningError }] = await Promise.all([
-    supabase
-      .from("proofs")
-      .select("id,title,result,permission_scope")
-      .eq("workspace_id", workspaceId)
-      .eq("status", "approved")
-      .in("permission_scope", ["anonymous", "public"])
-      .order("created_at", { ascending: false })
-      .limit(8),
-    supabase
-      .from("content_learning_notes")
-      .select("insight,action,confidence")
-      .eq("workspace_id", workspaceId)
-      .order("learned_on", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(10),
-  ]);
-
-  if (proofError) throw new Error("Approved proof could not be loaded.");
-  if (learningError) throw new Error("Content learnings could not be loaded.");
-
-  const proofs = (proofRows ?? []) as ProofRow[];
-  const learnings = (learningRows ?? []) as LearningRow[];
-  const targetCount = Math.max(1, Math.min(20, Number(profile.daily_target_count) || 5));
-  const generated = await generateWithOpenAI(
-    generationPrompt(workspaceName, profile, proofs, learnings, targetCount),
-    targetCount,
-  );
-  const quality = validateGeneratedContentBatch({
-    items: generated.items,
-    targetCount,
-    proofCount: proofs.length,
-  });
-
-  const { data: batch, error: batchError } = await supabase
-    .from("content_batches")
-    .upsert(
-      {
-        workspace_id: workspaceId,
-        batch_date: date,
-        status: "review",
-        focus: generated.focus,
-        strategy_notes: generated.strategy_notes,
-        generated_at: new Date().toISOString(),
-        created_by: actorId,
-      },
-      { onConflict: "workspace_id,batch_date" },
-    )
-    .select("id")
-    .single();
-
-  if (batchError || !batch) throw new Error("Daily batch could not be saved.");
-
-  const generatedAt = new Date().toISOString();
-  const drafts = generated.items.map((item, index) => {
-    const proof = item.proof_index === null ? null : proofs[item.proof_index];
-    return {
-      workspace_id: workspaceId,
-      batch_id: batch.id,
-      proof_id: proof?.id ?? null,
-      source_type: proof ? "proof" : "brand",
-      channel: item.channel,
-      format: item.format,
-      goal: item.goal,
-      title: item.title,
-      hook: item.hook,
-      body: item.body,
-      cta: item.cta,
-      media_brief: item.media_brief,
-      scheduled_for: localDateTimeToUtc(date, item.scheduled_time, profile.timezone),
-      status: "review",
-      sort_order: index,
-      generation_metadata: {
-        model: contentGenerationModel(),
-        generated_at: generatedAt,
-        local_time: item.scheduled_time,
-        timezone: profile.timezone,
-        quality,
-      },
-      created_by: actorId,
-    };
-  });
-
-  const { error: draftError } = await supabase.from("content_drafts").insert(drafts);
-  if (draftError) {
-    await supabase.from("content_batches").update({ status: "blocked" }).eq("id", batch.id).eq("workspace_id", workspaceId);
-    throw new Error("Generated content could not be saved.");
-  }
-
-  const { error: auditError } = await supabase.from("content_review_events").insert({
-    workspace_id: workspaceId,
-    batch_id: batch.id,
-    content_id: null,
-    event_type: "batch_generated",
-    actor_id: actorId,
-    details: {
-      model: contentGenerationModel(),
-      item_count: drafts.length,
-      quality_checks: quality.checks,
-      proof_count: proofs.length,
-    },
-  });
-  if (auditError) {
-    console.error("Content Engine generated a batch but could not append its audit event", auditError);
-  }
-
-  return { batchId: batch.id as string, reused: false };
 }
 
 export function providerForChannel(channel: string) {
