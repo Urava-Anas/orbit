@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CalendarDays } from "lucide-react";
 import { humanize } from "@/lib/format";
+import { serverTimeOffset } from "@/lib/server-clock";
 import { requireWorkspace } from "@/lib/workspace";
 import styles from "../ContentSection.module.css";
 
@@ -31,8 +32,8 @@ export default async function ContentCalendarPage() {
   const { supabase, workspace } = await requireWorkspace();
   const { data: profile } = await supabase.from("content_brand_profiles").select("timezone").eq("workspace_id", workspace.id).maybeSingle();
   const timezone = profile?.timezone || "UTC";
-  const from = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const until = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  const from = serverTimeOffset(-24 * 60 * 60 * 1000);
+  const until = serverTimeOffset(14 * 24 * 60 * 60 * 1000);
   const { data } = await supabase
     .from("content_drafts")
     .select("id,title,channel,format,status,scheduled_for")
