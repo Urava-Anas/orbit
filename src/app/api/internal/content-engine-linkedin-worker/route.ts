@@ -30,6 +30,10 @@ function safeMatch(received: string, expected: string) {
   return actual.length === target.length && timingSafeEqual(actual, target);
 }
 
+function linkedinTextFormat(format: string | null | undefined) {
+  return ["post", "text", "text post"].includes(String(format ?? "").trim().toLowerCase());
+}
+
 async function authorize(request: Request, admin: AdminClient) {
   const header = request.headers.get("authorization") ?? "";
   if (!header.startsWith("Bearer ")) return false;
@@ -108,7 +112,7 @@ async function reconcileBlockedLinkedIn(admin: AdminClient) {
     const [{ data: draft }, { data: profile }, connectionReady] = await Promise.all([
       admin
         .from("content_drafts")
-        .select("channel,status")
+        .select("channel,status,format")
         .eq("workspace_id", item.workspace_id)
         .eq("id", item.content_id)
         .maybeSingle(),
@@ -123,6 +127,7 @@ async function reconcileBlockedLinkedIn(admin: AdminClient) {
     if (process.env.CONTENT_PUBLISHING_ENABLED !== "true") continue;
     if (profile?.publishing_enabled !== true) continue;
     if (draft?.status !== "approved" || draft.channel !== "linkedin") continue;
+    if (!linkedinTextFormat(draft.format)) continue;
     if (!connectionReady) continue;
 
     const { data: queued, error: queueError } = await admin
@@ -163,7 +168,7 @@ async function deliver(admin: AdminClient) {
     const [{ data: draft }, { data: profile }, connectionReady] = await Promise.all([
       admin
         .from("content_drafts")
-        .select("channel,status,batch_id")
+        .select("channel,status,batch_id,format")
         .eq("workspace_id", job.workspace_id)
         .eq("id", job.content_id)
         .maybeSingle(),
@@ -181,6 +186,7 @@ async function deliver(admin: AdminClient) {
     else if (profile?.publishing_enabled !== true) blockReason = "Workspace automatic publishing was turned off before delivery.";
     else if (draft?.status !== "approved") blockReason = "Content is no longer founder-approved.";
     else if (job.provider !== "linkedin" || draft.channel !== "linkedin") blockReason = "The LinkedIn worker received an unsupported provider/channel pair.";
+    else if (!linkedinTextFormat(draft.format)) blockReason = "LinkedIn automatic delivery currently supports text posts only. Document or media concepts stay blocked.";
     else if (!connectionReady) blockReason = "LinkedIn member publishing capability is not currently verified.";
 
     if (blockReason) {
