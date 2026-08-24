@@ -105,6 +105,28 @@ test("OAuth ledger accepts content providers while TikTok automatic publishing r
   assert.doesNotMatch(migration, /claim_content_tiktok_publications/);
 });
 
+test("Google measurement sources feed aggregate learning through a read-only worker identity", async () => {
+  const [signals, worker, migration] = await Promise.all([
+    read("src/lib/content-engine-google-signals.ts"),
+    read("src/app/api/internal/content-engine-source-signals/route.ts"),
+    read("supabase/migrations/20260824017500_content_engine_google_signal_sources.sql"),
+  ]);
+
+  assert.match(signals, /webmasters\/v3\/sites/);
+  assert.match(signals, /analyticsdata\.googleapis\.com\/v1beta\/properties/);
+  assert.match(signals, /aggregate_only:\s*true/);
+  assert.match(signals, /grant_type:\s*"refresh_token"/);
+  assert.match(signals, /signalType:\s*"search"/);
+  assert.match(signals, /signalType:\s*"traffic"/);
+  assert.doesNotMatch(signals, /email|phone|lead_id|customer_id/i);
+  assert.match(worker, /source_signals/);
+  assert.match(worker, /read_only_intelligence/);
+  assert.match(migration, /orbit_content_engine_signal_worker_secret/);
+  assert.match(migration, /'search'/);
+  assert.match(migration, /'traffic'/);
+  assert.doesNotMatch(worker, /claim_content_publications|publishInstagramJob|publishFacebookJob|publishLinkedInJob/);
+});
+
 test("unsupported provider metrics are skipped rather than fabricated", async () => {
   const metrics = await read("src/app/api/internal/content-engine-metrics/route.ts");
   assert.match(metrics, /draft\?\.channel !== "instagram"/);
