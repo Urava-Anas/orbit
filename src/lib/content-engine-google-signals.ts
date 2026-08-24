@@ -28,8 +28,23 @@ type AnalyticsRow = {
   metricValues?: Array<{ value?: string }>;
 };
 
+const EMAILISH = /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/i;
+const LONG_DIGIT_RUN = /\d{7,}/;
+
 function dateOnly(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function safeSearchPhrase(value: string | undefined, impressions: number) {
+  const normalized = value?.trim().replace(/\s+/g, " ").slice(0, 140) ?? "";
+  if (!normalized || impressions < 5 || EMAILISH.test(normalized) || LONG_DIGIT_RUN.test(normalized)) return null;
+  return normalized;
+}
+
+function safePagePath(value: string | undefined) {
+  const normalized = value?.trim().split(/[?#]/, 1)[0]?.slice(0, 240) ?? "";
+  if (!normalized || EMAILISH.test(normalized) || LONG_DIGIT_RUN.test(normalized)) return null;
+  return normalized;
 }
 
 function googleClientCredentials() {
@@ -187,19 +202,20 @@ async function syncSearchConsole(admin: AdminClient, connection: Connection, tim
           dimensions: ["query"],
           type: "web",
           dataState: "final",
-          rowLimit: 10,
+          rowLimit: 25,
         }),
       },
     );
     if (!response.ok) throw new Error(`Search Console query failed (HTTP ${response.status}).`);
     const payload = (await response.json()) as { rows?: SearchRow[] };
     for (const row of payload.rows ?? []) {
-      const query = row.keys?.[0]?.trim();
+      const impressions = Number(row.impressions ?? 0);
+      const query = safeSearchPhrase(row.keys?.[0], impressions);
       if (!query) continue;
       rows.push({
         query,
         clicks: Number(row.clicks ?? 0),
-        impressions: Number(row.impressions ?? 0),
+        impressions,
         ctr: Number(row.ctr ?? 0),
         property: property.name || property.id || "Search Console property",
       });
@@ -215,11 +231,12 @@ async function syncSearchConsole(admin: AdminClient, connection: Connection, tim
     learnedOn,
     signalType: "search",
     insight: `Current organic search demand is strongest around: ${topics.join(" · ")}.`,
-    action: "Use these verified search-demand phrases as topic inspiration for the next content batch. Do not claim rankings, market size or causation from this signal alone.",
+    action: "Use these privacy-filtered, aggregate search-demand phrases as topic inspiration for the next content batch. Do not claim rankings, market size or causation from this signal alone.",
     confidence: Math.min(0.9, 0.55 + Math.min(0.35, top.reduce((sum, row) => sum + row.clicks, 0) / 200)),
     sourceMetrics: {
       provider: "google_search_console",
       aggregate_only: true,
+      privacy_filter: "minimum_5_impressions_no_email_or_long_digit_identifiers",
       window_days: 28,
       data_state: "final",
       properties: [...new Set(top.map((row) => row.property))],
@@ -255,7 +272,7 @@ async function syncAnalytics(admin: AdminClient, connection: Connection, timezon
             { name: "activeUsers" },
             { name: "keyEvents" },
           ],
-          limit: "10",
+          limit: 10,
           orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
         }),
       },
@@ -263,7 +280,7 @@ async function syncAnalytics(admin: AdminClient, connection: Connection, timezon
     if (!response.ok) throw new Error(`Google Analytics report failed (HTTP ${response.status}).`);
     const payload = (await response.json()) as { rows?: AnalyticsRow[] };
     for (const row of payload.rows ?? []) {
-      const page = row.dimensionValues?.[0]?.value?.trim();
+      const page = safePagePath(row.dimensionValues?.[0]?.value);
       if (!page) continue;
       rows.push({
         page,
@@ -289,6 +306,7 @@ async function syncAnalytics(admin: AdminClient, connection: Connection, timezon
     sourceMetrics: {
       provider: "google_analytics",
       aggregate_only: true,
+      privacy_filter: "path_only_no_query_string_no_email_or_long_digit_identifiers",
       window_days: 28,
       properties: [...new Set(top.map((row) => row.property))],
       top_pages: top,
