@@ -59,7 +59,7 @@ test("automatic Meta delivery remains isolated to verified Instagram and Faceboo
   assert.doesNotMatch(worker, /publishLinkedInJob|publishTikTokJob/);
 });
 
-test("LinkedIn member publishing is verified and isolated from TikTok", async () => {
+test("LinkedIn member publishing is verified, text-format faithful and isolated from TikTok", async () => {
   const [start, callback, publisher, worker, migration] = await Promise.all([
     read("src/app/api/integrations/oauth/[provider]/start/route.ts"),
     read("src/app/api/integrations/oauth/[provider]/callback/route.ts"),
@@ -74,11 +74,14 @@ test("LinkedIn member publishing is verified and isolated from TikTok", async ()
   assert.match(publisher, /https:\/\/api\.linkedin\.com\/rest\/posts/);
   assert.match(publisher, /X-Restli-Protocol-Version/);
   assert.match(publisher, /x-restli-id/);
+  assert.match(publisher, /LinkedIn automatic delivery currently supports text posts only/);
   assert.match(worker, /claim_content_linkedin_publications/);
   assert.match(worker, /CONTENT_PUBLISHING_ENABLED/);
   assert.match(worker, /linkedinConnectionReady/);
+  assert.match(worker, /linkedinTextFormat/);
   assert.match(migration, /connection\.provider = 'linkedin'/);
   assert.match(migration, /linkedin\.publish\.member/);
+  assert.match(migration, /lower\(trim\(draft\.format\)\) in \('post', 'text', 'text post'\)/);
   assert.doesNotMatch(worker, /publishTikTokJob/);
 });
 
@@ -105,7 +108,7 @@ test("OAuth ledger accepts content providers while TikTok automatic publishing r
   assert.doesNotMatch(migration, /claim_content_tiktok_publications/);
 });
 
-test("Google measurement sources feed aggregate learning through a read-only worker identity", async () => {
+test("Google measurement sources feed privacy-filtered aggregate learning through a read-only worker identity", async () => {
   const [signals, worker, migration] = await Promise.all([
     read("src/lib/content-engine-google-signals.ts"),
     read("src/app/api/internal/content-engine-source-signals/route.ts"),
@@ -118,7 +121,13 @@ test("Google measurement sources feed aggregate learning through a read-only wor
   assert.match(signals, /grant_type:\s*"refresh_token"/);
   assert.match(signals, /signalType:\s*"search"/);
   assert.match(signals, /signalType:\s*"traffic"/);
-  assert.doesNotMatch(signals, /email|phone|lead_id|customer_id/i);
+  assert.match(signals, /function safeSearchPhrase/);
+  assert.match(signals, /function safePagePath/);
+  assert.match(signals, /impressions < 5/);
+  assert.match(signals, /EMAILISH/);
+  assert.match(signals, /LONG_DIGIT_RUN/);
+  assert.match(signals, /privacy_filter:\s*"minimum_5_impressions_no_email_or_long_digit_identifiers"/);
+  assert.match(signals, /privacy_filter:\s*"path_only_no_query_string_no_email_or_long_digit_identifiers"/);
   assert.match(worker, /source_signals/);
   assert.match(worker, /read_only_intelligence/);
   assert.match(migration, /orbit_content_engine_signal_worker_secret/);
