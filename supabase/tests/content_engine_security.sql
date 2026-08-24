@@ -72,7 +72,7 @@ values
     null,
     'linkedin',
     'LinkedIn approved item',
-    'Unsupported automatic providers must remain blocked.',
+    'LinkedIn may enter its isolated queue only after founder approval.',
     'approved',
     '81000000-0000-4000-8000-000000000001',
     'brand',
@@ -124,7 +124,8 @@ values (
   'ci-instagram-no-media'
 );
 
--- Approved LinkedIn remains blocked because no verified automatic adapter exists.
+-- Founder-approved LinkedIn may enter the isolated LinkedIn queue. The service-role claim
+-- still requires a connected account, verified member-publish capability and exactly one identity.
 insert into public.content_publications (
   id,
   workspace_id,
@@ -139,7 +140,7 @@ values (
   '83000000-0000-4000-8000-000000000003',
   'linkedin',
   'queued',
-  'ci-linkedin-unsupported'
+  'ci-linkedin-approved'
 );
 
 do $$
@@ -147,10 +148,12 @@ declare
   facebook_state text;
   instagram_state text;
   linkedin_state text;
+  linkedin_claims integer;
 begin
   select status into facebook_state from public.content_publications where id = '84000000-0000-4000-8000-000000000001';
   select status into instagram_state from public.content_publications where id = '84000000-0000-4000-8000-000000000002';
   select status into linkedin_state from public.content_publications where id = '84000000-0000-4000-8000-000000000003';
+  select count(*) into linkedin_claims from public.claim_content_linkedin_publications(3);
 
   if facebook_state <> 'blocked' then
     raise exception 'Content Engine guard failure: unapproved Facebook item became %', facebook_state;
@@ -158,8 +161,11 @@ begin
   if instagram_state <> 'blocked' then
     raise exception 'Content Engine guard failure: Instagram without media became %', instagram_state;
   end if;
-  if linkedin_state <> 'blocked' then
-    raise exception 'Content Engine guard failure: unsupported LinkedIn item became %', linkedin_state;
+  if linkedin_state <> 'queued' then
+    raise exception 'Content Engine guard failure: approved LinkedIn item did not enter isolated queue (%)', linkedin_state;
+  end if;
+  if linkedin_claims <> 0 then
+    raise exception 'Content Engine LinkedIn claim failure: unconnected workspace produced % claim(s)', linkedin_claims;
   end if;
 end;
 $$;
@@ -224,14 +230,21 @@ begin
 end;
 $$;
 
--- Queue claims are service-role-only; authenticated users cannot invoke the privileged worker RPC.
+-- Queue claims and worker credentials are service-role-only; authenticated users cannot invoke
+-- either privileged publishing claim or read any worker secret hash.
 do $$
 begin
   if has_function_privilege('authenticated', 'public.claim_content_publications(integer)', 'EXECUTE') then
     raise exception 'Content Engine security failure: authenticated can execute claim_content_publications';
   end if;
+  if has_function_privilege('authenticated', 'public.claim_content_linkedin_publications(integer)', 'EXECUTE') then
+    raise exception 'Content Engine security failure: authenticated can execute claim_content_linkedin_publications';
+  end if;
   if not has_function_privilege('service_role', 'public.claim_content_publications(integer)', 'EXECUTE') then
     raise exception 'Content Engine security failure: service_role cannot execute claim_content_publications';
+  end if;
+  if not has_function_privilege('service_role', 'public.claim_content_linkedin_publications(integer)', 'EXECUTE') then
+    raise exception 'Content Engine security failure: service_role cannot execute claim_content_linkedin_publications';
   end if;
   if has_table_privilege('authenticated', 'public.content_worker_auth', 'SELECT') then
     raise exception 'Content Engine security failure: authenticated can read worker secret hashes';
