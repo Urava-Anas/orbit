@@ -19,12 +19,17 @@ type LinkedInAsset = {
 
 type Draft = {
   channel: string;
+  format: string;
   body: string;
   cta: string | null;
 };
 
 function apiVersion() {
   return process.env.LINKEDIN_API_VERSION?.trim() || "202607";
+}
+
+function linkedinTextFormat(format: string) {
+  return ["post", "text", "text post"].includes(format.trim().toLowerCase());
 }
 
 function messageFor(draft: Draft) {
@@ -91,13 +96,16 @@ export async function publishLinkedInJob(job: PublicationJob) {
   const { admin, memberName, memberUrn, accessToken } = await resolveLinkedInCredential(job.workspace_id);
   const { data: draft, error } = await admin
     .from("content_drafts")
-    .select("channel,body,cta,status")
+    .select("channel,format,body,cta,status")
     .eq("workspace_id", job.workspace_id)
     .eq("id", job.content_id)
     .maybeSingle();
   if (error || !draft) throw new Error("Approved LinkedIn content could not be loaded.");
   if (draft.channel !== "linkedin") throw new Error("LinkedIn worker received a non-LinkedIn content item.");
   if (draft.status !== "approved") throw new Error("Founder approval is required before LinkedIn publishing.");
+  if (!linkedinTextFormat(draft.format)) {
+    throw new Error("LinkedIn automatic delivery currently supports text posts only. Document or media concepts require their matching delivery adapter.");
+  }
 
   const commentary = messageFor(draft as Draft);
   if (!commentary) throw new Error("LinkedIn content is empty.");
