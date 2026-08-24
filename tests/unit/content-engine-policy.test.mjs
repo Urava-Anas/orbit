@@ -40,7 +40,7 @@ test("Instagram copy and generated visual must both be reviewable before approva
   assert.match(publishGuard, /Instagram requires an approved public image/);
 });
 
-test("automatic Meta delivery is limited to verified Instagram and Facebook rails", async () => {
+test("automatic Meta delivery remains isolated to verified Instagram and Facebook rails", async () => {
   const [actions, worker, migration, oauth] = await Promise.all([
     read("src/app/(app)/dashboard/content/actions.ts"),
     read("src/app/api/internal/content-engine-worker/route.ts"),
@@ -57,6 +57,52 @@ test("automatic Meta delivery is limited to verified Instagram and Facebook rail
   assert.match(oauth, /pages_manage_posts/);
   assert.match(oauth, /instagram_content_publish/);
   assert.doesNotMatch(worker, /publishLinkedInJob|publishTikTokJob/);
+});
+
+test("LinkedIn member publishing is verified and isolated from TikTok", async () => {
+  const [start, callback, publisher, worker, migration] = await Promise.all([
+    read("src/app/api/integrations/oauth/[provider]/start/route.ts"),
+    read("src/app/api/integrations/oauth/[provider]/callback/route.ts"),
+    read("src/lib/content-engine-linkedin.ts"),
+    read("src/app/api/internal/content-engine-linkedin-worker/route.ts"),
+    read("supabase/migrations/20260824017000_content_engine_connection_and_linkedin_rails.sql"),
+  ]);
+
+  assert.match(start, /openid profile email w_member_social/);
+  assert.match(callback, /linkedin\.publish\.member/);
+  assert.match(callback, /kind:\s*"linkedin_member"/);
+  assert.match(publisher, /https:\/\/api\.linkedin\.com\/rest\/posts/);
+  assert.match(publisher, /X-Restli-Protocol-Version/);
+  assert.match(publisher, /x-restli-id/);
+  assert.match(worker, /claim_content_linkedin_publications/);
+  assert.match(worker, /CONTENT_PUBLISHING_ENABLED/);
+  assert.match(worker, /linkedinConnectionReady/);
+  assert.match(migration, /connection\.provider = 'linkedin'/);
+  assert.match(migration, /linkedin\.publish\.member/);
+  assert.doesNotMatch(worker, /publishTikTokJob/);
+});
+
+test("OAuth ledger accepts content providers while TikTok automatic publishing remains fail closed", async () => {
+  const [integration, start, callback, migration] = await Promise.all([
+    read("src/lib/integration-connections.ts"),
+    read("src/app/api/integrations/oauth/[provider]/start/route.ts"),
+    read("src/app/api/integrations/oauth/[provider]/callback/route.ts"),
+    read("supabase/migrations/20260824017000_content_engine_connection_and_linkedin_rails.sql"),
+  ]);
+
+  assert.match(integration, /\| "tiktok"/);
+  assert.match(integration, /TIKTOK_CLIENT_KEY/);
+  assert.match(start, /user\.info\.basic,video\.publish,video\.upload/);
+  assert.match(callback, /open\.tiktokapis\.com\/v2\/oauth\/token/);
+  assert.match(callback, /tiktok\.publish/);
+  assert.match(callback, /tiktok\.upload/);
+  assert.match(migration, /'google_search_console'/);
+  assert.match(migration, /'google_analytics'/);
+  assert.match(migration, /'meta'/);
+  assert.match(migration, /'linkedin'/);
+  assert.match(migration, /'tiktok'/);
+  assert.match(migration, /TikTok automatic publishing is gated/);
+  assert.doesNotMatch(migration, /claim_content_tiktok_publications/);
 });
 
 test("unsupported provider metrics are skipped rather than fabricated", async () => {
