@@ -27,6 +27,7 @@ as $$
 declare
   draft_channel text;
   draft_status text;
+  draft_format text;
   workspace_publishing_enabled boolean;
   has_ready_asset boolean;
 begin
@@ -34,8 +35,8 @@ begin
     return new;
   end if;
 
-  select d.channel, d.status
-    into draft_channel, draft_status
+  select d.channel, d.status, d.format
+    into draft_channel, draft_status, draft_format
   from public.content_drafts d
   where d.id = new.content_id
     and d.workspace_id = new.workspace_id;
@@ -73,6 +74,12 @@ begin
       when draft_channel = 'linkedin' then 'LinkedIn content must use the verified LinkedIn delivery rail.'
       else 'No verified automatic publishing adapter exists for this channel.'
     end;
+    return new;
+  end if;
+
+  if new.provider = 'linkedin' and lower(trim(draft_format)) not in ('post', 'text', 'text post') then
+    new.status := 'blocked';
+    new.last_error := 'LinkedIn automatic delivery currently supports founder-approved text posts only. Document or media concepts remain blocked until their matching delivery adapter exists.';
     return new;
   end if;
 
@@ -133,6 +140,7 @@ begin
     where p.provider = 'linkedin'
       and draft.channel = 'linkedin'
       and draft.status = 'approved'
+      and lower(trim(draft.format)) in ('post', 'text', 'text post')
       and profile.publishing_enabled = true
       and connection.status = 'connected'
       and coalesce(connection.metadata -> 'verifiedCapabilities', '[]'::jsonb) ? 'linkedin.publish.member'
@@ -212,4 +220,4 @@ select cron.schedule(
 );
 
 comment on function public.claim_content_linkedin_publications(integer) is
-  'Service-role-only atomic claim for due, founder-approved LinkedIn member posts with a verified connection capability.';
+  'Service-role-only atomic claim for due, founder-approved LinkedIn member text posts with a verified connection capability.';
