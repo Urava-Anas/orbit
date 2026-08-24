@@ -8,16 +8,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "64kb",
     },
   },
-  async redirects() {
-    return [
-      {
-        source: "/dashboard/plugins",
-        has: [{ type: "query", key: "connect", value: "meta" }],
-        destination: "/api/integrations/oauth/meta/start",
-        permanent: false,
-      },
-    ];
-  },
   async headers() {
     return [
       {
