@@ -328,7 +328,6 @@ export async function runAiGateway(input: {
         usage: result.usage,
         latencyMs,
         costMicrousd,
-        raw: result.raw,
       };
     } catch (error) {
       const failure = error instanceof Error ? error : new Error("AI provider failed.");
