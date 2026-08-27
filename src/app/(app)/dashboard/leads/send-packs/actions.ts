@@ -3,12 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { buildRecommendedSendPack } from "@/lib/growth/send-pack";
 import {
-  approveAndSendRecommendedPack,
-  buildRecommendedSendPack,
-} from "@/lib/growth/send-pack";
-import {
-  approveAndSendRelayPack,
+  approveAndSendPersistedPack,
   buildRelayRecommendedSendPack,
 } from "@/lib/relay/send-pack-binding";
 import { requireWorkspace } from "@/lib/workspace";
@@ -71,28 +68,25 @@ export async function buildSendPackAction(formData: FormData) {
 
 export async function approveAndSendPackAction(formData: FormData) {
   const parsed = z
-    .object({
-      sendPackId: z.string().uuid(),
-      relay: z.enum(["0", "1"]).default("0"),
-    })
-    .safeParse({
-      sendPackId: value(formData, "sendPackId"),
-      relay: value(formData, "relay") || "0",
-    });
+    .object({ sendPackId: z.string().uuid() })
+    .safeParse({ sendPackId: value(formData, "sendPackId") });
 
   if (!parsed.success) bounce("error", "Invalid send pack.");
 
   const { supabase, user, workspace } = await requireWorkspace();
 
   try {
-    const result = parsed.data.relay === "1"
-      ? await approveAndSendRelayPack(supabase, workspace.id, user.id, parsed.data.sendPackId)
-      : await approveAndSendRecommendedPack(supabase, workspace.id, user.id, parsed.data.sendPackId);
+    const result = await approveAndSendPersistedPack(
+      supabase,
+      workspace.id,
+      user.id,
+      parsed.data.sendPackId,
+    );
 
     bounce(
       result.status === "succeeded" ? "notice" : "error",
       result.status === "succeeded"
-        ? `Proposal sent through Orbit's governed sender${parsed.data.relay === "1" ? " using the validated Relay rendering" : ""}.`
+        ? "Proposal sent through Orbit's governed sender."
         : `Orbit blocked the send with status ${result.status}. Check Autopilot/provider controls.`,
     );
   } catch (error) {
