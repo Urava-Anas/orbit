@@ -26,52 +26,81 @@ type Intelligence = {
   recommended_offer: string | null;
 };
 
+type RelayTemplate = {
+  id: string;
+  name: string;
+  current_version: number;
+};
+
+type RelayVersion = {
+  id: string;
+  template_id: string;
+  version: number;
+};
+
 export default async function SendPacksPage({ searchParams }: PageProps) {
   const { supabase, workspace } = await requireWorkspace();
   const params = await searchParams;
 
-  const [leadsResult, intelligenceResult, plansResult, packsResult, configResult] =
-    await Promise.all([
-      supabase
-        .from("leads")
-        .select("id,name,company,email,whatsapp,phone,stage,lead_score")
-        .eq("workspace_id", workspace.id)
-        .not("stage", "in", '("won","lost")')
-        .order("updated_at", { ascending: false })
-        .limit(100),
-      supabase
-        .from("orbit_lead_intelligence")
-        .select("lead_id,total_score,qualification,recommended_offer")
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("pricing_plans")
-        .select(
-          "id,name,service_category,base_price,min_price,max_price,currency,pricing_type,requires_approval,version",
-        )
-        .eq("workspace_id", workspace.id)
-        .eq("status", "active")
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("orbit_recommended_send_packs")
-        .select(
-          "id,lead_id,pricing_plan_id,channel,proposal_title,pricing_snapshot,confidence,status,blocked_reason,action_request_id,created_at,sent_at",
-        )
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false })
-        .limit(30),
-      supabase
-        .from("orbit_autopilot_configs")
-        .select("state,mode,external_actions_enabled,kill_switch_engaged,blocked_reason")
-        .eq("workspace_id", workspace.id)
-        .maybeSingle(),
-    ]);
+  const [
+    leadsResult,
+    intelligenceResult,
+    plansResult,
+    packsResult,
+    configResult,
+    relayTemplatesResult,
+    relayVersionsResult,
+  ] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id,name,company,email,whatsapp,phone,stage,lead_score")
+      .eq("workspace_id", workspace.id)
+      .not("stage", "in", '("won","lost")')
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("orbit_lead_intelligence")
+      .select("lead_id,total_score,qualification,recommended_offer")
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("pricing_plans")
+      .select(
+        "id,name,service_category,base_price,min_price,max_price,currency,pricing_type,requires_approval,version",
+      )
+      .eq("workspace_id", workspace.id)
+      .eq("status", "active")
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("orbit_recommended_send_packs")
+      .select(
+        "id,lead_id,pricing_plan_id,channel,proposal_title,pricing_snapshot,content_snapshot,confidence,status,blocked_reason,action_request_id,created_at,sent_at",
+      )
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("orbit_autopilot_configs")
+      .select("state,mode,external_actions_enabled,kill_switch_engaged,blocked_reason")
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("relay_templates")
+      .select("id,name,current_version")
+      .eq("workspace_id", workspace.id)
+      .eq("status", "active")
+      .eq("category", "proposal")
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("relay_template_versions")
+      .select("id,template_id,version")
+      .eq("workspace_id", workspace.id)
+      .order("version", { ascending: false }),
+  ]);
 
   const intelligenceByLead = new Map<string, Intelligence>();
   for (const row of (intelligenceResult.data ?? []) as Intelligence[]) {
-    if (!intelligenceByLead.has(row.lead_id)) {
-      intelligenceByLead.set(row.lead_id, row);
-    }
+    if (!intelligenceByLead.has(row.lead_id)) intelligenceByLead.set(row.lead_id, row);
   }
 
   const eligibleLeads = (leadsResult.data ?? []).filter((lead) => {
@@ -80,11 +109,21 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
   });
   const plans = plansResult.data ?? [];
   const packs = packsResult.data ?? [];
+  const relayVersions = (relayVersionsResult.data ?? []) as RelayVersion[];
+  const relayTemplates = (relayTemplatesResult.data ?? []) as RelayTemplate[];
+  const relayTemplateOptions = relayTemplates.flatMap((template) => {
+    const version = relayVersions.find(
+      (candidate) =>
+        candidate.template_id === template.id &&
+        candidate.version === template.current_version,
+    );
+    return version
+      ? [{ id: version.id, label: `${template.name} · v${version.version}` }]
+      : [];
+  });
+
   const leadNames = new Map(
-    (leadsResult.data ?? []).map((lead) => [
-      lead.id,
-      lead.company ?? lead.name,
-    ]),
+    (leadsResult.data ?? []).map((lead) => [lead.id, lead.company ?? lead.name]),
   );
   const planNames = new Map(plans.map((plan) => [plan.id, plan.name]));
   const config = configResult.data;
@@ -98,8 +137,8 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
           </Link>
           <h1>Commercial Send Packs</h1>
           <p>
-            Qualified lead → approved pricing → proposal → founder-approved send →
-            controlled follow-up.
+            Qualified lead → approved pricing → Relay rendering → proposal →
+            founder-approved send → controlled follow-up.
           </p>
         </div>
         <span className={styles.badge}>
@@ -134,7 +173,7 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
             <span className={styles.icon}><Sparkles size={18} /></span>
             <div>
               <h2>Build recommended pack</h2>
-              <p>Orbit refuses to invent pricing or bypass qualification.</p>
+              <p>Orbit refuses to invent pricing, bypass qualification, or send unresolved Relay variables.</p>
             </div>
           </div>
         </div>
@@ -142,10 +181,7 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
         {!plans.length ? (
           <div className={styles.blocker}>
             <strong>No active pricing plans.</strong>
-            <p>
-              This engine is correctly blocked until Urava publishes approved pricing
-              truth. No amount will be invented by the system.
-            </p>
+            <p>This engine is blocked until approved pricing truth exists.</p>
           </div>
         ) : null}
 
@@ -153,6 +189,16 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
           <div className={styles.blocker}>
             <strong>No qualified leads with persisted intelligence.</strong>
             <p>Run Lead Intelligence / qualification before building a send pack.</p>
+          </div>
+        ) : null}
+
+        {!relayTemplateOptions.length ? (
+          <div className={styles.blocker}>
+            <strong>No active Relay proposal template.</strong>
+            <p>
+              Plain-text Send Packs still work. Activate a Relay proposal template
+              to render validated HTML and text from the canonical template schema.
+            </p>
           </div>
         ) : null}
 
@@ -186,6 +232,15 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
             </select>
           </label>
           <label>
+            <span>Relay proposal template</span>
+            <select name="relayTemplateVersionId" defaultValue="">
+              <option value="">Plain-text fallback</option>
+              {relayTemplateOptions.map((template) => (
+                <option value={template.id} key={template.id}>{template.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             <span>Channel</span>
             <select name="channel" defaultValue="auto">
               <option value="auto">Auto — prefer verified email</option>
@@ -193,10 +248,7 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
               <option value="whatsapp">WhatsApp</option>
             </select>
           </label>
-          <button
-            type="submit"
-            disabled={!plans.length || !eligibleLeads.length}
-          >
+          <button type="submit" disabled={!plans.length || !eligibleLeads.length}>
             <Sparkles size={16} /> Build pack
           </button>
         </form>
@@ -215,14 +267,21 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
 
         <div className={styles.cards}>
           {packs.map((pack) => {
-            const snapshot =
+            const pricing =
               pack.pricing_snapshot &&
               typeof pack.pricing_snapshot === "object" &&
               !Array.isArray(pack.pricing_snapshot)
                 ? (pack.pricing_snapshot as Record<string, unknown>)
                 : {};
-            const currency = String(snapshot.currency ?? "");
-            const selected = Number(snapshot.base_price ?? 0);
+            const content =
+              pack.content_snapshot &&
+              typeof pack.content_snapshot === "object" &&
+              !Array.isArray(pack.content_snapshot)
+                ? (pack.content_snapshot as Record<string, unknown>)
+                : {};
+            const currency = String(pricing.currency ?? "");
+            const selected = Number(pricing.base_price ?? 0);
+            const relay = Boolean(content.relay_template_version_id);
             const canSend = ["waiting_approval", "ready"].includes(pack.status);
             return (
               <article className={styles.card} key={pack.id}>
@@ -232,21 +291,18 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
                     <h3>{pack.proposal_title}</h3>
                     <p>
                       {leadNames.get(pack.lead_id) ?? "Lead"} ·{" "}
-                      {planNames.get(pack.pricing_plan_id) ?? String(snapshot.name ?? "Pricing plan")}
+                      {planNames.get(pack.pricing_plan_id) ?? String(pricing.name ?? "Pricing plan")}
                     </p>
                   </div>
-                  <strong>
-                    {currency ? formatMoney(selected, currency) : "Priced"}
-                  </strong>
+                  <strong>{currency ? formatMoney(selected, currency) : "Priced"}</strong>
                 </div>
                 <div className={styles.meta}>
                   <span>{humanize(pack.channel)}</span>
                   <span>{pack.confidence}% confidence</span>
+                  {relay ? <span>Relay v{String(content.relay_template_version ?? "")}</span> : <span>Plain text</span>}
                   <span>{new Date(pack.created_at).toLocaleDateString("en-PK", { timeZone: "Asia/Karachi" })}</span>
                 </div>
-                {pack.blocked_reason ? (
-                  <p className={styles.reason}>{pack.blocked_reason}</p>
-                ) : null}
+                {pack.blocked_reason ? <p className={styles.reason}>{pack.blocked_reason}</p> : null}
                 {pack.status === "sent" ? (
                   <div className={styles.sent}>
                     <CheckCircle2 size={16} /> Sent through governed Stage 4
@@ -254,6 +310,7 @@ export default async function SendPacksPage({ searchParams }: PageProps) {
                 ) : canSend ? (
                   <form action={approveAndSendPackAction}>
                     <input type="hidden" name="sendPackId" value={pack.id} />
+                    <input type="hidden" name="relay" value={relay ? "1" : "0"} />
                     <button className={styles.sendButton} type="submit">
                       <Send size={15} /> Approve & Send
                     </button>
