@@ -7,7 +7,10 @@ import {
   executeStageFourAction,
   requestStageFourAction,
 } from "@/lib/agents/stage4-runtime";
-import { buildRecommendedSendPack } from "@/lib/growth/send-pack";
+import {
+  approveAndSendRecommendedPack,
+  buildRecommendedSendPack,
+} from "@/lib/growth/send-pack";
 import { recordCompanyEventBestEffort } from "@/lib/memory/store";
 import {
   renderRelayTemplate,
@@ -83,7 +86,9 @@ export async function buildRelayRecommendedSendPack(
     .eq("id", versionResult.data.template_id)
     .single();
   if (templateResult.error || !templateResult.data) throw new Error("Relay template was not found.");
-  if (templateResult.data.status !== "active") throw new Error("Relay template must be active before it can be used in a Send Pack.");
+  if (templateResult.data.status !== "active") {
+    throw new Error("Relay template must be active before it can be used in a Send Pack.");
+  }
   if (templateResult.data.category !== "proposal") {
     throw new Error("Commercial proposal Send Packs require a Relay proposal template.");
   }
@@ -92,6 +97,10 @@ export async function buildRelayRecommendedSendPack(
   }
 
   const lead = leadResult.data;
+  if (!lead.email?.trim()) {
+    throw new Error("Relay email Send Packs require a lead with a verified email destination.");
+  }
+
   const plan = planResult.data;
   const scope = list(plan.included_features);
   const selectedPrice = Number(plan.base_price);
@@ -111,8 +120,13 @@ export async function buildRelayRecommendedSendPack(
   };
 
   const renderedSubject = resolveRelayVariables(templateResult.data.subject_template, values);
-  const rendered = renderRelayTemplate(versionResult.data.schema as RelayTemplateSchema, values);
-  const missing = [...new Set([...renderedSubject.missing, ...rendered.missingVariables])];
+  const rendered = renderRelayTemplate(
+    versionResult.data.schema as RelayTemplateSchema,
+    values,
+  );
+  const missing = [
+    ...new Set([...renderedSubject.missing, ...rendered.missingVariables]),
+  ];
   if (missing.length) {
     throw new Error(`Relay template is missing required values: ${missing.join(", ")}.`);
   }
@@ -122,6 +136,9 @@ export async function buildRelayRecommendedSendPack(
     pricingPlanId: input.pricingPlanId,
     channel: "email",
   });
+  if (pack.channel !== "email") {
+    throw new Error("Orbit did not preserve the required email channel for this Relay Send Pack.");
+  }
 
   const proposalUpdate = await client
     .from("orbit_proposal_drafts")
@@ -180,32 +197,34 @@ export async function buildRelayRecommendedSendPack(
   };
 }
 
-export async function approveAndSendRelayPack(
+async function approveAndSendRelayPack(
   client: SupabaseClient,
   workspaceId: string,
   actorId: string,
   sendPackId: string,
+  proposalId: string,
 ) {
   const pack = await client
     .from("orbit_recommended_send_packs")
-    .select("id,lead_id,opportunity_id,channel,recommendation_basis,status,action_request_id")
+    .select("id,lead_id,opportunity_id,channel,status,action_request_id")
     .eq("workspace_id", workspaceId)
     .eq("id", sendPackId)
     .single();
   if (pack.error || !pack.data) throw new Error("Recommended send pack was not found.");
   if (pack.data.status === "sent") {
-    return { sendPackId, status: "sent" as const, actionRequestId: pack.data.action_request_id as string | null, reused: true };
+    return {
+      sendPackId,
+      status: "sent" as const,
+      actionRequestId: pack.data.action_request_id as string | null,
+      reused: true,
+    };
   }
   if (!["waiting_approval", "ready"].includes(pack.data.status)) {
     throw new Error(`Send pack cannot be approved from status ${pack.data.status}.`);
   }
-
-  const basis = pack.data.recommendation_basis && typeof pack.data.recommendation_basis === "object" && !Array.isArray(pack.data.recommendation_basis)
-    ? pack.data.recommendation_basis as Record<string, unknown>
-    : {};
-  const proposalId = String(basis.proposal_id || "");
-  if (!proposalId) throw new Error("Send pack is missing its proposal artifact.");
-  if (pack.data.channel !== "email") throw new Error("Relay-rendered Send Packs currently support governed email only.");
+  if (pack.data.channel !== "email") {
+    throw new Error("Relay-rendered Send Packs currently support governed email only.");
+  }
 
   const proposal = await client
     .from("orbit_proposal_drafts")
@@ -213,8 +232,14 @@ export async function approveAndSendRelayPack(
     .eq("workspace_id", workspaceId)
     .eq("id", proposalId)
     .single();
-  if (proposal.error || !proposal.data?.relay_template_version_id || !proposal.data.relay_rendered_html || !proposal.data.relay_rendered_text) {
-    throw new Error("Proposal does not contain a validated Relay rendering.");
+  if (
+    proposal.error ||
+    !proposal.data?.relay_template_version_id ||
+    !proposal.data.relay_rendered_subject ||
+    !proposal.data.relay_rendered_html ||
+    !proposal.data.relay_rendered_text
+  ) {
+    throw new Error("Proposal does not contain a complete validated Relay rendering.");
   }
 
   const request = await requestStageFourAction(client, workspaceId, actorId, {
@@ -224,20 +249,35 @@ export async function approveAndSendRelayPack(
     channel: "email",
     idempotencyKey: `send-pack:${sendPackId}:proposal`,
   });
-  const actionRequestId = "actionRequestId" in request
-    ? String(request.actionRequestId)
-    : "id" in request
-      ? String(request.id)
-      : "";
-  if (!actionRequestId) throw new Error("Stage 4 did not return an external action request.");
+
+  if (request.status !== "waiting_approval") {
+    throw new Error(
+      `Relay proposal sending requires a fresh manual founder approval; Stage 4 returned ${request.status}.`,
+    );
+  }
+
+  const actionRequestId =
+    "actionRequestId" in request
+      ? String(request.actionRequestId)
+      : "id" in request
+        ? String(request.id)
+        : "";
+  if (!actionRequestId) {
+    throw new Error("Stage 4 did not return an external action request.");
+  }
 
   const action = await client
     .from("orbit_external_action_requests")
-    .select("id,capability_key,channel,destination,artifact_refs,payload,approval_id")
+    .select("id,status,capability_key,channel,destination,artifact_refs,payload,approval_id")
     .eq("workspace_id", workspaceId)
     .eq("id", actionRequestId)
     .single();
-  if (action.error || !action.data) throw new Error("Stage 4 action request could not be loaded for Relay binding.");
+  if (action.error || !action.data) {
+    throw new Error("Stage 4 action request could not be loaded for Relay binding.");
+  }
+  if (action.data.status !== "waiting_approval" || !action.data.approval_id) {
+    throw new Error("Relay rendering can only bind to a pending manual Stage 4 approval.");
+  }
 
   const payload = {
     ...(action.data.payload as Record<string, unknown>),
@@ -258,50 +298,67 @@ export async function approveAndSendRelayPack(
     .from("orbit_external_action_requests")
     .update({ payload, payload_hash: payloadHash })
     .eq("workspace_id", workspaceId)
-    .eq("id", actionRequestId);
-  if (actionUpdate.error) throw new Error(`Bind Relay rendering to Stage 4 action: ${actionUpdate.error.message}`);
+    .eq("id", actionRequestId)
+    .eq("status", "waiting_approval");
+  if (actionUpdate.error) {
+    throw new Error(`Bind Relay rendering to Stage 4 action: ${actionUpdate.error.message}`);
+  }
 
-  if (action.data.approval_id) {
-    const approvalResult = await client
-      .from("orbit_agent_approvals")
-      .select("proposed_payload")
-      .eq("workspace_id", workspaceId)
-      .eq("id", action.data.approval_id)
-      .single();
-    if (approvalResult.error) throw new Error(`Load Stage 4 approval payload: ${approvalResult.error.message}`);
-    const proposed = approvalResult.data?.proposed_payload && typeof approvalResult.data.proposed_payload === "object" && !Array.isArray(approvalResult.data.proposed_payload)
-      ? approvalResult.data.proposed_payload as Record<string, unknown>
+  const approvalResult = await client
+    .from("orbit_agent_approvals")
+    .select("proposed_payload,status")
+    .eq("workspace_id", workspaceId)
+    .eq("id", action.data.approval_id)
+    .single();
+  if (approvalResult.error || approvalResult.data?.status !== "pending") {
+    throw new Error("Stage 4 founder approval is no longer pending for Relay binding.");
+  }
+  const proposed =
+    approvalResult.data.proposed_payload &&
+    typeof approvalResult.data.proposed_payload === "object" &&
+    !Array.isArray(approvalResult.data.proposed_payload)
+      ? (approvalResult.data.proposed_payload as Record<string, unknown>)
       : {};
-    const approvalUpdate = await client
-      .from("orbit_agent_approvals")
-      .update({ proposed_payload: { ...proposed, payloadHash, relayTemplateVersionId: proposal.data.relay_template_version_id } })
-      .eq("workspace_id", workspaceId)
-      .eq("id", action.data.approval_id);
-    if (approvalUpdate.error) throw new Error(`Update Stage 4 approval payload: ${approvalUpdate.error.message}`);
+  const approvalUpdate = await client
+    .from("orbit_agent_approvals")
+    .update({
+      proposed_payload: {
+        ...proposed,
+        payloadHash,
+        relayTemplateVersionId: proposal.data.relay_template_version_id,
+      },
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("id", action.data.approval_id)
+    .eq("status", "pending");
+  if (approvalUpdate.error) {
+    throw new Error(`Update Stage 4 approval payload: ${approvalUpdate.error.message}`);
   }
 
   await client
     .from("orbit_recommended_send_packs")
-    .update({ action_request_id: actionRequestId, status: request.status === "waiting_approval" ? "waiting_approval" : "queued" })
+    .update({ action_request_id: actionRequestId, status: "waiting_approval" })
     .eq("workspace_id", workspaceId)
     .eq("id", sendPackId);
 
-  if (request.status === "waiting_approval") {
-    await decideStageFourAction(client, workspaceId, actorId, {
-      actionRequestId,
-      decision: "approved",
-      reason: "Founder explicitly approved the validated Relay rendering for this Send Pack.",
-    });
-  }
+  await decideStageFourAction(client, workspaceId, actorId, {
+    actionRequestId,
+    decision: "approved",
+    reason: "Founder explicitly approved the validated Relay rendering for this Send Pack.",
+  });
 
-  const execution = await executeStageFourAction(client, workspaceId, actorId, { actionRequestId });
+  const execution = await executeStageFourAction(client, workspaceId, actorId, {
+    actionRequestId,
+  });
   const succeeded = execution.status === "succeeded";
   await client
     .from("orbit_recommended_send_packs")
     .update({
       status: succeeded ? "sent" : "blocked",
       sent_at: succeeded ? new Date().toISOString() : null,
-      blocked_reason: succeeded ? null : `Stage 4 execution ended with status ${execution.status}.`,
+      blocked_reason: succeeded
+        ? null
+        : `Stage 4 execution ended with status ${execution.status}.`,
     })
     .eq("workspace_id", workspaceId)
     .eq("id", sendPackId);
@@ -322,5 +379,59 @@ export async function approveAndSendRelayPack(
     },
   });
 
-  return { sendPackId, actionRequestId, status: execution.status, externalActionExecuted: execution.externalActionExecuted };
+  return {
+    sendPackId,
+    actionRequestId,
+    status: execution.status,
+    externalActionExecuted: execution.externalActionExecuted,
+  };
+}
+
+export async function approveAndSendPersistedPack(
+  client: SupabaseClient,
+  workspaceId: string,
+  actorId: string,
+  sendPackId: string,
+) {
+  const pack = await client
+    .from("orbit_recommended_send_packs")
+    .select("id,recommendation_basis")
+    .eq("workspace_id", workspaceId)
+    .eq("id", sendPackId)
+    .single();
+  if (pack.error || !pack.data) throw new Error("Recommended send pack was not found.");
+
+  const basis =
+    pack.data.recommendation_basis &&
+    typeof pack.data.recommendation_basis === "object" &&
+    !Array.isArray(pack.data.recommendation_basis)
+      ? (pack.data.recommendation_basis as Record<string, unknown>)
+      : {};
+  const proposalId = String(basis.proposal_id || "");
+  if (!proposalId) throw new Error("Send pack is missing its proposal artifact.");
+
+  const proposal = await client
+    .from("orbit_proposal_drafts")
+    .select("id,relay_template_version_id")
+    .eq("workspace_id", workspaceId)
+    .eq("id", proposalId)
+    .single();
+  if (proposal.error || !proposal.data) throw new Error("Send pack proposal was not found.");
+
+  if (proposal.data.relay_template_version_id) {
+    return approveAndSendRelayPack(
+      client,
+      workspaceId,
+      actorId,
+      sendPackId,
+      proposalId,
+    );
+  }
+
+  return approveAndSendRecommendedPack(
+    client,
+    workspaceId,
+    actorId,
+    sendPackId,
+  );
 }
