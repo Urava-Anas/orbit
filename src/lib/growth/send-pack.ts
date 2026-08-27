@@ -1,6 +1,12 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { stageThreeAgentCatalog } from "@/lib/agents/catalog";
+import {
+  createAgentRun,
+  enqueueAgentTask,
+  registerAgentDefinition,
+} from "@/lib/agents/store";
 import {
   decideStageFourAction,
   executeStageFourAction,
@@ -57,6 +63,105 @@ function priceShape(plan: {
     throw new Error("Pricing plan is missing a valid approved price range.");
   }
   return { base, min, max };
+}
+
+
+async function artifactContext(
+  client: SupabaseClient,
+  workspaceId: string,
+  actorId: string,
+  agentKey: "outreach" | "follow_up" | "proposal",
+  capabilityKey: string,
+  taskType: string,
+  title: string,
+  idempotencyKey: string,
+) {
+  for (const definition of stageThreeAgentCatalog) {
+    await registerAgentDefinition(client, workspaceId, actorId, definition);
+  }
+
+  const agent = await client
+    .from("orbit_agents")
+    .select("id,status")
+    .eq("workspace_id", workspaceId)
+    .eq("agent_key", agentKey)
+    .single();
+  if (agent.error || !agent.data || agent.data.status !== "active") {
+    throw new Error(`Orbit agent ${agentKey} is unavailable.`);
+  }
+
+  const permission = await client
+    .from("orbit_agent_permissions")
+    .select("effect,authority_level")
+    .eq("workspace_id", workspaceId)
+    .eq("agent_id", agent.data.id)
+    .eq("capability_key", capabilityKey)
+    .single();
+  if (
+    permission.error ||
+    !permission.data ||
+    permission.data.effect !== "allow" ||
+    permission.data.authority_level !== "green"
+  ) {
+    throw new Error(
+      `${agentKey} is not green-authorized for ${capabilityKey}.`,
+    );
+  }
+
+  const run = await createAgentRun(client, workspaceId, actorId, {
+    agentKey,
+    triggerType: "manual",
+    input: { workflow: "commercial_send_pack", externalActionsEnabled: false },
+    idempotencyKey: `${idempotencyKey}:run`,
+  });
+
+  const task = await enqueueAgentTask(client, workspaceId, {
+    runId: run.id,
+    assignedAgentKey: agentKey,
+    capabilityKey,
+    taskType,
+    title,
+    riskLevel: "green",
+    priority: 90,
+    input: { workflow: "commercial_send_pack", externalActionsEnabled: false },
+    idempotencyKey: `${idempotencyKey}:task`,
+  });
+
+  const now = new Date().toISOString();
+  const [runUpdate, taskUpdate] = await Promise.all([
+    client
+      .from("orbit_agent_runs")
+      .update({
+        status: "succeeded",
+        started_at: now,
+        completed_at: now,
+        output: { workflow: "commercial_send_pack", artifactPrepared: true },
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("id", run.id),
+    client
+      .from("orbit_agent_tasks")
+      .update({
+        status: "succeeded",
+        attempts: 1,
+        completed_at: now,
+        output: { workflow: "commercial_send_pack", artifactPrepared: true },
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("id", task.id),
+  ]);
+  if (runUpdate.error) {
+    throw new Error(`Complete artifact run: ${runUpdate.error.message}`);
+  }
+  if (taskUpdate.error) {
+    throw new Error(`Complete artifact task: ${taskUpdate.error.message}`);
+  }
+
+  return {
+    runId: run.id,
+    taskId: task.id,
+    agentId: String(agent.data.id),
+  };
 }
 
 async function ensureOpportunity(
@@ -207,12 +312,72 @@ export async function buildRecommendedSendPack(
     "Any work outside the approved included features requires a revised scope.",
   ];
 
+  const baseKey = `send-pack:${lead.id}:${plan.id}:${plan.version}`;
+
+  const outreachCtx = await artifactContext(
+    client,
+    workspaceId,
+    actorId,
+    "outreach",
+    "growth.outreach_draft",
+    "commercial_send_pack_outreach",
+    `Prepare commercial message for ${lead.company ?? lead.name}`,
+    `${baseKey}:outreach`,
+  );
+
+  const outreach = await client
+    .from("orbit_outreach_drafts")
+    .insert({
+      workspace_id: workspaceId,
+      lead_id: lead.id,
+      intelligence_id: null,
+      run_id: outreachCtx.runId,
+      task_id: outreachCtx.taskId,
+      agent_id: outreachCtx.agentId,
+      channel,
+      subject,
+      body: messageBody,
+      status: "approved",
+      personalization_basis: {
+        pain_point: lead.pain_point,
+        niche: lead.niche,
+        pricing_plan_id: plan.id,
+      },
+      generation_mode: "deterministic_fallback",
+      model_provider: null,
+      model_name: null,
+      external_send_enabled: false,
+      created_by: actorId,
+    })
+    .select("id")
+    .single();
+
+  if (outreach.error || !outreach.data) {
+    throw new Error(
+      `Create outreach draft: ${outreach.error?.message ?? "not returned"}`,
+    );
+  }
+
+  const proposalCtx = await artifactContext(
+    client,
+    workspaceId,
+    actorId,
+    "proposal",
+    "growth.proposal_draft",
+    "commercial_send_pack_proposal",
+    `Prepare priced proposal for ${lead.company ?? lead.name}`,
+    `${baseKey}:proposal`,
+  );
+
   const proposal = await client
     .from("orbit_proposal_drafts")
     .insert({
       workspace_id: workspaceId,
       opportunity_id: opportunityId,
       lead_id: lead.id,
+      run_id: proposalCtx.runId,
+      task_id: proposalCtx.taskId,
+      agent_id: proposalCtx.agentId,
       title: proposalTitle.slice(0, 240),
       scope,
       price_min: min,
@@ -235,21 +400,16 @@ export async function buildRecommendedSendPack(
     );
   }
 
-  const pain = lead.pain_point?.trim();
-  const messageBody = [
-    `Hi ${lead.name},`,
-    pain
-      ? `Based on what we can see, the main opportunity is: ${pain}.`
-      : `I put together a focused ${plan.service_category} proposal for ${lead.company ?? lead.name}.`,
-    `The recommended package is ${plan.name}, with an approved range of ${plan.currency} ${min}–${max}.`,
-    `Core scope: ${scope.join(", ")}.`,
-    "If the direction makes sense, reply and we can lock the exact scope and next step.",
-  ].join("\n\n");
-
-  const subject =
-    channel === "email"
-      ? `${plan.name} proposal for ${lead.company ?? lead.name}`.slice(0, 240)
-      : null;
+  const followupCtx = await artifactContext(
+    client,
+    workspaceId,
+    actorId,
+    "follow_up",
+    "growth.followup_plan",
+    "commercial_send_pack_followup",
+    `Prepare follow-up sequence for ${lead.company ?? lead.name}`,
+    `${baseKey}:followup`,
+  );
 
   const followup = await client
     .from("orbit_followup_plans")
@@ -257,7 +417,10 @@ export async function buildRecommendedSendPack(
       workspace_id: workspaceId,
       opportunity_id: opportunityId,
       lead_id: lead.id,
-      outreach_draft_id: null,
+      outreach_draft_id: outreach.data.id,
+      run_id: followupCtx.runId,
+      task_id: followupCtx.taskId,
+      agent_id: followupCtx.agentId,
       channel,
       sequence: [
         { touch: 1, delayHours: 24 },
@@ -331,6 +494,8 @@ export async function buildRecommendedSendPack(
       lead_id: lead.id,
       opportunity_id: opportunityId,
       pricing_plan_id: plan.id,
+      outreach_draft_id: outreach.data.id,
+      outreach_draft_id: outreach.data.id,
       proposal_id: proposal.data.id,
       followup_plan_id: followup.data.id,
       channel,
