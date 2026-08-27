@@ -195,7 +195,6 @@ export const stageFourCapabilityOwner: Record<StageFourExternalCapability, strin
 export const stageFourPolicyEligibleCapabilities = new Set<StageFourExternalCapability>([
   "growth.outreach_send",
   "growth.followup_send",
-  "growth.proposal_send",
   "cash.payment_request",
   "growth.referral_send",
 ]);
@@ -209,6 +208,7 @@ export const stageFourGatewayCapabilities = new Set<StageFourExternalCapability>
 ]);
 
 export const stageFourFounderOnlyCapabilities = new Set<StageFourExternalCapability>([
+  "growth.proposal_send",
   "cash.payment_collect",
   "delivery.project_activate",
   "proof.publish",
