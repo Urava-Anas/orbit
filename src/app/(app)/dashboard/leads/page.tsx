@@ -19,8 +19,9 @@ import {
   UsersRound,
 } from "lucide-react";
 import { Notice } from "@/components/Notice";
-import { humanize } from "@/lib/format";
+import { formatDate, humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
+import approvedStyles from "./ApprovedLeads.module.css";
 import styles from "./leads.module.css";
 
 export const metadata: Metadata = {
@@ -40,7 +41,14 @@ const sourceCards = [
 ] as const;
 
 type PageProps = {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    notice?: string;
+    approved_q?: string;
+    approved_source?: string;
+    approved_stage?: string;
+    approved_sort?: string;
+  }>;
 };
 
 type LeadActivity = {
@@ -61,6 +69,31 @@ type LeadEngineSummary = {
   total: number;
   sources: Record<string, number>;
   flow: number[];
+};
+
+type ApprovedLeadMemory = {
+  lead_id: string | null;
+  decided_at: string | null;
+};
+
+type ApprovedLead = {
+  id: string;
+  name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  contact_person: string | null;
+  contact_role: string | null;
+  source: string;
+  stage: string;
+  niche: string | null;
+  lead_score: number | null;
+  next_action: string | null;
+  created_at: string;
+};
+
+type ApprovedLeadRow = ApprovedLead & {
+  approved_at: string | null;
 };
 
 const emptySummary: LeadEngineSummary = {
@@ -86,6 +119,21 @@ function asSummary(value: unknown): LeadEngineSummary {
   };
 }
 
+function approvedLeadInitials(lead: ApprovedLead) {
+  return (lead.company ?? lead.name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "L";
+}
+
+function leadSourceLabel(source: string) {
+  if (source === "local_search" || source === "google") return "Local Search";
+  const sourceCard = sourceCards.find((card) => card.slug === source);
+  return sourceCard?.label ?? humanize(source);
+}
+
 export default async function LeadsPage({ searchParams }: PageProps) {
   const { supabase, workspace } = await requireWorkspace();
   const params = await searchParams;
@@ -93,7 +141,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   monthStart.setHours(0, 0, 0, 0);
   monthStart.setDate(1);
 
-  const [summaryResult, activityResult, autopilotResult, activeProjectResult, emailActionResult] = await Promise.all([
+  const [summaryResult, activityResult, autopilotResult, activeProjectResult, emailActionResult, approvedMemoryResult] = await Promise.all([
     supabase.rpc("get_lead_engine_summary", { p_workspace_id: workspace.id }),
     supabase
       .from("lead_activities")
@@ -118,6 +166,13 @@ export default async function LeadsPage({ searchParams }: PageProps) {
       .eq("channel", "email")
       .in("status", ["completed", "sent", "succeeded"])
       .gte("created_at", monthStart.toISOString()),
+    supabase
+      .from("lead_finder_place_memory")
+      .select("lead_id,decided_at")
+      .eq("workspace_id", workspace.id)
+      .eq("decision", "approved")
+      .order("decided_at", { ascending: false })
+      .limit(100),
   ]);
 
   const summary = summaryResult.error ? emptySummary : asSummary(summaryResult.data);
@@ -134,6 +189,46 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   const autopilotState = autopilot?.state ? humanize(autopilot.state) : "Not configured";
   const health = autopilot?.blocked_reason ? "Needs attention" : autopilot ? "Healthy" : "Setup required";
   const activeSources = sourceCards.filter((card) => (summary.sources[card.slug] ?? 0) > 0).length;
+
+  const approvedMemories = ((approvedMemoryResult.data ?? []) as ApprovedLeadMemory[])
+    .filter((item): item is ApprovedLeadMemory & { lead_id: string } => Boolean(item.lead_id));
+  const approvedIds = Array.from(new Set(approvedMemories.map((item) => item.lead_id)));
+  let approvedLeadData: ApprovedLead[] = [];
+  if (approvedIds.length) {
+    const result = await supabase
+      .from("leads")
+      .select("id,name,company,email,phone,contact_person,contact_role,source,stage,niche,lead_score,next_action,created_at")
+      .eq("workspace_id", workspace.id)
+      .in("id", approvedIds);
+    approvedLeadData = (result.data ?? []) as ApprovedLead[];
+  }
+
+  const approvedById = new Map(approvedLeadData.map((lead) => [lead.id, lead]));
+  const allApprovedLeads: ApprovedLeadRow[] = approvedMemories.flatMap((memory) => {
+    const lead = approvedById.get(memory.lead_id);
+    return lead ? [{ ...lead, approved_at: memory.decided_at }] : [];
+  });
+
+  const approvedQuery = params.approved_q?.trim().toLowerCase() ?? "";
+  const approvedSource = params.approved_source?.trim() ?? "";
+  const approvedStage = params.approved_stage?.trim() ?? "";
+  const approvedSort = params.approved_sort === "score" || params.approved_sort === "name" ? params.approved_sort : "newest";
+  const approvedSources = Array.from(new Set(allApprovedLeads.map((lead) => lead.source))).sort((a, b) => leadSourceLabel(a).localeCompare(leadSourceLabel(b)));
+  const approvedStages = Array.from(new Set(allApprovedLeads.map((lead) => lead.stage))).sort((a, b) => humanize(a).localeCompare(humanize(b)));
+  const filteredApprovedLeads = allApprovedLeads
+    .filter((lead) => {
+      if (approvedSource && lead.source !== approvedSource) return false;
+      if (approvedStage && lead.stage !== approvedStage) return false;
+      if (!approvedQuery) return true;
+      return [lead.company, lead.name, lead.contact_person, lead.email, lead.phone, lead.niche, lead.next_action]
+        .some((value) => value?.toLowerCase().includes(approvedQuery));
+    })
+    .sort((a, b) => {
+      if (approvedSort === "score") return (b.lead_score ?? -1) - (a.lead_score ?? -1);
+      if (approvedSort === "name") return (a.company ?? a.name).localeCompare(b.company ?? b.name);
+      return new Date(b.approved_at ?? b.created_at).getTime() - new Date(a.approved_at ?? a.created_at).getTime();
+    });
+  const hasApprovedFilters = Boolean(approvedQuery || approvedSource || approvedStage || approvedSort !== "newest");
 
   return (
     <main className={styles.enginePage}>
@@ -223,6 +318,91 @@ export default async function LeadsPage({ searchParams }: PageProps) {
               <Sparkles size={15} aria-hidden="true" />
               <span>Orbit can run approved acquisition work automatically. Founder attention stays on exceptions and red-authority decisions.</span>
             </div>
+          </section>
+
+          <section className={approvedStyles.panel} id="approved-leads" aria-labelledby="approved-leads-title">
+            <div className={approvedStyles.heading}>
+              <div>
+                <div className={approvedStyles.titleLine}>
+                  <h2 id="approved-leads-title">Approved Leads</h2>
+                  <span className={approvedStyles.count}>{allApprovedLeads.length}</span>
+                </div>
+                <p>Founder-approved opportunities ready for outreach and the next Lead Engine action.</p>
+              </div>
+              <Link href="/dashboard/leads/sources/google">View Local Search <ArrowRight size={14} aria-hidden="true" /></Link>
+            </div>
+
+            <form className={approvedStyles.filters} action="/dashboard/leads#approved-leads" method="get">
+              <label className={approvedStyles.searchBox}>
+                <Search size={14} aria-hidden="true" />
+                <input name="approved_q" type="search" defaultValue={params.approved_q ?? ""} placeholder="Search approved leads…" aria-label="Search approved leads" />
+              </label>
+              <select name="approved_source" defaultValue={approvedSource} aria-label="Filter approved leads by source">
+                <option value="">All sources</option>
+                {approvedSources.map((source) => <option key={source} value={source}>{leadSourceLabel(source)}</option>)}
+              </select>
+              <select name="approved_stage" defaultValue={approvedStage} aria-label="Filter approved leads by stage">
+                <option value="">All stages</option>
+                {approvedStages.map((stage) => <option key={stage} value={stage}>{humanize(stage)}</option>)}
+              </select>
+              <select name="approved_sort" defaultValue={approvedSort} aria-label="Sort approved leads">
+                <option value="newest">Newest approved</option>
+                <option value="score">Highest score</option>
+                <option value="name">Name A–Z</option>
+              </select>
+              <button type="submit">Apply</button>
+              {hasApprovedFilters ? <Link className={approvedStyles.reset} href="/dashboard/leads#approved-leads">Reset</Link> : null}
+            </form>
+
+            {allApprovedLeads.length ? (
+              <>
+                <div className={approvedStyles.summary}>
+                  <span>Showing <strong>{filteredApprovedLeads.length}</strong> of <strong>{allApprovedLeads.length}</strong> approved leads</span>
+                  <span>Approval history is preserved even after discovery results expire.</span>
+                </div>
+                {filteredApprovedLeads.length ? (
+                  <div className={approvedStyles.tableWrap}>
+                    <table className={approvedStyles.table}>
+                      <thead>
+                        <tr><th>Lead</th><th>Source</th><th>Score</th><th>Contact</th><th>Approved</th><th>Current stage</th><th>Next action</th><th /></tr>
+                      </thead>
+                      <tbody>
+                        {filteredApprovedLeads.map((lead) => {
+                          const contactPrimary = lead.contact_person ?? lead.email ?? lead.phone ?? "No public contact";
+                          const contactSecondary = lead.contact_person
+                            ? (lead.contact_role ? humanize(lead.contact_role) : lead.email ?? lead.phone ?? "Public contact")
+                            : lead.email && lead.phone ? lead.phone : "";
+                          return (
+                            <tr key={lead.id}>
+                              <td>
+                                <Link className={approvedStyles.identity} href={`/dashboard/leads/${lead.id}`}>
+                                  <span className={approvedStyles.avatar}>{approvedLeadInitials(lead)}</span>
+                                  <span className={approvedStyles.identityText}>
+                                    <strong>{lead.company ?? lead.name}</strong>
+                                    <small>{lead.niche ?? "Niche not set"}</small>
+                                  </span>
+                                </Link>
+                              </td>
+                              <td><span className={approvedStyles.source}>{leadSourceLabel(lead.source)}</span></td>
+                              <td><span className={approvedStyles.score}>{lead.lead_score ?? "—"}</span></td>
+                              <td><span className={approvedStyles.contact}><strong>{contactPrimary}</strong>{contactSecondary ? <small>{contactSecondary}</small> : null}</span></td>
+                              <td><span className={approvedStyles.date}>{formatDate(lead.approved_at ?? lead.created_at)}</span></td>
+                              <td><span className={approvedStyles.stage}>{humanize(lead.stage)}</span></td>
+                              <td><strong className={approvedStyles.nextAction}>{lead.next_action ?? "Set next action"}</strong></td>
+                              <td><Link className={approvedStyles.open} href={`/dashboard/leads/${lead.id}`}>Open <ArrowRight size={13} aria-hidden="true" /></Link></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className={approvedStyles.empty}><div><strong>No approved leads match these filters.</strong><p>Reset the filters to return to the full approved-lead directory.</p></div></div>
+                )}
+              </>
+            ) : (
+              <div className={approvedStyles.empty}><div><strong>No approved leads yet.</strong><p>Approve a scored discovery result and Orbit will keep it here as a durable Lead Engine record.</p></div></div>
+            )}
           </section>
         </div>
 
