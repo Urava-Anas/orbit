@@ -6,7 +6,7 @@ create table if not exists public.relay_templates (
   subject_template text not null default '',
   status text not null default 'draft' check (status in ('draft','active','archived')),
   current_version integer not null default 1,
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(workspace_id,name)
@@ -19,7 +19,7 @@ create table if not exists public.relay_template_versions (
   version integer not null,
   schema jsonb not null default '{"blocks":[]}'::jsonb,
   variable_keys text[] not null default '{}',
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   unique(template_id,version)
 );
@@ -31,7 +31,7 @@ create table if not exists public.relay_modules (
   module_type text not null default 'custom',
   schema jsonb not null,
   is_system boolean not null default false,
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(workspace_id,name)
