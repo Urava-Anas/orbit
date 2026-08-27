@@ -215,7 +215,16 @@ export default async function RelayPage({ searchParams }: Props) {
 
       <Notice error={params.error} notice={params.notice} />
 
-      {view === "connectors" ? (
+      {view === "templates" ? (
+        <section className={styles.workspacePanel}>
+          <div className={styles.workspaceIntro}>
+            <span>Relay Template Studio</span>
+            <h2>Build reusable, versioned email systems.</h2>
+            <p>Compose from reusable blocks, use Orbit merge variables, preview desktop/mobile, and render from one canonical schema.</p>
+            <Link className={styles.replyButton} href="/dashboard/mail/templates">Open Template Studio</Link>
+          </div>
+        </section>
+      ) : view === "connectors" ? (
         <ConnectorWorkspace
           mailboxes={mailboxes}
           selectedMailbox={selectedMailbox}
