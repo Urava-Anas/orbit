@@ -74,11 +74,11 @@ type WonLead = {
   currency: string;
 };
 
-type AuditRow = {
+type CompanyEventRow = {
   id: number;
-  action: string;
-  entity_type: string;
-  created_at: string;
+  event_type: string;
+  entity_type: string | null;
+  occurred_at: string;
 };
 
 function initials(name: string) {
@@ -123,14 +123,14 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
     supabase.from("projects").select("id,client_id,name,status,value,currency,due_date,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
     supabase.from("invoices").select("id,reference,amount,currency,status,due_at,paid_at,created_at,projects(name,client_id)").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
     supabase.from("leads").select("id,stage,estimated_value,currency").eq("workspace_id", workspace.id).eq("stage", "won"),
-    supabase.from("audit_events").select("id,action,entity_type,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(6),
+    supabase.from("company_events").select("id,event_type,entity_type,occurred_at").eq("workspace_id", workspace.id).order("occurred_at", { ascending: false }).limit(6),
   ]);
 
   const clients = (clientsResult.data ?? []) as ClientRow[];
   const projects = (projectsResult.data ?? []) as ProjectRow[];
   const invoices = (invoicesResult.data ?? []) as unknown as InvoiceRow[];
   const wonLeads = (wonResult.data ?? []) as WonLead[];
-  const audit = (auditResult.data ?? []) as AuditRow[];
+  const companyEvents = (auditResult.data ?? []) as CompanyEventRow[];
 
   const activeProjects = projects.filter((project) => project.status !== "completed");
   const pipelinePkr = activeProjects.filter((project) => project.currency === "PKR").reduce((sum, project) => sum + Number(project.value || 0), 0);
@@ -293,7 +293,7 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
           <section className={styles.sideCard}>
             <div className={styles.sideHeading}><h2>Recent activity</h2><Link href="/dashboard">View all</Link></div>
             <div className={styles.activityList}>
-              {audit.length ? audit.map((event) => <div key={event.id}><span className={styles.activityDot} /><p><strong>{humanize(event.action)} {humanize(event.entity_type)}</strong><small>Organisation record changed</small></p><time>{formatRelativeDate(event.created_at)}</time></div>) : <div className={styles.emptyMini}>No recent client activity.</div>}
+              {companyEvents.length ? companyEvents.map((event) => <div key={event.id}><span className={styles.activityDot} /><p><strong>{humanize(event.event_type)}</strong><small>{event.entity_type ? humanize(event.entity_type) : "Organisation workflow"} event</small></p><time>{formatRelativeDate(event.occurred_at)}</time></div>) : <div className={styles.emptyMini}>No recent company workflow events.</div>}
             </div>
           </section>
 

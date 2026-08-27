@@ -142,9 +142,14 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           <h1>Lead Engine</h1>
           <p>Find leads, nurture them and turn opportunities into clients.</p>
         </div>
-        <Link className={styles.primaryButton} href="/dashboard/leads/add">
-          <Plus size={16} aria-hidden="true" /> Add lead
-        </Link>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link className={styles.primaryButton} href="/dashboard/leads/send-packs">
+            <Send size={16} aria-hidden="true" /> Send Packs
+          </Link>
+          <Link className={styles.primaryButton} href="/dashboard/leads/add">
+            <Plus size={16} aria-hidden="true" /> Add lead
+          </Link>
+        </div>
       </header>
 
       <Notice error={params.error} notice={params.notice} />

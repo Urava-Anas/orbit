@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { recordCompanyEventBestEffort } from "@/lib/memory/store";
 import { requireWorkspace } from "@/lib/workspace";
 
 const activityKinds = ["whatsapp", "call", "email", "meeting", "audit", "proposal", "note"] as const;
@@ -73,20 +74,35 @@ export async function createSalesClient(formData: FormData) {
   if (!parsed.success) salesRedirect("error", "Check the client details and try again.");
 
   const { supabase, user, workspace } = await requireWorkspace();
-  const { error } = await supabase.from("clients").insert({
-    workspace_id: workspace.id,
-    name: parsed.data.name,
-    contact_name: parsed.data.contactName || null,
-    email: parsed.data.email || null,
-    phone: parsed.data.phone || null,
-    website: parsed.data.website || null,
-    notes: parsed.data.notes || null,
-    created_by: user.id,
+  const { data: client, error } = await supabase
+    .from("clients")
+    .insert({
+      workspace_id: workspace.id,
+      name: parsed.data.name,
+      contact_name: parsed.data.contactName || null,
+      email: parsed.data.email || null,
+      phone: parsed.data.phone || null,
+      website: parsed.data.website || null,
+      notes: parsed.data.notes || null,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (error || !client) {
+    salesRedirect("error", error?.code === "23505" ? "That client already exists." : "Orbit could not save this client.");
+  }
+
+  await recordCompanyEventBestEffort({
+    workspaceId: workspace.id,
+    actorId: user.id,
+    domain: "sales",
+    eventType: "client.created",
+    entityType: "client",
+    entityId: client.id,
+    payload: { source: "sales_desk" },
   });
 
-  if (error) {
-    salesRedirect("error", error.code === "23505" ? "That client already exists." : "Orbit could not save this client.");
-  }
   revalidatePath("/dashboard/sales");
   revalidatePath("/dashboard/projects");
   salesRedirect("notice", "Client added to Sales Desk.");
@@ -117,18 +133,22 @@ export async function logSalesActivity(formData: FormData) {
 
   const nextActionAt = parsePakistanDate(parsed.data.nextActionAt);
   const nextStage = inferredStage(lead.stage, parsed.data.nextStage, parsed.data.outcome);
-  const { error: activityError } = await supabase.from("lead_activities").insert({
-    workspace_id: workspace.id,
-    lead_id: lead.id,
-    kind: parsed.data.kind,
-    direction: parsed.data.direction,
-    outcome: parsed.data.outcome,
-    summary: parsed.data.summary,
-    next_action: parsed.data.nextAction || null,
-    next_action_at: nextActionAt,
-    created_by: user.id,
-  });
-  if (activityError) salesRedirect("error", "Orbit could not save this sales activity.", lead.id);
+  const { data: activity, error: activityError } = await supabase
+    .from("lead_activities")
+    .insert({
+      workspace_id: workspace.id,
+      lead_id: lead.id,
+      kind: parsed.data.kind,
+      direction: parsed.data.direction,
+      outcome: parsed.data.outcome,
+      summary: parsed.data.summary,
+      next_action: parsed.data.nextAction || null,
+      next_action_at: nextActionAt,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (activityError || !activity) salesRedirect("error", "Orbit could not save this sales activity.", lead.id);
 
   const { error: updateError } = await supabase
     .from("leads")
@@ -136,6 +156,36 @@ export async function logSalesActivity(formData: FormData) {
     .eq("id", lead.id)
     .eq("workspace_id", workspace.id);
   if (updateError) salesRedirect("error", "The activity was logged, but Orbit could not update the next action.", lead.id);
+
+  await recordCompanyEventBestEffort({
+    workspaceId: workspace.id,
+    actorId: user.id,
+    domain: "growth",
+    eventType:
+      nextStage === "won"
+        ? "lead.won"
+        : nextStage === "lost"
+          ? "lead.lost"
+          : parsed.data.outcome === "proposal_sent"
+            ? "lead.proposal_sent"
+            : parsed.data.outcome === "replied"
+              ? "lead.replied"
+              : parsed.data.kind === "email" || parsed.data.kind === "whatsapp" || parsed.data.kind === "call"
+                ? "lead.outreach_logged"
+                : "lead.activity_logged",
+    entityType: "lead",
+    entityId: lead.id,
+    payload: {
+      activity_id: activity.id,
+      kind: parsed.data.kind,
+      direction: parsed.data.direction,
+      outcome: parsed.data.outcome,
+      from_stage: lead.stage,
+      to_stage: nextStage,
+      next_action_at: nextActionAt,
+      has_next_action: Boolean(parsed.data.nextAction),
+    },
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/leads");
