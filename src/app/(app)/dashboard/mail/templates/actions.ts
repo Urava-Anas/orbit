@@ -52,6 +52,20 @@ export async function saveRelayTemplate(formData: FormData) {
   redirect(`/dashboard/mail/templates?id=${templateId}&notice=Saved+version+${version}`);
 }
 
+export async function activateRelayTemplate(formData:FormData){
+  const templateId=String(formData.get("templateId")??"").trim();
+  if(!z.string().uuid().safeParse(templateId).success) redirect("/dashboard/mail/templates?error=Invalid+template");
+  const {supabase,workspace,role}=await requireWorkspace();
+  if(!["owner","admin","founder"].includes(role)) redirect("/dashboard/mail/templates?error=Admin+authority+required");
+  const {data:template,error:loadError}=await supabase.from("relay_templates").select("current_version").eq("workspace_id",workspace.id).eq("id",templateId).single();
+  if(loadError||!template) redirect("/dashboard/mail/templates?error=Template+not+found");
+  const {data:version,error:versionError}=await supabase.from("relay_template_versions").select("id").eq("workspace_id",workspace.id).eq("template_id",templateId).eq("version",template.current_version).maybeSingle();
+  if(versionError||!version) redirect(`/dashboard/mail/templates?id=${templateId}&error=Save+a+version+before+activation`);
+  const {error}=await supabase.from("relay_templates").update({status:"active",updated_at:new Date().toISOString()}).eq("workspace_id",workspace.id).eq("id",templateId);
+  if(error) redirect(`/dashboard/mail/templates?id=${templateId}&error=${encodeURIComponent(error.message)}`);
+  redirect(`/dashboard/mail/templates?id=${templateId}&notice=Template+activated`);
+}
+
 export async function saveRelayModule(formData:FormData){
   const name=String(formData.get("name")??"").trim();
   const document=String(formData.get("document")??"");
