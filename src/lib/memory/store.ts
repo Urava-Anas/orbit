@@ -145,3 +145,19 @@ export async function rememberCompanyFact(input: CompanyMemoryInput) {
 
   return String(data.id);
 }
+
+
+export async function recordCompanyEventBestEffort(input: CompanyEventInput) {
+  try {
+    return await recordCompanyEvent(input);
+  } catch (error) {
+    console.error("Company event recording failed", {
+      domain: input.domain,
+      eventType: input.eventType,
+      entityType: input.entityType ?? null,
+      entityId: input.entityId ?? null,
+      error: error instanceof Error ? error.message : "Unknown company-event error",
+    });
+    return null;
+  }
+}
