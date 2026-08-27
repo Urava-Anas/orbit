@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorkspace } from "@/lib/workspace";
 
 const schema = z.object({
@@ -32,14 +33,17 @@ export async function saveOutboundEmailProvider(formData: FormData) {
   if (!emailCandidate.includes("@")) fail("Verified sender must contain a valid email address.");
   if (!parsed.data.apiKey.startsWith("re_")) fail("Resend API key should start with re_.");
 
-  const keyResult = await supabase.rpc("set_stage4_provider_secret", {
+  const admin = createAdminClient();
+  if (!admin) fail("Orbit server credentials are not configured for secure provider storage.");
+
+  const keyResult = await admin.rpc("set_stage4_provider_secret", {
     p_workspace_id: workspace.id,
     p_key: "resend_api_key",
     p_value: parsed.data.apiKey,
   });
   if (keyResult.error) fail(`Orbit could not store the Resend key: ${keyResult.error.message}`);
 
-  const fromResult = await supabase.rpc("set_stage4_provider_secret", {
+  const fromResult = await admin.rpc("set_stage4_provider_secret", {
     p_workspace_id: workspace.id,
     p_key: "email_from",
     p_value: parsed.data.emailFrom,
