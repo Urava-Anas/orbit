@@ -26,35 +26,17 @@ function platformCredentialMode() {
 }
 
 const templateKeys: Record<string, { vault: string; env: string }> = {
-  "growth.outreach_send": {
-    vault: "whatsapp_template_outreach",
-    env: "ORBIT_WHATSAPP_TEMPLATE_OUTREACH",
-  },
-  "growth.followup_send": {
-    vault: "whatsapp_template_followup",
-    env: "ORBIT_WHATSAPP_TEMPLATE_FOLLOWUP",
-  },
-  "growth.proposal_send": {
-    vault: "whatsapp_template_proposal",
-    env: "ORBIT_WHATSAPP_TEMPLATE_PROPOSAL",
-  },
-  "cash.payment_request": {
-    vault: "whatsapp_template_payment_request",
-    env: "ORBIT_WHATSAPP_TEMPLATE_PAYMENT_REQUEST",
-  },
-  "growth.referral_send": {
-    vault: "whatsapp_template_referral",
-    env: "ORBIT_WHATSAPP_TEMPLATE_REFERRAL",
-  },
+  "growth.outreach_send": { vault: "whatsapp_template_outreach", env: "ORBIT_WHATSAPP_TEMPLATE_OUTREACH" },
+  "growth.followup_send": { vault: "whatsapp_template_followup", env: "ORBIT_WHATSAPP_TEMPLATE_FOLLOWUP" },
+  "growth.proposal_send": { vault: "whatsapp_template_proposal", env: "ORBIT_WHATSAPP_TEMPLATE_PROPOSAL" },
+  "cash.payment_request": { vault: "whatsapp_template_payment_request", env: "ORBIT_WHATSAPP_TEMPLATE_PAYMENT_REQUEST" },
+  "growth.referral_send": { vault: "whatsapp_template_referral", env: "ORBIT_WHATSAPP_TEMPLATE_REFERRAL" },
 };
 
 async function vaultSecret(workspaceId: string, key: string) {
   const client = getStageFourExecutionClient();
   if (!client) return null;
-  const result = await client.rpc("get_stage4_provider_secret", {
-    p_workspace_id: workspaceId,
-    p_key: key,
-  });
+  const result = await client.rpc("get_stage4_provider_secret", { p_workspace_id: workspaceId, p_key: key });
   if (result.error) {
     console.error(`Stage 4 Vault provider lookup failed for ${key}`, result.error);
     return null;
@@ -62,16 +44,9 @@ async function vaultSecret(workspaceId: string, key: string) {
   return text(result.data) || null;
 }
 
-async function providerSetting(
-  workspaceId: string,
-  vaultKey: string,
-  envKey: string,
-) {
+async function providerSetting(workspaceId: string, vaultKey: string, envKey: string) {
   const workspaceValue = await vaultSecret(workspaceId, vaultKey);
   if (workspaceValue) return workspaceValue;
-
-  // Shared Urava/platform credentials are opt-in. A tenant that has not configured
-  // its own provider must never silently send through another organisation's identity.
   if (!platformCredentialMode()) return null;
   return process.env[envKey]?.trim() || null;
 }
@@ -85,77 +60,46 @@ async function whatsappTemplateName(workspaceId: string, capabilityKey: string) 
 export function stageFourProviderReadiness(): ProviderReadiness {
   if (!platformCredentialMode()) {
     return {
-      email: {
-        configured: false,
-        provider: "resend",
-        reason: "Platform provider credentials are disabled; each workspace must use its own Vault credentials.",
-      },
-      whatsapp: {
-        configured: false,
-        provider: "meta_whatsapp_cloud",
-        reason: "Platform provider credentials are disabled; each workspace must use its own Vault credentials.",
-      },
+      email: { configured: false, provider: "resend", reason: "Platform provider credentials are disabled; each workspace must use its own Vault credentials." },
+      whatsapp: { configured: false, provider: "meta_whatsapp_cloud", reason: "Platform provider credentials are disabled; each workspace must use its own Vault credentials." },
     };
   }
 
-  const emailConfigured = Boolean(
-    process.env.RESEND_API_KEY?.trim() && process.env.ORBIT_EMAIL_FROM?.trim(),
-  );
+  const emailConfigured = Boolean(process.env.RESEND_API_KEY?.trim() && process.env.ORBIT_EMAIL_FROM?.trim());
   const whatsappCore = Boolean(
     process.env.WHATSAPP_CLOUD_ACCESS_TOKEN?.trim() &&
-      process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() &&
-      process.env.WHATSAPP_GRAPH_API_VERSION?.trim(),
+    process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() &&
+    process.env.WHATSAPP_GRAPH_API_VERSION?.trim(),
   );
-  const whatsappHasTemplate = Object.values(templateKeys).some(
-    ({ env }) => Boolean(process.env[env]?.trim()),
-  );
+  const whatsappHasTemplate = Object.values(templateKeys).some(({ env }) => Boolean(process.env[env]?.trim()));
 
   return {
     email: {
       configured: emailConfigured,
       provider: "resend",
-      reason: emailConfigured
-        ? "Explicit platform Resend credentials are configured."
-        : "Platform Resend credentials are incomplete.",
+      reason: emailConfigured ? "Explicit platform Resend credentials are configured." : "Platform Resend credentials are incomplete.",
     },
     whatsapp: {
       configured: whatsappCore && whatsappHasTemplate,
       provider: "meta_whatsapp_cloud",
-      reason:
-        whatsappCore && whatsappHasTemplate
-          ? "Explicit platform WhatsApp credentials and a capability template are configured."
-          : "Platform WhatsApp credentials are incomplete.",
+      reason: whatsappCore && whatsappHasTemplate
+        ? "Explicit platform WhatsApp credentials and a capability template are configured."
+        : "Platform WhatsApp credentials are incomplete.",
     },
   };
 }
 
-export async function stageFourProviderReadinessForWorkspace(
-  workspaceId: string,
-): Promise<ProviderReadiness> {
-  const [
-    resendApiKey,
-    emailFrom,
-    whatsappToken,
-    whatsappPhoneNumberId,
-    whatsappGraphVersion,
-    ...templates
-  ] = await Promise.all([
+export async function stageFourProviderReadinessForWorkspace(workspaceId: string): Promise<ProviderReadiness> {
+  const [resendApiKey, emailFrom, whatsappToken, whatsappPhoneNumberId, whatsappGraphVersion, ...templates] = await Promise.all([
     providerSetting(workspaceId, "resend_api_key", "RESEND_API_KEY"),
     providerSetting(workspaceId, "email_from", "ORBIT_EMAIL_FROM"),
     providerSetting(workspaceId, "whatsapp_access_token", "WHATSAPP_CLOUD_ACCESS_TOKEN"),
     providerSetting(workspaceId, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID"),
     providerSetting(workspaceId, "whatsapp_graph_api_version", "WHATSAPP_GRAPH_API_VERSION"),
-    ...Object.entries(templateKeys).map(([capabilityKey]) =>
-      whatsappTemplateName(workspaceId, capabilityKey),
-    ),
+    ...Object.keys(templateKeys).map((capabilityKey) => whatsappTemplateName(workspaceId, capabilityKey)),
   ]);
   const emailConfigured = Boolean(resendApiKey && emailFrom);
-  const whatsappConfigured = Boolean(
-    whatsappToken &&
-      whatsappPhoneNumberId &&
-      whatsappGraphVersion &&
-      templates.some(Boolean),
-  );
+  const whatsappConfigured = Boolean(whatsappToken && whatsappPhoneNumberId && whatsappGraphVersion && templates.some(Boolean));
   return {
     email: {
       configured: emailConfigured,
@@ -216,6 +160,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
   }
 
   const body = text(envelope.payload.body);
+  const html = text(envelope.payload.html);
   if (!body) {
     return {
       ok: false,
@@ -238,6 +183,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
       to: [envelope.destination],
       subject: emailSubject(envelope),
       text: body,
+      ...(html ? { html } : {}),
       headers: {
         "X-Orbit-Request-Id": envelope.requestId,
         "X-Orbit-Action-Request-Id": envelope.actionRequestId,
@@ -264,7 +210,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
     ok: true,
     provider: "resend",
     providerRequestId,
-    responseSummary: { status: response.status, accepted: true },
+    responseSummary: { status: response.status, accepted: true, html: Boolean(html) },
     errorCode: null,
   };
 }
@@ -292,15 +238,12 @@ async function sendWhatsApp(envelope: StageFourGatewayEnvelope): Promise<StageFo
       providerRequestId: null,
       responseSummary: {
         blocked: true,
-        reason:
-          "WhatsApp automation requires workspace Cloud API credentials and an approved template for this capability. Free-form business-initiated messaging is not used by Orbit Stage 4.",
+        reason: "WhatsApp automation requires workspace Cloud API credentials and an approved template for this capability. Free-form business-initiated messaging is not used by Orbit Stage 4.",
       },
       errorCode: "whatsapp_template_not_configured",
     };
   }
-  const destination = envelope.destination
-    ? normalizeWhatsAppDestination(envelope.destination)
-    : "";
+  const destination = envelope.destination ? normalizeWhatsAppDestination(envelope.destination) : "";
   if (!destination) {
     return {
       ok: false,
@@ -313,19 +256,13 @@ async function sendWhatsApp(envelope: StageFourGatewayEnvelope): Promise<StageFo
 
   const response = await fetch(`${META_GRAPH_HOST}/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to: destination,
       type: "template",
-      template: {
-        name: templateName,
-        language: { code: language },
-      },
+      template: { name: templateName, language: { code: language } },
     }),
     cache: "no-store",
     redirect: "error",
@@ -355,9 +292,7 @@ async function sendWhatsApp(envelope: StageFourGatewayEnvelope): Promise<StageFo
   };
 }
 
-export async function dispatchStageFourProvider(
-  envelope: StageFourGatewayEnvelope,
-): Promise<StageFourGatewayResult> {
+export async function dispatchStageFourProvider(envelope: StageFourGatewayEnvelope): Promise<StageFourGatewayResult> {
   if (envelope.channel === "email") return sendEmail(envelope);
   if (envelope.channel === "whatsapp") return sendWhatsApp(envelope);
   return {
