@@ -28,6 +28,12 @@ function escapeHtml(value: string) {
   })[char] ?? char);
 }
 
+function safeHref(value: string) {
+  const trimmed = value.trim();
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  return "#";
+}
+
 export function renderRelayTemplate(schema: RelayTemplateSchema, values: Record<string,string> = {}) {
   const missing = new Set<string>();
   const resolve = (value = "") => {
@@ -40,7 +46,7 @@ export function renderRelayTemplate(schema: RelayTemplateSchema, values: Record<
     if (block.type === "heading") return `<h2 style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:28px;line-height:1.2;color:#111827">${content}</h2>`;
     if (block.type === "text") return `<p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#374151">${content.replace(/\n/g,"<br>")}</p>`;
     if (block.type === "button") {
-      const href = escapeHtml(resolve(block.href || "#"));
+      const href = escapeHtml(safeHref(resolve(block.href || "#")));
       return `<p style="margin:20px 0"><a href="${href}" style="display:inline-block;padding:12px 18px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-family:Arial,sans-serif;font-weight:700">${content || "Continue"}</a></p>`;
     }
     if (block.type === "divider") return '<hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0">';
