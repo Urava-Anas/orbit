@@ -47,7 +47,6 @@ export type AiGatewayResponse = {
   usage: AiUsage;
   latencyMs: number;
   costMicrousd: number;
-  raw?: unknown;
 };
 
 export type AiProviderConfig = {
