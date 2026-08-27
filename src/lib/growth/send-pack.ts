@@ -283,6 +283,27 @@ export async function buildRecommendedSendPack(
     throw new Error("Active pricing plan has no approved included features.");
   }
 
+  const intelligenceResult = await client
+    .from("orbit_lead_intelligence")
+    .select("id,total_score,qualification,recommended_offer,recommended_channel")
+    .eq("workspace_id", workspaceId)
+    .eq("lead_id", lead.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (intelligenceResult.error) {
+    throw new Error(`Load lead intelligence: ${intelligenceResult.error.message}`);
+  }
+  if (!intelligenceResult.data) {
+    throw new Error(
+      "This lead has no Orbit intelligence record. Run qualification before building a commercial send pack.",
+    );
+  }
+  if (intelligenceResult.data.qualification === "unqualified") {
+    throw new Error("Unqualified leads cannot receive a commercial send pack.");
+  }
+
   const opportunityId = await ensureOpportunity(
     client,
     workspaceId,
@@ -312,6 +333,22 @@ export async function buildRecommendedSendPack(
     "Any work outside the approved included features requires a revised scope.",
   ];
 
+  const pain = lead.pain_point?.trim();
+  const messageBody = [
+    `Hi ${lead.name},`,
+    pain
+      ? `Based on what we can see, the main opportunity is: ${pain}.`
+      : `I put together a focused ${plan.service_category} proposal for ${lead.company ?? lead.name}.`,
+    `The recommended package is ${plan.name}, with an approved range of ${plan.currency} ${min}–${max}.`,
+    `Core scope: ${scope.join(", ")}.`,
+    "If the direction makes sense, reply and we can lock the exact scope and next step.",
+  ].join("\n\n");
+
+  const subject =
+    channel === "email"
+      ? `${plan.name} proposal for ${lead.company ?? lead.name}`.slice(0, 240)
+      : null;
+
   const baseKey = `send-pack:${lead.id}:${plan.id}:${plan.version}`;
 
   const outreachCtx = await artifactContext(
@@ -330,7 +367,7 @@ export async function buildRecommendedSendPack(
     .insert({
       workspace_id: workspaceId,
       lead_id: lead.id,
-      intelligence_id: null,
+      intelligence_id: intelligenceResult.data.id,
       run_id: outreachCtx.runId,
       task_id: outreachCtx.taskId,
       agent_id: outreachCtx.agentId,
@@ -342,6 +379,9 @@ export async function buildRecommendedSendPack(
         pain_point: lead.pain_point,
         niche: lead.niche,
         pricing_plan_id: plan.id,
+        intelligence_id: intelligenceResult.data.id,
+        intelligence_score: intelligenceResult.data.total_score,
+        intelligence_qualification: intelligenceResult.data.qualification,
       },
       generation_mode: "deterministic_fallback",
       model_provider: null,
@@ -465,6 +505,7 @@ export async function buildRecommendedSendPack(
           channel === "email"
             ? "Verified email preferred."
             : "WhatsApp/phone destination available.",
+        outreach_draft_id: outreach.data.id,
         proposal_id: proposal.data.id,
         followup_plan_id: followup.data.id,
       },
@@ -494,7 +535,6 @@ export async function buildRecommendedSendPack(
       lead_id: lead.id,
       opportunity_id: opportunityId,
       pricing_plan_id: plan.id,
-      outreach_draft_id: outreach.data.id,
       outreach_draft_id: outreach.data.id,
       proposal_id: proposal.data.id,
       followup_plan_id: followup.data.id,
