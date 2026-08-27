@@ -52,6 +52,12 @@ export default async function SettingsPage({ searchParams }: PageProps) {
         </article>
 
         <article className="panel settings-card">
+          <h2>Outbound email</h2>
+          <p>Connect the verified sender Orbit Stage 4 uses for proposals, outreach and follow-ups.</p>
+          <Link className="button" href="/dashboard/settings/outbound-email">Manage outbound email</Link>
+        </article>
+
+        <article className="panel settings-card">
           <h2>Current session</h2>
           <p>Close only this browser session and keep other signed-in devices active.</p>
           <form action={signOut}><button className="button" type="submit">Sign out this session</button></form>
