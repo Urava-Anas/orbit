@@ -42,19 +42,19 @@ alter table public.relay_template_versions enable row level security;
 alter table public.relay_modules enable row level security;
 
 create policy "relay_templates_workspace_read" on public.relay_templates for select
-using (public.is_workspace_member(workspace_id));
+using (private.is_workspace_member(workspace_id));
 create policy "relay_templates_workspace_write" on public.relay_templates for all
-using (public.is_workspace_admin(workspace_id)) with check (public.is_workspace_admin(workspace_id));
+using (private.is_workspace_admin(workspace_id)) with check (private.is_workspace_admin(workspace_id));
 
 create policy "relay_versions_workspace_read" on public.relay_template_versions for select
-using (public.is_workspace_member(workspace_id));
+using (private.is_workspace_member(workspace_id));
 create policy "relay_versions_workspace_write" on public.relay_template_versions for all
-using (public.is_workspace_admin(workspace_id)) with check (public.is_workspace_admin(workspace_id));
+using (private.is_workspace_admin(workspace_id)) with check (private.is_workspace_admin(workspace_id));
 
 create policy "relay_modules_workspace_read" on public.relay_modules for select
-using (public.is_workspace_member(workspace_id));
+using (private.is_workspace_member(workspace_id));
 create policy "relay_modules_workspace_write" on public.relay_modules for all
-using (public.is_workspace_admin(workspace_id)) with check (public.is_workspace_admin(workspace_id));
+using (private.is_workspace_admin(workspace_id)) with check (private.is_workspace_admin(workspace_id));
 
 create index if not exists relay_templates_workspace_idx on public.relay_templates(workspace_id,updated_at desc);
 create index if not exists relay_versions_template_idx on public.relay_template_versions(template_id,version desc);
