@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  Banknote,
+  CheckCircle2,
+  FileCheck2,
+  FolderKanban,
+  UsersRound,
+} from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 import { MetricCard } from "@/components/MetricCard";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -110,7 +118,9 @@ export default async function DashboardPage() {
         title: apexExperience
           ? `${project.name} dispatch milestone is overdue`
           : `${project.name} passed its due date`,
-        detail: project.clients?.name ?? (apexExperience ? "Dispatch needs review" : "Delivery needs review"),
+        detail:
+          project.clients?.name ??
+          (apexExperience ? "Dispatch needs review" : "Delivery needs review"),
         href: "/dashboard/projects",
         priority: 2,
         date: project.due_date,
@@ -178,21 +188,29 @@ export default async function DashboardPage() {
           label={dashboard.opportunityLabel}
           value={activeLeads.length}
           note={`${leads.length} ${dashboard.opportunityNote}`}
+          icon={UsersRound}
+          tone="accent"
         />
         <MetricCard
           label={dashboard.deliveryLabel}
           value={activeProjects.length}
           note={`${projects.length} ${dashboard.deliveryNote}`}
+          icon={FolderKanban}
+          tone="info"
         />
         <MetricCard
           label={dashboard.cashLabel}
           value={formatMoney(cashReceived, dashboard.cashCurrency)}
           note={dashboard.cashNote}
+          icon={Banknote}
+          tone="success"
         />
         <MetricCard
           label={dashboard.proofLabel}
           value={approvedProof}
           note={`${proofs.length} ${dashboard.proofNote}`}
+          icon={FileCheck2}
+          tone="warning"
         />
       </section>
 
@@ -205,7 +223,12 @@ export default async function DashboardPage() {
           {founderAttention.length ? (
             <div className="action-list">
               {founderAttention.map((item) => (
-                <Link className="action-row" href={item.href} key={item.id}>
+                <Link
+                  className="action-row"
+                  data-priority={item.priority}
+                  href={item.href}
+                  key={item.id}
+                >
                   <i aria-hidden="true" />
                   <div>
                     <strong>{item.title}</strong>
@@ -218,15 +241,16 @@ export default async function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div className="empty-state">
-              <div>
-                <span className="empty-state-icon">
-                  <CheckCircle2 size={22} aria-hidden="true" />
-                </span>
-                <h3>{dashboard.attentionEmptyTitle}</h3>
-                <p>{dashboard.attentionEmptyDescription}</p>
-              </div>
-            </div>
+            <EmptyState
+              icon={CheckCircle2}
+              title={dashboard.attentionEmptyTitle}
+              description={dashboard.attentionEmptyDescription}
+              action={
+                <Link className="button" href="/dashboard/leads">
+                  Review opportunities
+                </Link>
+              }
+            />
           )}
         </article>
 
@@ -253,15 +277,11 @@ export default async function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div className="empty-state">
-              <div>
-                <span className="empty-state-icon">
-                  <CheckCircle2 size={22} aria-hidden="true" />
-                </span>
-                <h3>No mutations yet</h3>
-                <p>Your authorised insert, update, and delete history will appear here.</p>
-              </div>
-            </div>
+            <EmptyState
+              icon={CheckCircle2}
+              title="No activity yet"
+              description="Authorised inserts, updates and deletes will appear here as the organisation starts operating."
+            />
           )}
         </article>
       </section>
