@@ -71,7 +71,7 @@ export default async function FoundryMapPage({ searchParams }: Props) {
     return (
       <div className="foundry-page">
         <EmptyFoundryState
-          title="No active member yet"
+          title="No active student yet"
           detail="Add a student first. Their complete level journey will appear here."
           href="/dashboard/foundry/students?mode=add"
           action="Add student"
@@ -126,22 +126,22 @@ export default async function FoundryMapPage({ searchParams }: Props) {
     <div className="foundry-page">
       <section className="foundry-page-title">
         <div>
-          <span className="foundry-kicker">Choose member → inspect journey → act</span>
+          <span className="foundry-kicker">Choose student → inspect journey → act</span>
           <h1>Journey Map</h1>
           <p>
-            Start with the member list. Each row tells you who the student is, their
+            Start with the student list. Each row shows who the student is, their
             department and the latest level they have actually reached. Open one row
             to inspect Classes, Notes, Tasks, evidence and Studio work on one map.
           </p>
         </div>
         <span className="foundry-title-stat">
           <UsersRound aria-hidden="true" size={20} />
-          {students.length} mapped members
+          {students.length} mapped students
         </span>
       </section>
 
       <section className="foundry-summary-strip" aria-label="How Journey Map works">
-        <span><b>1</b> Choose a member below</span>
+        <span><b>1</b> Choose a student below</span>
         <span><b>2</b> Read the level path from top to bottom</span>
         <span><b>3</b> Use map controls to schedule, teach, assign or move to Studio</span>
       </section>
@@ -149,8 +149,8 @@ export default async function FoundryMapPage({ searchParams }: Props) {
       <section className="foundry-card">
         <div className="foundry-card-head">
           <div>
-            <span className="foundry-card-eyebrow">Member map directory</span>
-            <h2>{selectedEntry ? "Switch member" : "Choose a student to inspect"}</h2>
+            <span className="foundry-card-eyebrow">Student map directory</span>
+            <h2>{selectedEntry ? "Switch student" : "Choose a student to inspect"}</h2>
           </div>
           <MapIcon aria-hidden="true" size={20} />
         </div>
