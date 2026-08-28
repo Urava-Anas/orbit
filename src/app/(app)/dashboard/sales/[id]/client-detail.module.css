@@ -1,0 +1,38 @@
+.page { display: grid; gap: 16px; }
+.back { width: fit-content; }
+.hero { display: flex; padding: 22px; align-items: flex-start; justify-content: space-between; gap: 20px; border: 1px solid var(--line); border-radius: 22px; background: radial-gradient(circle at 0 0, rgba(111, 123, 255, .11), transparent 22rem), linear-gradient(145deg, rgba(255,255,255,.065), transparent 44%), var(--glass-regular); box-shadow: var(--glass-shadow-soft); }
+.identity { display: flex; min-width: 0; align-items: center; gap: 14px; }
+.avatar { display: grid; width: 54px; height: 54px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line-strong); border-radius: 17px; background: rgba(255,255,255,.055); color: #8ea1ff; font-size: 15px; font-weight: 800; }
+.eyebrow { color: #8ea1ff; font-family: var(--font-orbit-mono); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.identity h1 { margin: 5px 0 0; font-size: clamp(30px,4vw,48px); line-height: 1; letter-spacing: -.05em; }
+.identity p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.metric { padding: 17px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.025); }
+.metric span { display: block; color: var(--muted); font-family: var(--font-orbit-mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.metric strong { display: block; margin-top: 9px; overflow: hidden; font-size: 19px; letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
+.grid { display: grid; grid-template-columns: minmax(0,.75fr) minmax(0,1.25fr); gap: 14px; }
+.card { padding: 21px; }
+.cardWide { grid-column: 1 / -1; }
+.cardHead { display: flex; margin-bottom: 15px; align-items: center; justify-content: space-between; gap: 12px; }
+.cardHead > div { display: flex; align-items: center; gap: 10px; }
+.cardIcon { display: grid; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 10px; place-items: center; background: rgba(255,255,255,.04); color: #8ea1ff; }
+.cardHead h2 { margin: 0; font-size: 15px; letter-spacing: -.02em; }
+.cardHead small { color: var(--muted); font-size: 9px; }
+.definition { display: grid; gap: 0; }
+.definition > div { display: grid; padding: 11px 0; grid-template-columns: minmax(100px,.4fr) minmax(0,1fr); gap: 14px; border-top: 1px solid var(--line); }
+.definition > div:first-child { padding-top: 0; border-top: 0; }
+.definition dt { color: var(--muted); font-size: 10px; }
+.definition dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--muted-strong); font-size: 11px; text-align: right; }
+.list { display: grid; gap: 8px; }
+.row { display: grid; min-height: 60px; padding: 11px; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.02); }
+.row strong, .row small { display: block; }
+.row strong { font-size: 11px; }
+.row small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.rowMeta { text-align: right; }
+.rowMeta strong { font-size: 10px; }
+.rowMeta small { white-space: nowrap; }
+.notes { margin: 0; color: var(--muted-strong); font-size: 12px; line-height: 1.7; white-space: pre-wrap; }
+.empty { padding: 20px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 10px; text-align: center; }
+@media (max-width: 900px) { .hero { align-items: stretch; flex-direction: column; } .actions { justify-content: flex-start; } .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .grid { grid-template-columns: 1fr; } .cardWide { grid-column: auto; } }
+@media (max-width: 560px) { .metrics, .actions { display: grid; grid-template-columns: 1fr; } .actions :global(.button) { width: 100%; } .definition > div { grid-template-columns: 1fr; gap: 4px; } .definition dd { text-align: left; } .row { grid-template-columns: 1fr; } .rowMeta { text-align: left; } }
