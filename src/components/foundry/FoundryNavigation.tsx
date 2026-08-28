@@ -9,6 +9,7 @@ import {
   Gauge,
   House,
   Map,
+  Settings2,
   Sparkles,
   UserRound,
   UsersRound,
@@ -24,6 +25,7 @@ const founderLinks = [
   { href: "/dashboard/foundry/tasks", label: "Tasks", icon: BookOpen },
   { href: "/dashboard/foundry/studio", label: "Studio", icon: Sparkles },
   { href: "/dashboard/foundry/operations", label: "Activity", icon: Workflow },
+  { href: "/dashboard/foundry/more", label: "Settings", icon: Settings2 },
 ] as const;
 
 const studentLinks = [
