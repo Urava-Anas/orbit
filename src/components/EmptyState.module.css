@@ -1,0 +1,23 @@
+.empty {
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 107, 97, 0.055), transparent 180px),
+    transparent;
+}
+
+.action {
+  display: flex;
+  margin-top: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .action {
+    display: grid;
+  }
+
+  .action :global(.button) {
+    width: 100%;
+  }
+}
