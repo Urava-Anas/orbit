@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   CalendarClock,
-  CircleDollarSign,
   ExternalLink,
   Globe2,
   Mail,
