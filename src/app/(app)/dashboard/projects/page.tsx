@@ -16,7 +16,7 @@ import { MetricCard } from "@/components/MetricCard";
 import { Notice } from "@/components/Notice";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
-import { formatDate, formatMoney, humanize } from "@/lib/format";
+import { currentTimestamp, formatDate, formatMoney, humanize } from "@/lib/format";
 import type { Client, Lead, Project } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -57,7 +57,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
   const activeProjects = projects.filter((project) => project.status !== "completed");
   const inReview = projects.filter((project) => project.status === "review");
   const blocked = projects.filter((project) => project.status === "blocked");
-  const now = Date.now();
+  const now = currentTimestamp();
   const nextWeek = now + 7 * 24 * 60 * 60 * 1000;
   const dueSoon = activeProjects.filter((project) => {
     if (!project.due_date) return false;
