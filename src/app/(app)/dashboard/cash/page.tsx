@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
-import { Banknote } from "lucide-react";
+import {
+  Banknote,
+  CircleCheckBig,
+  Clock3,
+  ReceiptText,
+  TriangleAlert,
+} from "lucide-react";
 import {
   createInvoice,
   updateInvoiceStatus,
 } from "@/app/(app)/dashboard/actions";
 import { EmptyState } from "@/components/EmptyState";
+import { MetricCard } from "@/components/MetricCard";
 import { Notice } from "@/components/Notice";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
@@ -40,17 +47,124 @@ export default async function CashPage({ searchParams }: PageProps) {
   ]);
   const projects = (projectsResult.data ?? []) as Pick<Project, "id" | "name">[];
   const invoices = (invoicesResult.data ?? []) as unknown as Invoice[];
+  const outstanding = invoices.filter((invoice) => ["sent", "overdue"].includes(invoice.status));
+  const overdue = invoices.filter((invoice) => invoice.status === "overdue");
+  const paid = invoices.filter((invoice) => invoice.status === "paid");
+  const outstandingPkr = outstanding
+    .filter((invoice) => invoice.currency === "PKR")
+    .reduce((sum, invoice) => sum + Number(invoice.amount), 0);
+  const paidPkr = paid
+    .filter((invoice) => invoice.currency === "PKR")
+    .reduce((sum, invoice) => sum + Number(invoice.amount), 0);
 
   return (
     <div className="page">
       <PageHeader
         kicker="Money control"
         title="Cash"
-        description="Orbit records invoices and payment state. It does not replace accounting, banking, tax advice, or your source documents."
+        description="See what is collected, what is outstanding, and what needs attention. Orbit records payment state without pretending to replace your bank or accounting source of truth."
+        action={
+          <a className="button button-primary" href="#record-invoice">
+            Record invoice
+          </a>
+        }
       />
       <Notice error={params.error} notice={params.notice} />
 
-      <details className="create-panel">
+      <section className="metrics-grid" aria-label="Cash overview">
+        <MetricCard
+          label="Outstanding"
+          value={formatMoney(outstandingPkr, "PKR")}
+          note={`${outstanding.length} sent or overdue · PKR amount shown`}
+          icon={Clock3}
+          tone={outstanding.length ? "warning" : "neutral"}
+        />
+        <MetricCard
+          label="Overdue"
+          value={overdue.length}
+          note={overdue.length ? "Collection needs attention" : "Nothing overdue"}
+          icon={TriangleAlert}
+          tone={overdue.length ? "danger" : "success"}
+        />
+        <MetricCard
+          label="Paid"
+          value={formatMoney(paidPkr, "PKR")}
+          note={`${paid.length} paid invoices · PKR amount shown`}
+          icon={CircleCheckBig}
+          tone="success"
+        />
+        <MetricCard
+          label="Ledger"
+          value={invoices.length}
+          note="Invoices across all currencies"
+          icon={ReceiptText}
+          tone="info"
+        />
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Invoice ledger</h2>
+          <span>{invoices.length} invoices</span>
+        </div>
+        {invoices.length ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Project</th>
+                  <th>Amount</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td>
+                      <strong className="mono">{invoice.reference}</strong>
+                    </td>
+                    <td>{invoice.projects?.name ?? "Not linked"}</td>
+                    <td>{formatMoney(Number(invoice.amount), invoice.currency)}</td>
+                    <td>{formatDate(invoice.due_at)}</td>
+                    <td>
+                      <form className="inline-form" action={updateInvoiceStatus}>
+                        <input type="hidden" name="id" value={invoice.id} />
+                        <StatusPill value={invoice.status} />
+                        <select
+                          aria-label={`Update ${invoice.reference} status`}
+                          name="status"
+                          defaultValue={invoice.status}
+                        >
+                          {["draft", "sent", "paid", "overdue", "void"].map(
+                            (status) => (
+                              <option value={status} key={status}>
+                                {humanize(status)}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                        <button className="button button-quiet" type="submit">
+                          Update
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={Banknote}
+            title="No cash records"
+            description="Record the first real invoice. Quoted value and cash received remain deliberately separate."
+          />
+        )}
+      </section>
+
+      <details className="create-panel" id="record-invoice">
         <summary>Record invoice</summary>
         <form action={createInvoice}>
           <div className="form-grid">
@@ -127,69 +241,6 @@ export default async function CashPage({ searchParams }: PageProps) {
           </div>
         </form>
       </details>
-
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Invoice ledger</h2>
-          <span>{invoices.length} invoices</span>
-        </div>
-        {invoices.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Project</th>
-                  <th>Amount</th>
-                  <th>Due</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((invoice) => (
-                  <tr key={invoice.id}>
-                    <td>
-                      <strong className="mono">{invoice.reference}</strong>
-                    </td>
-                    <td>{invoice.projects?.name ?? "Not linked"}</td>
-                    <td>{formatMoney(Number(invoice.amount), invoice.currency)}</td>
-                    <td>{formatDate(invoice.due_at)}</td>
-                    <td>
-                      <form className="inline-form" action={updateInvoiceStatus}>
-                        <input type="hidden" name="id" value={invoice.id} />
-                        <StatusPill value={invoice.status} />
-                        <select
-                          aria-label={`Update ${invoice.reference} status`}
-                          name="status"
-                          defaultValue={invoice.status}
-                        >
-                          {["draft", "sent", "paid", "overdue", "void"].map(
-                            (status) => (
-                              <option value={status} key={status}>
-                                {humanize(status)}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                        <button className="button button-quiet" type="submit">
-                          Update
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            icon={Banknote}
-            title="No cash records"
-            description="Record the first real invoice. Quoted value and cash received remain deliberately separate."
-          />
-        )}
-      </section>
     </div>
   );
 }
-
