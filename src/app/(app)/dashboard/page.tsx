@@ -20,6 +20,7 @@ import {
 import type { AuditEvent, Lead, Project } from "@/lib/types";
 import { requireWorkspace } from "@/lib/workspace";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
+import styles from "./DashboardPage.module.css";
 
 export const metadata: Metadata = {
   title: "Founder Dashboard",
@@ -224,7 +225,7 @@ export default async function DashboardPage() {
             <div className="action-list">
               {founderAttention.map((item) => (
                 <Link
-                  className="action-row"
+                  className={`action-row ${styles.attentionRow}`}
                   data-priority={item.priority}
                   href={item.href}
                   key={item.id}
