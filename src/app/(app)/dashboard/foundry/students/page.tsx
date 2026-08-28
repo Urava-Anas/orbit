@@ -16,6 +16,7 @@ import {
   EmptyFoundryState,
   FoundryNotice,
   FoundryProgressBar,
+  FoundryStageBadge,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
 import { StudentRosterActions } from "@/components/foundry/StudentRosterActions";
@@ -304,9 +305,8 @@ export default async function FoundryStudentsPage({ searchParams }: Props) {
               </div>
 
               <div className="foundry-student-progress">
-                <span>
-                  Recorded progress <b>{student.progress_percent}%</b>
-                </span>
+                <span>Learning maturity</span>
+                <FoundryStageBadge value={student.progress_percent} showEvidence />
                 <FoundryProgressBar value={student.progress_percent} compact />
               </div>
 
