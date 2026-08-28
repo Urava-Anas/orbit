@@ -1,0 +1,38 @@
+.header {
+  position: relative;
+}
+
+.copy {
+  min-width: 0;
+}
+
+.copy > p {
+  max-width: 660px;
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 820px) {
+  .actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .actions :global(.button) {
+    width: 100%;
+  }
+}
