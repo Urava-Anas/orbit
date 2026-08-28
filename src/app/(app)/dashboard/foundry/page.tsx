@@ -17,6 +17,7 @@ import {
   DuePill,
   EmptyFoundryState,
   FoundryProgressBar,
+  FoundryStageBadge,
   HealthBadge,
 } from "@/components/foundry/FoundryUI";
 import {
@@ -360,7 +361,7 @@ export default async function FoundryDashboardPage() {
                 </div>
                 <FoundryProgressBar value={average} compact />
                 <p>
-                  <b>{average}%</b> average progress
+                  <FoundryStageBadge value={average} showEvidence />
                   {state.atRisk ? <em>{state.atRisk} need help</em> : null}
                 </p>
               </article>
