@@ -1,0 +1,59 @@
+.stage {
+  display: inline-flex;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--foundry-muted, var(--muted));
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stage::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px color-mix(in srgb, currentColor 45%, transparent);
+  content: "";
+}
+
+.stage[data-stage="introduced"] {
+  color: #8d97a8;
+}
+
+.stage[data-stage="practising"] {
+  color: #e4a849;
+}
+
+.stage[data-stage="understood"] {
+  color: #78a9ff;
+}
+
+.stage[data-stage="applied"] {
+  color: #70d99b;
+}
+
+.stage[data-stage="mastered"] {
+  border-color: rgba(255, 197, 85, 0.24);
+  background: rgba(255, 197, 85, 0.06);
+  color: #ffc555;
+}
+
+.stageDetail {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.stageDetail small {
+  color: var(--foundry-muted, var(--muted));
+  font-size: 9px;
+  font-weight: 600;
+}
