@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { MessageSquareText } from "lucide-react";
+import Link from "next/link";
+import { MessageSquareText, Plus } from "lucide-react";
 import {
   createContentDraft,
   updateContentStatus,
@@ -48,73 +49,13 @@ export default async function ContentPage({ searchParams }: PageProps) {
         kicker="Distribution control"
         title="Content"
         description="Content begins with approved proof and ends with human review. Orbit drafts and tracks; it does not pretend to publish."
+        action={
+          <a className="button button-primary" href="#create-content">
+            <Plus size={15} aria-hidden="true" /> Create from proof
+          </a>
+        }
       />
       <Notice error={params.error} notice={params.notice} />
-
-      <details className="create-panel">
-        <summary>Create draft from proof</summary>
-        <form action={createContentDraft}>
-          {approvedProofs.length ? (
-            <>
-              <div className="form-grid">
-                <div className="field">
-                  <label htmlFor="content-proof">Approved proof</label>
-                  <select id="content-proof" name="proofId" required>
-                    {approvedProofs.map((proof) => (
-                      <option key={proof.id} value={proof.id}>
-                        {proof.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="content-channel">Channel</label>
-                  <select id="content-channel" name="channel" defaultValue="linkedin">
-                    {["website", "linkedin", "facebook", "instagram", "whatsapp"].map(
-                      (channel) => (
-                        <option value={channel} key={channel}>
-                          {humanize(channel)}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </div>
-                <div className="field field-wide">
-                  <label htmlFor="content-title">Title</label>
-                  <input
-                    id="content-title"
-                    name="title"
-                    minLength={2}
-                    maxLength={180}
-                    required
-                  />
-                </div>
-                <div className="field field-wide">
-                  <label htmlFor="content-body">Draft</label>
-                  <textarea
-                    id="content-body"
-                    name="body"
-                    minLength={10}
-                    maxLength={8000}
-                    required
-                    placeholder="Problem → evidence → mechanism → limit → next action"
-                  />
-                </div>
-              </div>
-              <div className="form-actions">
-                <button className="button button-primary" type="submit">
-                  Save draft
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="notice">
-              Approve a proof asset first. Orbit will not turn unverified claims into
-              marketing.
-            </div>
-          )}
-        </form>
-      </details>
 
       <section className="panel">
         <div className="panel-head">
@@ -179,10 +120,81 @@ export default async function ContentPage({ searchParams }: PageProps) {
             icon={MessageSquareText}
             title="No content drafts"
             description="Approve real proof, then turn it into one evidence-rich source asset. Direct publishing is intentionally not connected."
+            action={
+              approvedProofs.length ? (
+                <a className="button" href="#create-content">Create first draft</a>
+              ) : (
+                <Link className="button" href="/dashboard/proof">Review proof</Link>
+              )
+            }
           />
         )}
       </section>
+
+      <details className="create-panel" id="create-content">
+        <summary>Create draft from approved proof</summary>
+        <form action={createContentDraft}>
+          {approvedProofs.length ? (
+            <>
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor="content-proof">Approved proof</label>
+                  <select id="content-proof" name="proofId" required>
+                    {approvedProofs.map((proof) => (
+                      <option key={proof.id} value={proof.id}>
+                        {proof.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="content-channel">Channel</label>
+                  <select id="content-channel" name="channel" defaultValue="linkedin">
+                    {["website", "linkedin", "facebook", "instagram", "whatsapp"].map(
+                      (channel) => (
+                        <option value={channel} key={channel}>
+                          {humanize(channel)}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+                <div className="field field-wide">
+                  <label htmlFor="content-title">Title</label>
+                  <input
+                    id="content-title"
+                    name="title"
+                    minLength={2}
+                    maxLength={180}
+                    required
+                  />
+                </div>
+                <div className="field field-wide">
+                  <label htmlFor="content-body">Draft</label>
+                  <textarea
+                    id="content-body"
+                    name="body"
+                    minLength={10}
+                    maxLength={8000}
+                    required
+                    placeholder="Problem → evidence → mechanism → limit → next action"
+                  />
+                </div>
+              </div>
+              <div className="form-actions">
+                <button className="button button-primary" type="submit">
+                  Save draft
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="notice">
+              Approve a proof asset first. Orbit will not turn unverified claims into
+              marketing. <Link href="/dashboard/proof">Open Proof →</Link>
+            </div>
+          )}
+        </form>
+      </details>
     </div>
   );
 }
-
