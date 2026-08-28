@@ -17,7 +17,7 @@ import {
 
 const founderLinks = [
   { href: "/dashboard/foundry", label: "Command", icon: House },
-  { href: "/dashboard/foundry/students", label: "Members", icon: UsersRound },
+  { href: "/dashboard/foundry/students", label: "Students", icon: UsersRound },
   { href: "/dashboard/foundry/map", label: "Map", icon: Map },
   { href: "/dashboard/foundry/classes", label: "Classes", icon: CalendarDays },
   { href: "/dashboard/foundry/notes", label: "Notes", icon: FileText },
