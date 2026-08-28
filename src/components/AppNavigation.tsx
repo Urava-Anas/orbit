@@ -38,7 +38,7 @@ const orbitLinks = [
   { href: "/dashboard/plugins", label: "Plugins & Connections", icon: Blocks },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
   { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
-  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
+  { href: "/dashboard/settings", label: "Security & Access", icon: ShieldCheck },
 ] as const;
 
 const apexLinks = [
@@ -54,7 +54,7 @@ const apexLinks = [
   { href: "/dashboard/plugins", label: "Integrations", icon: Blocks },
   { href: "/dashboard/organisation", label: "Workspace", icon: Building2 },
   { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
-  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
+  { href: "/dashboard/settings", label: "Security & Access", icon: ShieldCheck },
 ] as const;
 
 type AppNavigationProps = {
