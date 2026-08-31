@@ -24,11 +24,21 @@ test("Relay decrypted credential reads use the server admin client", async () =>
 
 test("Relay credential RPC explicitly grants the service role before cutover", async () => {
   const migration = await source(
-    "supabase/migrations/20260831100000_relay_credential_read_service_role.sql",
+    "supabase/migrations/20260831165900_relay_credential_read_service_role.sql",
   );
 
   assert.match(
     migration,
     /grant execute on function public\.orbit_relay_get_credential\(uuid\) to service_role;/i,
   );
+});
+
+test("Relay credential RPC accepts service-role calls without a user auth uid", async () => {
+  const migration = await source(
+    "supabase/migrations/20260831170026_relay_credential_getter_service_role_guard.sql",
+  );
+
+  assert.match(migration, /auth\.role\(\)/i);
+  assert.match(migration, /service_role/i);
+  assert.match(migration, /private\.is_workspace_admin\(v_workspace_id\)/i);
 });
