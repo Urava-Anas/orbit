@@ -2,6 +2,7 @@ import "server-only";
 
 import * as tls from "node:tls";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const HOST = "mail.privateemail.com";
@@ -220,7 +221,10 @@ export async function removeMailboxCredential(mailboxId: string) {
 }
 
 async function getMailboxCredential(mailboxId: string) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
+  if (!supabase) {
+    throw new Error("Relay server credential access is not configured.");
+  }
   const { data, error } = await supabase.rpc("orbit_relay_get_credential", {
     p_mailbox_id: mailboxId,
   });
