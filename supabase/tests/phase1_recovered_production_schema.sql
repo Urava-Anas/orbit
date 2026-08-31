@@ -6,6 +6,8 @@ declare
   meta_provider_constraint text;
   project_url_nullable text;
   project_external_ref_count integer;
+  content_insert_policy text;
+  proof_fk_definition text;
 begin
   select count(*) into missing
   from (values
@@ -90,6 +92,34 @@ begin
 
   if project_external_ref_count <> 1 then
     raise exception 'project_files.external_ref is missing';
+  end if;
+
+  select with_check
+    into content_insert_policy
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'content_drafts'
+    and policyname = 'content_insert_member_draft_only';
+
+  if content_insert_policy is null
+     or position('draft' in lower(content_insert_policy)) = 0
+     or position('review' in lower(content_insert_policy)) = 0
+     or position('approved_by' in lower(content_insert_policy)) = 0 then
+    raise exception 'content insert policy does not restrict members to unapproved draft/review states';
+  end if;
+
+  select pg_get_constraintdef(c.oid)
+    into proof_fk_definition
+  from pg_constraint c
+  join pg_class t on t.oid = c.conrelid
+  join pg_namespace n on n.oid = t.relnamespace
+  where n.nspname = 'public'
+    and t.relname = 'commercial_content_assets'
+    and c.conname = 'commercial_content_assets_proof_fk';
+
+  if proof_fk_definition is null
+     or position('SET NULL (proof_id)' in proof_fk_definition) = 0 then
+    raise exception 'commercial content proof deletion must null proof_id only';
   end if;
 end
 $$;
