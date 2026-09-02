@@ -9,6 +9,7 @@ import {
 } from "./identifiers";
 import { resolveMotusMcToDot, type MotusMcResolution } from "./motus";
 import { persistMotusMcResolution } from "./motus-store";
+import { resolveSaferMcToDot, type SaferMcResolution } from "./safer";
 import { persistCompanyCensusCarrier } from "./store";
 import {
   CarrierPublicSourceError,
@@ -59,42 +60,95 @@ export type CarrierCoreLookupInput = {
   leadId?: string | null;
 };
 
-async function resolveRequestedDot(
-  identifier: CarrierLookupIdentifier,
-): Promise<
-  | { status: "resolved"; dotNumber: string; motus: Extract<MotusMcResolution, { status: "resolved" }> | null }
+type ResolvedDot = {
+  status: "resolved";
+  dotNumber: string;
+  motus: Extract<MotusMcResolution, { status: "resolved" }> | null;
+  safer: Extract<SaferMcResolution, { status: "resolved" }> | null;
+};
+
+type DotResolutionFailure =
   | { status: "not_found"; message: string }
   | { status: "manual_review"; message: string }
-> {
+  | { status: "source_unavailable"; message: string };
+
+async function resolveRequestedDot(
+  identifier: CarrierLookupIdentifier,
+): Promise<ResolvedDot | DotResolutionFailure> {
   if (identifier.kind === "dot") {
-    return { status: "resolved", dotNumber: identifier.value, motus: null };
+    return { status: "resolved", dotNumber: identifier.value, motus: null, safer: null };
   }
 
-  const resolution = await resolveMotusMcToDot(identifier.value);
-  if (resolution.status === "not_found") {
-    return {
-      status: "not_found",
-      message: `No modern Motus operating-authority identity was found for ${identifier.canonical}.`,
-    };
+  let motusUnavailable: string | null = null;
+  try {
+    const resolution = await resolveMotusMcToDot(identifier.value);
+    if (resolution.status === "resolved") {
+      return {
+        status: "resolved",
+        dotNumber: resolution.dotNumber,
+        motus: resolution,
+        safer: null,
+      };
+    }
+    if (resolution.status === "invalid_source") {
+      return { status: "manual_review", message: resolution.reason };
+    }
+  } catch (error) {
+    if (error instanceof CarrierPublicSourceError) {
+      motusUnavailable = error.message;
+    } else {
+      throw error;
+    }
   }
-  if (resolution.status === "invalid_source") {
+
+  // SAFER is a narrowly scoped identity fallback, not the primary data model.
+  // It prevents a temporary/open-data lookup issue from making MC search useless.
+  try {
+    const safer = await resolveSaferMcToDot(identifier.value);
+    if (safer.status === "resolved") {
+      return {
+        status: "resolved",
+        dotNumber: safer.dotNumber,
+        motus: null,
+        safer,
+      };
+    }
+    if (safer.status === "invalid_source") {
+      return { status: "manual_review", message: safer.reason };
+    }
+  } catch (error) {
+    if (error instanceof CarrierPublicSourceError) {
+      return {
+        status: "source_unavailable",
+        message: [motusUnavailable, error.message].filter(Boolean).join(" SAFER fallback: "),
+      };
+    }
+    throw error;
+  }
+
+  if (motusUnavailable) {
     return {
-      status: "manual_review",
-      message: resolution.reason,
+      status: "source_unavailable",
+      message:
+        `${motusUnavailable} SAFER fallback did not resolve ${identifier.canonical}; ` +
+        "the lookup is inconclusive rather than a verified not-found result.",
     };
   }
 
-  return { status: "resolved", dotNumber: resolution.dotNumber, motus: resolution };
+  return {
+    status: "not_found",
+    message: `Neither modern Motus nor SAFER resolved ${identifier.canonical} to a USDOT entity.`,
+  };
 }
 
 /**
  * First end-to-end Carrier Intelligence identity/core vertical slice.
  *
  * USDOT lookups bootstrap from the free Company Census dataset. MC lookups first
- * resolve MC → USDOT through modern Motus, then load Company Census by USDOT.
- * A missing Census row is explicitly NOT treated as proof that a USDOT entity
- * does not exist because FMCSA documents coverage exclusions (including active
- * HMSP entities). Those cases are routed to an alternate official-source path.
+ * resolve MC → USDOT through modern Motus with a narrow SAFER identity fallback,
+ * then load Company Census by USDOT. A missing Census row is explicitly NOT
+ * treated as proof that a USDOT entity does not exist because FMCSA documents
+ * coverage exclusions (including active HMSP entities).
  *
  * Callers must supply workspaceId from authenticated Orbit workspace context.
  */
@@ -107,26 +161,16 @@ export async function lookupAndPersistCarrierCore(
   }
 
   const identifier = parsed.identifier;
-
-  let resolved;
-  try {
-    resolved = await resolveRequestedDot(identifier);
-  } catch (error) {
-    if (error instanceof CarrierPublicSourceError) {
-      return {
-        status: "source_unavailable",
-        identifier,
-        message: error.message,
-      };
-    }
-    throw error;
-  }
+  const resolved = await resolveRequestedDot(identifier);
 
   if (resolved.status === "not_found") {
     return { status: "not_found", identifier, message: resolved.message };
   }
   if (resolved.status === "manual_review") {
     return { status: "manual_review", identifier, message: resolved.message };
+  }
+  if (resolved.status === "source_unavailable") {
+    return { status: "source_unavailable", identifier, message: resolved.message };
   }
 
   let row;
@@ -203,6 +247,20 @@ export async function lookupAndPersistCarrierCore(
       carrierId: persisted.carrierId,
       resolution: resolved.motus,
       retrievedAt,
+    });
+  }
+
+  if (resolved.safer) {
+    await registerCarrierIdentifier({
+      workspaceId: input.workspaceId,
+      carrierId: persisted.carrierId,
+      type: "mc",
+      value: resolved.safer.mcNumber,
+      isPrimary: false,
+      status: "observed",
+      sourceName: "FMCSA SAFER Company Snapshot",
+      sourceReference: resolved.safer.sourceReference,
+      observedAt: retrievedAt,
     });
   }
 
