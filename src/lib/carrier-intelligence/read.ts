@@ -215,12 +215,19 @@ function safeReasons(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string").slice(0, 50);
 }
 
-function maxTimestamp(values: Array<string | null | undefined>, fallback: string): string {
-  const valid = values
+function validTimestamps(values: Array<string | null | undefined>): string[] {
+  return values
     .filter((value): value is string => Boolean(value))
     .filter((value) => Number.isFinite(Date.parse(value)))
     .sort((a, b) => Date.parse(a) - Date.parse(b));
-  return valid.at(-1) ?? fallback;
+}
+
+function maxTimestamp(values: Array<string | null | undefined>, fallback: string): string {
+  return validTimestamps(values).at(-1) ?? fallback;
+}
+
+function maxOptionalTimestamp(values: Array<string | null | undefined>): string | null {
+  return validTimestamps(values).at(-1) ?? null;
 }
 
 /**
@@ -363,10 +370,7 @@ export async function loadCarrier360Profile(
     authorities.map((row) => row.retrieved_at),
     carrier.last_verified_at ?? carrier.updated_at,
   );
-  const authoritySourceDate = maxTimestamp(
-    authorities.map((row) => row.source_date),
-    authorityRetrievedAt,
-  );
+  const authoritySourceDate = maxOptionalTimestamp(authorities.map((row) => row.source_date));
   const authorityStatuses = Array.from(
     new Set(currentAuthorities.map((row) => row.status).filter(Boolean)),
   ).sort();
@@ -379,6 +383,8 @@ export async function loadCarrier360Profile(
       : authorityStatuses.length > 1
         ? "mixed"
         : null;
+  const authorityStatusVerification: CarrierVerificationState =
+    authorityStatuses.length > 1 ? "derived" : "verified";
   const authorityGrantedDates = currentAuthorities
     .map((row) => row.granted_at)
     .filter((value): value is string => Boolean(value))
@@ -396,11 +402,36 @@ export async function loadCarrier360Profile(
   }));
 
   const insuranceFilings = (insuranceResult.data ?? []) as InsuranceRow[];
-  const latestInsurance = insuranceFilings[0] ?? null;
   const insuranceRetrievedAt = maxTimestamp(
     insuranceFilings.map((row) => row.retrieved_at),
     carrier.last_verified_at ?? carrier.updated_at,
   );
+  const insuranceSourceDate = maxOptionalTimestamp(insuranceFilings.map((row) => row.source_date));
+  const insuranceStatuses = Array.from(
+    new Set(insuranceFilings.map((row) => row.status).filter(Boolean)),
+  ).sort();
+  const insuranceStatus =
+    insuranceStatuses.length === 1
+      ? insuranceStatuses[0]
+      : insuranceStatuses.length > 1
+        ? "mixed"
+        : null;
+  const insuranceStatusVerification: CarrierVerificationState =
+    insuranceStatuses.length > 1 ? "derived" : "verified";
+  const insuranceFilingSet = insuranceFilings.map((row) => ({
+    filingType: row.filing_type,
+    insurerName: row.insurer_name,
+    policyNumber: row.policy_number,
+    requiredAmount: row.required_amount,
+    coverageAmount: row.coverage_amount,
+    status: row.status,
+    effectiveAt: row.effective_at,
+    cancellationAt: row.cancellation_at,
+    sourceName: row.source_name,
+    sourceReference: row.source_reference,
+    sourceDate: row.source_date,
+  }));
+  const singletonInsurance = insuranceFilings.length === 1 ? insuranceFilings[0] : null;
 
   const safety = (safetyResult.data as SafetyRow | null) ?? null;
   const latestRisk = (riskResult.data as RiskRow | null) ?? null;
@@ -493,10 +524,11 @@ export async function loadCarrier360Profile(
       ? {
           status: officialEvidence(
             authorityStatus,
-            "FMCSA Motus Carrier",
+            authorityStatuses.length > 1 ? "Derived from FMCSA Motus Carrier" : "FMCSA Motus Carrier",
             "Stored current operating-authority rows",
             authoritySourceDate,
             authorityRetrievedAt,
+            authorityStatusVerification,
           ),
           authorityTypes: authorityTypes.length
             ? officialEvidence(
@@ -530,64 +562,86 @@ export async function loadCarrier360Profile(
           status: legacyEvidence(carrier.authority_status, "authority_status", carrier),
           grantedAt: legacyEvidence(carrier.authority_granted_at, "authority_granted_at", carrier),
         },
-    insurance: latestInsurance
+    insurance: insuranceFilings.length
       ? {
           regulatoryStatus: officialEvidence(
-            latestInsurance.status,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
+            insuranceStatus,
+            insuranceStatuses.length > 1 ? "Derived from FMCSA Motus Insur" : "FMCSA Motus Insur",
+            "Stored active/pending regulatory filing set",
+            insuranceSourceDate,
+            insuranceRetrievedAt,
+            insuranceStatusVerification,
+          ),
+          filings: officialEvidence(
+            insuranceFilingSet,
+            "FMCSA Motus Insur",
+            "Stored active/pending regulatory filing set",
+            insuranceSourceDate,
             insuranceRetrievedAt,
           ),
-          insurer: officialEvidence(
-            latestInsurance.insurer_name,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
-          filingType: officialEvidence(
-            latestInsurance.filing_type,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
-          policyNumber: officialEvidence(
-            latestInsurance.policy_number,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
-          requiredAmount: officialEvidence(
-            latestInsurance.required_amount,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
-          coverageAmount: officialEvidence(
-            latestInsurance.coverage_amount,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
-          effectiveAt: officialEvidence(
-            latestInsurance.effective_at,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
-          cancellationAt: officialEvidence(
-            latestInsurance.cancellation_at,
-            latestInsurance.source_name,
-            latestInsurance.source_reference,
-            latestInsurance.source_date,
-            insuranceRetrievedAt,
-          ),
+          insurer: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.insurer_name,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
+          filingType: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.filing_type,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
+          policyNumber: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.policy_number,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
+          requiredAmount: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.required_amount,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
+          coverageAmount: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.coverage_amount,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
+          effectiveAt: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.effective_at,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
+          cancellationAt: singletonInsurance
+            ? officialEvidence(
+                singletonInsurance.cancellation_at,
+                singletonInsurance.source_name,
+                singletonInsurance.source_reference,
+                singletonInsurance.source_date,
+                insuranceRetrievedAt,
+              )
+            : undefined,
         }
       : {
           regulatoryStatus: legacyEvidence(carrier.insurance_status, "insurance_status", carrier),
@@ -642,8 +696,8 @@ export async function loadCarrier360Profile(
       [
         carrier.last_verified_at,
         carrier.data_freshness_at,
-        authorityRetrievedAt,
-        insuranceRetrievedAt,
+        authorities.length ? authorityRetrievedAt : null,
+        insuranceFilings.length ? insuranceRetrievedAt : null,
         safety?.retrieved_at,
       ],
       carrier.updated_at,
