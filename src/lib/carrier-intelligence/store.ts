@@ -33,7 +33,7 @@ const CORE_FIELD_TO_COLUMN = {
 } as const;
 
 type CoreFieldKey = keyof typeof CORE_FIELD_TO_COLUMN;
-
+type EvidenceEntry = [string, CarrierFieldEvidence<unknown>];
 type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
 type ExistingCarrier = {
@@ -57,7 +57,7 @@ type ExistingCarrier = {
   source_summary: Record<string, unknown> | null;
 };
 
-type ProvenanceRow = {
+type CurrentEvidenceRow = {
   field_key: string;
   field_value: unknown;
   source_type: CarrierSourceType;
@@ -143,28 +143,24 @@ async function resolveExistingCarrier(
   return byDot ?? byMc;
 }
 
-async function strongestFieldEvidence(
+async function currentFieldEvidence(
   admin: AdminClient,
   workspaceId: string,
   carrierId: string,
 ): Promise<Map<string, CarrierFieldEvidence<unknown>>> {
   const { data, error } = await admin
-    .from("apex_carrier_field_provenance")
+    .from("apex_carrier_field_current")
     .select(
-      "field_key,field_value,source_type,source_name,source_reference,source_date,retrieved_at,confidence,verification_state,source_priority",
+      "field_key,field_value,source_type,source_name,source_reference,source_date,retrieved_at,confidence,verification_state",
     )
     .eq("workspace_id", workspaceId)
-    .eq("carrier_id", carrierId)
-    .order("source_priority", { ascending: true })
-    .order("source_date", { ascending: false, nullsFirst: false })
-    .order("retrieved_at", { ascending: false });
+    .eq("carrier_id", carrierId);
 
-  if (error) throw new Error(`Carrier provenance lookup failed: ${error.message}`);
+  if (error) throw new Error(`Current Carrier 360 evidence lookup failed: ${error.message}`);
 
-  const strongest = new Map<string, CarrierFieldEvidence<unknown>>();
-  for (const row of (data ?? []) as (ProvenanceRow & { source_priority: number })[]) {
-    if (strongest.has(row.field_key)) continue;
-    strongest.set(row.field_key, {
+  const current = new Map<string, CarrierFieldEvidence<unknown>>();
+  for (const row of (data ?? []) as CurrentEvidenceRow[]) {
+    current.set(row.field_key, {
       value: row.field_value ?? null,
       sourceType: row.source_type,
       sourceName: row.source_name,
@@ -175,7 +171,7 @@ async function strongestFieldEvidence(
       verificationState: row.verification_state,
     });
   }
-  return strongest;
+  return current;
 }
 
 async function insertSourceRecord(
@@ -208,29 +204,30 @@ async function insertSourceRecord(
   throw new Error(`Carrier source-record write failed: ${error.message}`);
 }
 
-function mappedCoreUpdates(
+function acceptedEvidence(
   currentEvidence: Map<string, CarrierFieldEvidence<unknown>>,
   evidence: Record<string, CarrierFieldEvidence<unknown>>,
-) {
-  const updates: Record<string, unknown> = {};
-  const accepted: [string, CarrierFieldEvidence<unknown>][] = [];
-
-  for (const [fieldKey, column] of Object.entries(CORE_FIELD_TO_COLUMN) as [
-    CoreFieldKey,
-    (typeof CORE_FIELD_TO_COLUMN)[CoreFieldKey],
-  ][]) {
-    const candidate = evidence[fieldKey];
-    if (!candidate || candidate.value === null) continue;
-    if (!shouldReplaceCarrierEvidence(currentEvidence.get(fieldKey), candidate)) continue;
-    updates[column] = candidate.value;
-    if (fieldKey === "power_units") updates.fleet_size = candidate.value;
-    accepted.push([fieldKey, candidate]);
-  }
-
-  return { updates, accepted };
+): EvidenceEntry[] {
+  return Object.entries(evidence).filter(([fieldKey, candidate]) => {
+    if (candidate.value === null) return false;
+    return shouldReplaceCarrierEvidence(currentEvidence.get(fieldKey), candidate);
+  });
 }
 
-async function insertProvenance(
+function mappedCoreUpdates(accepted: EvidenceEntry[]) {
+  const updates: Record<string, unknown> = {};
+
+  for (const [fieldKey, candidate] of accepted) {
+    const column = CORE_FIELD_TO_COLUMN[fieldKey as CoreFieldKey];
+    if (!column) continue;
+    updates[column] = candidate.value;
+    if (fieldKey === "power_units") updates.fleet_size = candidate.value;
+  }
+
+  return updates;
+}
+
+async function appendProvenanceLedger(
   admin: AdminClient,
   workspaceId: string,
   carrierId: string,
@@ -258,6 +255,36 @@ async function insertProvenance(
   if (!rows.length) return;
   const { error } = await admin.from("apex_carrier_field_provenance").insert(rows);
   if (error) throw new Error(`Carrier provenance write failed: ${error.message}`);
+}
+
+async function upsertCurrentEvidence(
+  admin: AdminClient,
+  workspaceId: string,
+  carrierId: string,
+  accepted: EvidenceEntry[],
+) {
+  if (!accepted.length) return;
+
+  const rows = accepted.map(([fieldKey, item]) => ({
+    workspace_id: workspaceId,
+    carrier_id: carrierId,
+    field_key: fieldKey,
+    field_value: item.value,
+    source_type: item.sourceType,
+    source_priority: CARRIER_SOURCE_PRIORITY[item.sourceType],
+    source_name: item.sourceName,
+    source_reference: item.sourceReference ?? null,
+    source_date: item.sourceDate ?? null,
+    retrieved_at: item.retrievedAt,
+    confidence: Math.min(100, Math.max(0, Math.trunc(item.confidence))),
+    verification_state: item.verificationState,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await admin
+    .from("apex_carrier_field_current")
+    .upsert(rows, { onConflict: "workspace_id,carrier_id,field_key" });
+  if (error) throw new Error(`Current Carrier 360 evidence update failed: ${error.message}`);
 }
 
 /**
@@ -342,9 +369,11 @@ export async function persistCompanyCensusCarrier(
     }
   }
 
-  const currentEvidence = await strongestFieldEvidence(admin, input.workspaceId, carrier.id);
+  const currentEvidence = await currentFieldEvidence(admin, input.workspaceId, carrier.id);
   const sourceRecordInserted = await insertSourceRecord(admin, input, carrier.id);
 
+  // Exact same source payload has already been processed. Avoid duplicating the
+  // historical provenance ledger and touching normalized timestamps again.
   if (!sourceRecordInserted) {
     return {
       carrierId: carrier.id,
@@ -354,7 +383,8 @@ export async function persistCompanyCensusCarrier(
     };
   }
 
-  const { updates, accepted } = mappedCoreUpdates(currentEvidence, evidence);
+  const accepted = acceptedEvidence(currentEvidence, evidence);
+  const updates = mappedCoreUpdates(accepted);
   const retrievedAt =
     Object.values(evidence).find((item) => item.retrievedAt)?.retrievedAt ??
     new Date().toISOString();
@@ -380,7 +410,8 @@ export async function persistCompanyCensusCarrier(
     if (error) throw new Error(`Carrier core update failed: ${error.message}`);
   }
 
-  await insertProvenance(admin, input.workspaceId, carrier.id, evidence, currentEvidence);
+  await appendProvenanceLedger(admin, input.workspaceId, carrier.id, evidence, currentEvidence);
+  await upsertCurrentEvidence(admin, input.workspaceId, carrier.id, accepted);
 
   return {
     carrierId: carrier.id,
