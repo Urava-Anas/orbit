@@ -4,9 +4,7 @@ import {
   Archive,
   ArrowRight,
   BarChart3,
-  Bot,
   CalendarClock,
-  CheckCircle2,
   CircleAlert,
   FileText,
   Inbox,
@@ -25,7 +23,6 @@ import {
   UsersRound,
   WandSparkles,
   Workflow,
-  Zap,
 } from "lucide-react";
 import { Notice } from "@/components/Notice";
 import { requireWorkspace } from "@/lib/workspace";
