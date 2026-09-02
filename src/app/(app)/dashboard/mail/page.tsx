@@ -98,6 +98,7 @@ type Message = {
 
 const folders = [
   ["inbox", "Inbox", Inbox],
+  ["outbox", "Approval Queue", Workflow],
   ["sent", "Sent", Send],
   ["drafts", "Drafts", PenLine],
   ["archive", "Archive", Archive],
