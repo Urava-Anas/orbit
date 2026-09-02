@@ -94,6 +94,12 @@ export interface CarrierAuthority360 {
 
 export interface CarrierInsurance360 {
   regulatoryStatus?: CarrierFieldEvidence<string>;
+  /**
+   * Complete stored regulatory filing set. Use this when Motus returns more than
+   * one filing; singleton convenience fields below must never arbitrarily choose
+   * one policy from a multi-filing carrier.
+   */
+  filings?: CarrierFieldEvidence<Record<string, unknown>[]>;
   insurer?: CarrierFieldEvidence<string>;
   filingType?: CarrierFieldEvidence<string>;
   policyNumber?: CarrierFieldEvidence<string>;
