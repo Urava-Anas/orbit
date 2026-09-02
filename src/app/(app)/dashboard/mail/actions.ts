@@ -243,7 +243,7 @@ export async function requestMailSend(formData: FormData) {
     subject,
     normalized_subject: subject.toLowerCase().replace(/^re:\s*/i, ""),
     participant_emails: to,
-    folder: messageStatus === "draft" ? "drafts" : "sent",
+    folder: messageStatus === "draft" ? "drafts" : "outbox",
     is_unread: false,
   }).select("id").single();
   if (!thread) redirect(`/dashboard/mail?mailbox=${mailbox.id}&error=Could%20not%20create%20message`);
@@ -266,5 +266,5 @@ export async function requestMailSend(formData: FormData) {
   if (messageStatus === "draft") {
     redirect(`/dashboard/mail?view=mail&folder=drafts&mailbox=${mailbox.id}&notice=Mailbox%20is%20not%20connected.%20Message%20saved%20as%20a%20draft.`);
   }
-  redirect(`/dashboard/mail?view=mail&folder=sent&mailbox=${mailbox.id}&notice=Message%20queued%20for%20approved%20sending`);
+  redirect(`/dashboard/mail?view=mail&folder=outbox&mailbox=${mailbox.id}&notice=Message%20queued%20for%20approval.%20It%20has%20not%20been%20sent.`);
 }
