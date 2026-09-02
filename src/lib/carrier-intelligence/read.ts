@@ -74,6 +74,34 @@ type IdentifierRow = {
   last_seen_at: string | null;
 };
 
+type AuthorityRow = {
+  docket_number: string | null;
+  authority_type: string;
+  status: string;
+  granted_at: string | null;
+  effective_at: string | null;
+  revoked_at: string | null;
+  source_name: string;
+  source_reference: string | null;
+  source_date: string | null;
+  retrieved_at: string;
+};
+
+type InsuranceRow = {
+  filing_type: string | null;
+  insurer_name: string | null;
+  policy_number: string | null;
+  required_amount: number | null;
+  coverage_amount: number | null;
+  status: string;
+  effective_at: string | null;
+  cancellation_at: string | null;
+  source_name: string;
+  source_reference: string | null;
+  source_date: string | null;
+  retrieved_at: string;
+};
+
 type SafetyRow = {
   safety_rating: string | null;
   allowed_to_operate: boolean | null;
@@ -146,27 +174,53 @@ function typedEvidence<T>(
   return item ? (item as CarrierFieldEvidence<T>) : fallback;
 }
 
+function officialEvidence<T>(
+  value: T | null | undefined,
+  sourceName: string,
+  sourceReference: string | null,
+  sourceDate: string | null,
+  retrievedAt: string,
+  verificationState: CarrierVerificationState = "verified",
+): CarrierFieldEvidence<T> | undefined {
+  if (value === null || value === undefined) return undefined;
+  return {
+    value,
+    sourceType: "official_government",
+    sourceName,
+    sourceReference,
+    sourceDate,
+    retrievedAt,
+    confidence: 100,
+    verificationState,
+  };
+}
+
 function safetyEvidence<T>(
   value: T | null,
   field: string,
   row: SafetyRow | null,
 ): CarrierFieldEvidence<T> | undefined {
   if (!row || value === null) return undefined;
-  return {
+  return officialEvidence(
     value,
-    sourceType: "official_government",
-    sourceName: row.source_name,
-    sourceReference: row.source_reference ? `${row.source_reference} · ${field}` : field,
-    sourceDate: row.source_date,
-    retrievedAt: row.retrieved_at,
-    confidence: 100,
-    verificationState: "verified",
-  };
+    row.source_name,
+    row.source_reference ? `${row.source_reference} · ${field}` : field,
+    row.source_date,
+    row.retrieved_at,
+  );
 }
 
 function safeReasons(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string").slice(0, 50);
+}
+
+function maxTimestamp(values: Array<string | null | undefined>, fallback: string): string {
+  const valid = values
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => Number.isFinite(Date.parse(value)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  return valid.at(-1) ?? fallback;
 }
 
 /**
@@ -195,7 +249,14 @@ export async function loadCarrier360Profile(
   if (!carrierResult.data) return null;
   const carrier = carrierResult.data as CarrierRow;
 
-  const [currentResult, identifiersResult, safetyResult, riskResult] = await Promise.all([
+  const [
+    currentResult,
+    identifiersResult,
+    authoritiesResult,
+    insuranceResult,
+    safetyResult,
+    riskResult,
+  ] = await Promise.all([
     admin
       .from("apex_carrier_field_current")
       .select(
@@ -213,6 +274,26 @@ export async function loadCarrier360Profile(
       .order("identifier_type", { ascending: true })
       .order("is_primary", { ascending: false })
       .order("identifier_value", { ascending: true }),
+    admin
+      .from("apex_carrier_authorities")
+      .select(
+        "docket_number,authority_type,status,granted_at,effective_at,revoked_at,source_name,source_reference,source_date,retrieved_at",
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("carrier_id", carrierId)
+      .order("source_date", { ascending: false, nullsFirst: false })
+      .order("retrieved_at", { ascending: false })
+      .limit(100),
+    admin
+      .from("apex_carrier_insurance_filings")
+      .select(
+        "filing_type,insurer_name,policy_number,required_amount,coverage_amount,status,effective_at,cancellation_at,source_name,source_reference,source_date,retrieved_at",
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("carrier_id", carrierId)
+      .order("source_date", { ascending: false, nullsFirst: false })
+      .order("retrieved_at", { ascending: false })
+      .limit(100),
     admin
       .from("apex_carrier_safety_snapshots")
       .select(
@@ -236,6 +317,8 @@ export async function loadCarrier360Profile(
 
   if (currentResult.error) throw new Error(`Carrier current-evidence read failed: ${currentResult.error.message}`);
   if (identifiersResult.error) throw new Error(`Carrier identifier read failed: ${identifiersResult.error.message}`);
+  if (authoritiesResult.error) throw new Error(`Carrier authority read failed: ${authoritiesResult.error.message}`);
+  if (insuranceResult.error) throw new Error(`Carrier insurance read failed: ${insuranceResult.error.message}`);
   if (safetyResult.error) throw new Error(`Carrier safety read failed: ${safetyResult.error.message}`);
   if (riskResult.error) throw new Error(`Carrier risk read failed: ${riskResult.error.message}`);
 
@@ -273,6 +356,51 @@ export async function loadCarrier360Profile(
           verificationState: "derived",
         }
       : undefined;
+
+  const authorities = (authoritiesResult.data ?? []) as AuthorityRow[];
+  const currentAuthorities = authorities.filter((row) => row.source_name === "FMCSA Motus Carrier");
+  const authorityRetrievedAt = maxTimestamp(
+    authorities.map((row) => row.retrieved_at),
+    carrier.last_verified_at ?? carrier.updated_at,
+  );
+  const authoritySourceDate = maxTimestamp(
+    authorities.map((row) => row.source_date),
+    authorityRetrievedAt,
+  );
+  const authorityStatuses = Array.from(
+    new Set(currentAuthorities.map((row) => row.status).filter(Boolean)),
+  ).sort();
+  const authorityTypes = Array.from(
+    new Set(currentAuthorities.map((row) => row.authority_type).filter(Boolean)),
+  ).sort();
+  const authorityStatus =
+    authorityStatuses.length === 1
+      ? authorityStatuses[0]
+      : authorityStatuses.length > 1
+        ? "mixed"
+        : null;
+  const authorityGrantedDates = currentAuthorities
+    .map((row) => row.granted_at)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  const authorityHistory = authorities.map((row) => ({
+    docketNumber: row.docket_number,
+    authorityType: row.authority_type,
+    status: row.status,
+    grantedAt: row.granted_at,
+    effectiveAt: row.effective_at,
+    revokedAt: row.revoked_at,
+    sourceName: row.source_name,
+    sourceReference: row.source_reference,
+    sourceDate: row.source_date,
+  }));
+
+  const insuranceFilings = (insuranceResult.data ?? []) as InsuranceRow[];
+  const latestInsurance = insuranceFilings[0] ?? null;
+  const insuranceRetrievedAt = maxTimestamp(
+    insuranceFilings.map((row) => row.retrieved_at),
+    carrier.last_verified_at ?? carrier.updated_at,
+  );
 
   const safety = (safetyResult.data as SafetyRow | null) ?? null;
   const latestRisk = (riskResult.data as RiskRow | null) ?? null;
@@ -361,13 +489,109 @@ export async function loadCarrier360Profile(
       ),
       trailers: legacyEvidence(carrier.trailers, "trailers", carrier),
     },
-    authority: {
-      status: legacyEvidence(carrier.authority_status, "authority_status", carrier),
-      grantedAt: legacyEvidence(carrier.authority_granted_at, "authority_granted_at", carrier),
-    },
-    insurance: {
-      regulatoryStatus: legacyEvidence(carrier.insurance_status, "insurance_status", carrier),
-    },
+    authority: authorities.length
+      ? {
+          status: officialEvidence(
+            authorityStatus,
+            "FMCSA Motus Carrier",
+            "Stored current operating-authority rows",
+            authoritySourceDate,
+            authorityRetrievedAt,
+          ),
+          authorityTypes: authorityTypes.length
+            ? officialEvidence(
+                authorityTypes,
+                "FMCSA Motus Carrier",
+                "Stored current operating-authority rows",
+                authoritySourceDate,
+                authorityRetrievedAt,
+              )
+            : undefined,
+          grantedAt: authorityGrantedDates.length
+            ? officialEvidence(
+                authorityGrantedDates[0],
+                "FMCSA Motus Carrier",
+                "Explicit stored grant date",
+                authoritySourceDate,
+                authorityRetrievedAt,
+              )
+            : undefined,
+          history: authorityHistory.length
+            ? officialEvidence(
+                authorityHistory,
+                "FMCSA Motus Carrier + AuthHist",
+                "Stored bounded authority lifecycle evidence",
+                authoritySourceDate,
+                authorityRetrievedAt,
+              )
+            : undefined,
+        }
+      : {
+          status: legacyEvidence(carrier.authority_status, "authority_status", carrier),
+          grantedAt: legacyEvidence(carrier.authority_granted_at, "authority_granted_at", carrier),
+        },
+    insurance: latestInsurance
+      ? {
+          regulatoryStatus: officialEvidence(
+            latestInsurance.status,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          insurer: officialEvidence(
+            latestInsurance.insurer_name,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          filingType: officialEvidence(
+            latestInsurance.filing_type,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          policyNumber: officialEvidence(
+            latestInsurance.policy_number,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          requiredAmount: officialEvidence(
+            latestInsurance.required_amount,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          coverageAmount: officialEvidence(
+            latestInsurance.coverage_amount,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          effectiveAt: officialEvidence(
+            latestInsurance.effective_at,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+          cancellationAt: officialEvidence(
+            latestInsurance.cancellation_at,
+            latestInsurance.source_name,
+            latestInsurance.source_reference,
+            latestInsurance.source_date,
+            insuranceRetrievedAt,
+          ),
+        }
+      : {
+          regulatoryStatus: legacyEvidence(carrier.insurance_status, "insurance_status", carrier),
+        },
     safety: {
       safetyRating: safetyEvidence(safety?.safety_rating ?? null, "safety_rating", safety),
       allowedToOperate: safetyEvidence(safety?.allowed_to_operate ?? null, "allowed_to_operate", safety),
@@ -414,6 +638,15 @@ export async function loadCarrier360Profile(
           scoringVersion: null,
           assessedAt: null,
         },
-    lastMaterialVerificationAt: carrier.last_verified_at ?? carrier.data_freshness_at,
+    lastMaterialVerificationAt: maxTimestamp(
+      [
+        carrier.last_verified_at,
+        carrier.data_freshness_at,
+        authorityRetrievedAt,
+        insuranceRetrievedAt,
+        safety?.retrieved_at,
+      ],
+      carrier.updated_at,
+    ),
   };
 }
