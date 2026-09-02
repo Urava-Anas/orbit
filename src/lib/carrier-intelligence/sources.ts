@@ -13,6 +13,7 @@ export interface CarrierSourceDefinition {
   cadence: "daily" | "monthly" | "on_demand";
   datasetId?: string;
   notes: string;
+  coverageLimitations?: readonly string[];
 }
 
 /**
@@ -33,7 +34,12 @@ export const FREE_CARRIER_SOURCE_REGISTRY = {
     cadence: "daily",
     datasetId: "az4n-8mr2",
     notes:
-      "Primary USDOT entity identity, business operations, equipment and driver source. Daily; not real-time.",
+      "Primary USDOT entity identity, business operations, equipment and driver source. Daily from roughly 24-hour-old source data; not real-time.",
+    coverageLimitations: [
+      "Does not include shipper-only business types.",
+      "FMCSA states entities with an active HMSP on file at FMCSA/PHMSA are excluded from this file.",
+      "A missing Company Census row is therefore not sufficient evidence that a USDOT entity does not exist.",
+    ],
   },
   fmcsa_motus_carrier_history: {
     key: "fmcsa_motus_carrier_history",
@@ -45,7 +51,7 @@ export const FREE_CARRIER_SOURCE_REGISTRY = {
     cadence: "daily",
     datasetId: "inys-ebih",
     notes:
-      "Modern operating-authority baseline/history keyed by USDOT and docket number.",
+      "Modern operating-authority baseline/history keyed by USDOT and docket number. One USDOT entity may have multiple operating-authority dockets.",
   },
   fmcsa_motus_authority_history: {
     key: "fmcsa_motus_authority_history",
@@ -122,7 +128,8 @@ export const FREE_CARRIER_SOURCE_REGISTRY = {
     paidDependency: false,
     accessMode: "public_verification",
     cadence: "on_demand",
-    notes: "Verification/fallback surface, not the primary national ingestion store.",
+    notes:
+      "Verification/fallback surface, including cases where Company Census coverage is intentionally incomplete. Not the primary national ingestion store.",
   },
   fmcsa_hmsp: {
     key: "fmcsa_hmsp",
@@ -133,7 +140,7 @@ export const FREE_CARRIER_SOURCE_REGISTRY = {
     accessMode: "public_verification",
     cadence: "on_demand",
     notes:
-      "HMSP is distinct from a carrier declaring hazmat operations or having hazmat inspections.",
+      "HMSP is distinct from a carrier declaring hazmat operations or having hazmat inspections. Company Census coverage can exclude active HMSP entities, so HMSP-aware lookup is mandatory.",
   },
   ucr_public: {
     key: "ucr_public",
