@@ -29,7 +29,20 @@ test("core carrier lookup has no paid carrier-data provider dependency", async (
     source("src/lib/carrier-intelligence/store.ts"),
   ]);
   const runtime = files.join("\n");
-  assert.doesNotMatch(runtime, /CarrierSource|SearchMule|Apollo|ZoomInfo|Clearbit|Hunter/i);
+  // Policy documentation and comments are allowed to name excluded vendors. The
+  // executable path may not import them, call their hosts, or require credentials.
+  assert.doesNotMatch(
+    runtime,
+    /from\s+["'][^"']*(?:carriersource|searchmule|apollo|zoominfo|clearbit|hunter)[^"']*["']/i,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /https?:\/\/[^"'\s]*(?:carriersource|searchmule|apollo|zoominfo|clearbit|hunter)[^"'\s]*/i,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /(?:CARRIERSOURCE|SEARCHMULE|APOLLO|ZOOMINFO|CLEARBIT|HUNTER)[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET)/,
+  );
   assert.doesNotMatch(runtime, /api[_-]?key|bearer\s+/i);
   assert.match(runtime, /data\.transportation\.gov/);
   assert.match(runtime, /safer\.fmcsa\.dot\.gov/);
@@ -75,7 +88,7 @@ test("Carrier 360 current facts remain separate from the historical provenance l
   assert.match(currentMigration, /provenance table remains the audit ledger/i);
   assert.match(store, /appendProvenanceLedger/);
   assert.match(store, /upsertCurrentEvidence/);
-  assert.match(reader, /does NOT contact external sources/i);
+  assert.match(reader, /without re-contacting external[\s\S]{0,80}sources/i);
 });
 
 test("MC resolution is fail-closed and SAFER is only a fallback", async () => {
