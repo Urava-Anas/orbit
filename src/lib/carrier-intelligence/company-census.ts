@@ -5,8 +5,10 @@ export interface FmcsaCompanyCensusRecord {
   status_code?: unknown;
   carrier_operation?: unknown;
   phone?: unknown;
+  cell_phone?: unknown;
   company_officer_1?: unknown;
   company_officer_2?: unknown;
+  truck_units?: unknown;
   power_units?: unknown;
   hm_ind?: unknown;
   total_drivers?: unknown;
@@ -33,6 +35,7 @@ export interface NormalizedCompanyCensusCarrier {
   officerName: string | null;
   secondaryOfficerName: string | null;
   phone: string | null;
+  cellPhone: string | null;
   email: string | null;
   physicalAddress: string | null;
   city: string | null;
@@ -40,6 +43,8 @@ export interface NormalizedCompanyCensusCarrier {
   postalCode: string | null;
   drivers: number | null;
   powerUnits: number | null;
+  /** Straight-truck count as filed in Company Census; not total power units. */
+  truckUnits: number | null;
   carrierOperation: string | null;
   classification: string | null;
   operatingStatus: "active" | "inactive" | "pending" | "unknown";
@@ -163,7 +168,8 @@ function makeFiledEvidence<T>(
  * This function is intentionally conservative:
  * - missing values remain null;
  * - an FF/MX/other docket is never relabeled as an MC number;
- * - filed power units/drivers are not presented as live availability;
+ * - filed power units/drivers/truck units are not presented as live availability;
+ * - TRUCK_UNITS is kept distinct from POWER_UNITS and is not treated as trailers;
  * - cargo/equipment detail is not inferred until its exact federal field mapping
  *   is explicitly implemented and tested.
  */
@@ -183,6 +189,7 @@ export function normalizeCompanyCensusRecord(
     officerName: cleanText(record.company_officer_1),
     secondaryOfficerName: cleanText(record.company_officer_2),
     phone: cleanPhone(record.phone),
+    cellPhone: cleanPhone(record.cell_phone),
     email: cleanEmail(record.email_address),
     physicalAddress: cleanText(record.phy_street),
     city: cleanText(record.phy_city),
@@ -190,6 +197,7 @@ export function normalizeCompanyCensusRecord(
     postalCode: cleanText(record.phy_zip),
     drivers: parseNonNegativeInteger(record.total_drivers),
     powerUnits: parseNonNegativeInteger(record.power_units),
+    truckUnits: parseNonNegativeInteger(record.truck_units),
     carrierOperation: cleanText(record.carrier_operation),
     classification: cleanText(record.classdef),
     operatingStatus: normalizeStatus(record.status_code),
@@ -199,97 +207,22 @@ export function normalizeCompanyCensusRecord(
   };
 
   const evidence: Record<string, CarrierFieldEvidence<unknown>> = {
-    dot_number: makeFiledEvidence(
-      normalized.dotNumber,
-      "dot_number",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    mc_number: makeFiledEvidence(
-      normalized.mcNumber,
-      "docket1",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    legal_name: makeFiledEvidence(
-      normalized.legalName,
-      "legal_name",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    dba_name: makeFiledEvidence(
-      normalized.dbaName,
-      "dba_name",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    officer_name: makeFiledEvidence(
-      normalized.officerName,
-      "company_officer_1",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    phone: makeFiledEvidence(
-      normalized.phone,
-      "phone",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    email: makeFiledEvidence(
-      normalized.email,
-      "email_address",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    physical_address: makeFiledEvidence(
-      normalized.physicalAddress,
-      "phy_street",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    city: makeFiledEvidence(
-      normalized.city,
-      "phy_city",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    state: makeFiledEvidence(
-      normalized.state,
-      "phy_state",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    postal_code: makeFiledEvidence(
-      normalized.postalCode,
-      "phy_zip",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    drivers: makeFiledEvidence(
-      normalized.drivers,
-      "total_drivers",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    power_units: makeFiledEvidence(
-      normalized.powerUnits,
-      "power_units",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
+    dot_number: makeFiledEvidence(normalized.dotNumber, "dot_number", retrievedAt, carrierFilingDate, dotNumber),
+    mc_number: makeFiledEvidence(normalized.mcNumber, "docket1", retrievedAt, carrierFilingDate, dotNumber),
+    legal_name: makeFiledEvidence(normalized.legalName, "legal_name", retrievedAt, carrierFilingDate, dotNumber),
+    dba_name: makeFiledEvidence(normalized.dbaName, "dba_name", retrievedAt, carrierFilingDate, dotNumber),
+    officer_name: makeFiledEvidence(normalized.officerName, "company_officer_1", retrievedAt, carrierFilingDate, dotNumber),
+    secondary_officer_name: makeFiledEvidence(normalized.secondaryOfficerName, "company_officer_2", retrievedAt, carrierFilingDate, dotNumber),
+    phone: makeFiledEvidence(normalized.phone, "phone", retrievedAt, carrierFilingDate, dotNumber),
+    cell_phone: makeFiledEvidence(normalized.cellPhone, "cell_phone", retrievedAt, carrierFilingDate, dotNumber),
+    email: makeFiledEvidence(normalized.email, "email_address", retrievedAt, carrierFilingDate, dotNumber),
+    physical_address: makeFiledEvidence(normalized.physicalAddress, "phy_street", retrievedAt, carrierFilingDate, dotNumber),
+    city: makeFiledEvidence(normalized.city, "phy_city", retrievedAt, carrierFilingDate, dotNumber),
+    state: makeFiledEvidence(normalized.state, "phy_state", retrievedAt, carrierFilingDate, dotNumber),
+    postal_code: makeFiledEvidence(normalized.postalCode, "phy_zip", retrievedAt, carrierFilingDate, dotNumber),
+    drivers: makeFiledEvidence(normalized.drivers, "total_drivers", retrievedAt, carrierFilingDate, dotNumber),
+    power_units: makeFiledEvidence(normalized.powerUnits, "power_units", retrievedAt, carrierFilingDate, dotNumber),
+    truck_units: makeFiledEvidence(normalized.truckUnits, "truck_units", retrievedAt, carrierFilingDate, dotNumber),
     operating_status: makeFiledEvidence(
       normalized.operatingStatus === "unknown" ? null : normalized.operatingStatus,
       "status_code",
@@ -297,27 +230,9 @@ export function normalizeCompanyCensusRecord(
       carrierFilingDate,
       dotNumber,
     ),
-    carrier_operation: makeFiledEvidence(
-      normalized.carrierOperation,
-      "carrier_operation",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    classification: makeFiledEvidence(
-      normalized.classification,
-      "classdef",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
-    hazmat_declared: makeFiledEvidence(
-      normalized.hazmatDeclared,
-      "hm_ind",
-      retrievedAt,
-      carrierFilingDate,
-      dotNumber,
-    ),
+    carrier_operation: makeFiledEvidence(normalized.carrierOperation, "carrier_operation", retrievedAt, carrierFilingDate, dotNumber),
+    classification: makeFiledEvidence(normalized.classification, "classdef", retrievedAt, carrierFilingDate, dotNumber),
+    hazmat_declared: makeFiledEvidence(normalized.hazmatDeclared, "hm_ind", retrievedAt, carrierFilingDate, dotNumber),
   };
 
   return {
