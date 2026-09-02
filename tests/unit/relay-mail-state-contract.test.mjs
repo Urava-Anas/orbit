@@ -22,3 +22,10 @@ test("Relay never presents approval-pending outbound mail as Sent", async () => 
   assert.doesNotMatch(requestSend, /folder: messageStatus === "draft" \? "drafts" : "sent"/);
   assert.doesNotMatch(requestSend, /folder=sent/);
 });
+
+test("Relay exposes the approval outbox to operators", async () => {
+  const page = await source("src/app/(app)/dashboard/mail/page.tsx");
+
+  assert.match(page, /\["outbox", "Approval Queue", Workflow\]/);
+  assert.match(page, /folder=\$\{key\}/);
+});
