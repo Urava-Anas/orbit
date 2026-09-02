@@ -21,6 +21,7 @@ const CORE_FIELD_TO_COLUMN = {
   dba_name: "dba_name",
   officer_name: "officer_name",
   phone: "phone",
+  cell_phone: "cell_phone",
   email: "email",
   physical_address: "physical_address",
   city: "city",
@@ -44,6 +45,7 @@ type ExistingCarrier = {
   dot_number: string | null;
   officer_name: string | null;
   phone: string | null;
+  cell_phone: string | null;
   email: string | null;
   physical_address: string | null;
   city: string | null;
@@ -113,7 +115,7 @@ async function carrierByField(
   const { data, error } = await admin
     .from("apex_carriers")
     .select(
-      "id,lead_id,legal_name,dba_name,mc_number,dot_number,officer_name,phone,email,physical_address,city,home_state,postal_code,drivers,power_units,hazmat_declared,source_summary",
+      "id,lead_id,legal_name,dba_name,mc_number,dot_number,officer_name,phone,cell_phone,email,physical_address,city,home_state,postal_code,drivers,power_units,hazmat_declared,source_summary",
     )
     .eq("workspace_id", workspaceId)
     .eq(field, value)
@@ -182,7 +184,11 @@ async function insertSourceRecord(
   carrierId: string,
 ) {
   const dotNumber = input.result.normalized.dotNumber;
-  const externalRecordId = dotNumber ? `USDOT:${dotNumber}` : input.result.normalized.mcNumber ? `MC:${input.result.normalized.mcNumber}` : "";
+  const externalRecordId = dotNumber
+    ? `USDOT:${dotNumber}`
+    : input.result.normalized.mcNumber
+      ? `MC:${input.result.normalized.mcNumber}`
+      : "";
   const payloadHash = carrierSourcePayloadHash(input.rawRecord);
   const { error } = await admin.from("apex_carrier_source_records").insert({
     workspace_id: input.workspaceId,
@@ -296,6 +302,7 @@ export async function persistCompanyCensusCarrier(
         officer_name: normalized.officerName,
         email: normalized.email,
         phone: normalized.phone,
+        cell_phone: normalized.cellPhone,
         physical_address: normalized.physicalAddress,
         city: normalized.city,
         home_state: normalized.state,
@@ -314,7 +321,7 @@ export async function persistCompanyCensusCarrier(
         },
       })
       .select(
-        "id,lead_id,legal_name,dba_name,mc_number,dot_number,officer_name,phone,email,physical_address,city,home_state,postal_code,drivers,power_units,hazmat_declared,source_summary",
+        "id,lead_id,legal_name,dba_name,mc_number,dot_number,officer_name,phone,cell_phone,email,physical_address,city,home_state,postal_code,drivers,power_units,hazmat_declared,source_summary",
       )
       .single();
 
@@ -349,7 +356,8 @@ export async function persistCompanyCensusCarrier(
 
   const { updates, accepted } = mappedCoreUpdates(currentEvidence, evidence);
   const retrievedAt =
-    Object.values(evidence).find((item) => item.retrievedAt)?.retrievedAt ?? new Date().toISOString();
+    Object.values(evidence).find((item) => item.retrievedAt)?.retrievedAt ??
+    new Date().toISOString();
   const nextSourceSummary = {
     ...(carrier.source_summary ?? {}),
     fmcsa_company_census: {
