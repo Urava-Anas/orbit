@@ -1,11 +1,14 @@
 import "server-only";
 
 import { normalizeCompanyCensusRecord } from "./company-census";
+import { registerCarrierIdentifier } from "./identifier-store";
 import {
   parseCarrierLookupIdentifier,
   type CarrierIdentifierKind,
   type CarrierLookupIdentifier,
 } from "./identifiers";
+import { resolveMotusMcToDot, type MotusMcResolution } from "./motus";
+import { persistMotusMcResolution } from "./motus-store";
 import { persistCompanyCensusCarrier } from "./store";
 import {
   CarrierPublicSourceError,
@@ -16,6 +19,7 @@ export type CarrierCoreLookupOutcome =
   | {
       status: "ok";
       identifier: CarrierLookupIdentifier;
+      resolvedDotNumber: string;
       carrierId: string;
       created: boolean;
       sourceRecordInserted: boolean;
@@ -32,7 +36,7 @@ export type CarrierCoreLookupOutcome =
       message: string;
     }
   | {
-      status: "needs_motus_resolution";
+      status: "manual_review";
       identifier: CarrierLookupIdentifier;
       message: string;
     }
@@ -49,14 +53,41 @@ export type CarrierCoreLookupInput = {
   leadId?: string | null;
 };
 
+async function resolveRequestedDot(
+  identifier: CarrierLookupIdentifier,
+): Promise<
+  | { status: "resolved"; dotNumber: string; motus: Extract<MotusMcResolution, { status: "resolved" }> | null }
+  | { status: "not_found"; message: string }
+  | { status: "manual_review"; message: string }
+> {
+  if (identifier.kind === "dot") {
+    return { status: "resolved", dotNumber: identifier.value, motus: null };
+  }
+
+  const resolution = await resolveMotusMcToDot(identifier.value);
+  if (resolution.status === "not_found") {
+    return {
+      status: "not_found",
+      message: `No modern Motus carrier identity was found for ${identifier.canonical}.`,
+    };
+  }
+  if (resolution.status === "invalid_source") {
+    return {
+      status: "manual_review",
+      message: resolution.reason,
+    };
+  }
+
+  return { status: "resolved", dotNumber: resolution.dotNumber, motus: resolution };
+}
+
 /**
- * First end-to-end Carrier Intelligence vertical slice.
+ * First end-to-end Carrier Intelligence identity/core vertical slice.
  *
- * USDOT lookups can bootstrap directly from the free Company Census dataset.
- * MC lookups intentionally stop at a typed state until the modern Motus
- * MC-to-USDOT resolver is implemented. We do not guess or rely only on the first
- * legacy Census docket slot, because doing so can create false "not found"
- * results or bind the wrong carrier.
+ * USDOT lookups bootstrap directly from the free Company Census dataset.
+ * MC lookups first resolve MC → USDOT through modern Motus, then load Company
+ * Census by the resolved USDOT. No first-docket shortcut or heuristic identity
+ * merge is allowed.
  *
  * Callers must supply workspaceId from authenticated Orbit workspace context.
  */
@@ -69,18 +100,31 @@ export async function lookupAndPersistCarrierCore(
   }
 
   const identifier = parsed.identifier;
-  if (identifier.kind === "mc") {
-    return {
-      status: "needs_motus_resolution",
-      identifier,
-      message:
-        "MC lookup is waiting for the modern Motus MC-to-USDOT resolver. No carrier identity was guessed.",
-    };
+
+  let resolved;
+  try {
+    resolved = await resolveRequestedDot(identifier);
+  } catch (error) {
+    if (error instanceof CarrierPublicSourceError) {
+      return {
+        status: "source_unavailable",
+        identifier,
+        message: error.message,
+      };
+    }
+    throw error;
+  }
+
+  if (resolved.status === "not_found") {
+    return { status: "not_found", identifier, message: resolved.message };
+  }
+  if (resolved.status === "manual_review") {
+    return { status: "manual_review", identifier, message: resolved.message };
   }
 
   let row;
   try {
-    row = await fetchCompanyCensusByDot(identifier.value);
+    row = await fetchCompanyCensusByDot(resolved.dotNumber);
   } catch (error) {
     if (error instanceof CarrierPublicSourceError) {
       return {
@@ -96,15 +140,15 @@ export async function lookupAndPersistCarrierCore(
     return {
       status: "not_found",
       identifier,
-      message: `No Company Census carrier was found for ${identifier.canonical}.`,
+      message: `No Company Census carrier was found for USDOT ${resolved.dotNumber}.`,
     };
   }
 
   const retrievedAt = new Date().toISOString();
   const normalized = normalizeCompanyCensusRecord(row, retrievedAt);
-  if (normalized.normalized.dotNumber !== identifier.value) {
+  if (normalized.normalized.dotNumber !== resolved.dotNumber) {
     throw new Error(
-      `Company Census identity mismatch: requested ${identifier.canonical} but source returned USDOT ${normalized.normalized.dotNumber ?? "unknown"}.`,
+      `Company Census identity mismatch: requested USDOT ${resolved.dotNumber} but source returned USDOT ${normalized.normalized.dotNumber ?? "unknown"}.`,
     );
   }
 
@@ -115,9 +159,47 @@ export async function lookupAndPersistCarrierCore(
     result: normalized,
   });
 
+  await registerCarrierIdentifier({
+    workspaceId: input.workspaceId,
+    carrierId: persisted.carrierId,
+    type: "usdot",
+    value: resolved.dotNumber,
+    isPrimary: true,
+    status: "observed",
+    sourceName: "FMCSA Company Census File",
+    sourceReference: `USDOT ${resolved.dotNumber}`,
+    observedAt: retrievedAt,
+  });
+
+  // The Census docket slot is useful observed evidence but it is not treated as
+  // the complete MC list. Modern Motus remains canonical for docket resolution.
+  if (normalized.normalized.mcNumber) {
+    await registerCarrierIdentifier({
+      workspaceId: input.workspaceId,
+      carrierId: persisted.carrierId,
+      type: "mc",
+      value: normalized.normalized.mcNumber,
+      isPrimary: false,
+      status: "observed",
+      sourceName: "FMCSA Company Census File",
+      sourceReference: `USDOT ${resolved.dotNumber} · docket1`,
+      observedAt: retrievedAt,
+    });
+  }
+
+  if (resolved.motus) {
+    await persistMotusMcResolution({
+      workspaceId: input.workspaceId,
+      carrierId: persisted.carrierId,
+      resolution: resolved.motus,
+      retrievedAt,
+    });
+  }
+
   return {
     status: "ok",
     identifier,
+    resolvedDotNumber: resolved.dotNumber,
     carrierId: persisted.carrierId,
     created: persisted.created,
     sourceRecordInserted: persisted.sourceRecordInserted,
