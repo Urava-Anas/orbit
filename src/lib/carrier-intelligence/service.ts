@@ -36,6 +36,12 @@ export type CarrierCoreLookupOutcome =
       message: string;
     }
   | {
+      status: "source_gap";
+      identifier: CarrierLookupIdentifier;
+      resolvedDotNumber: string;
+      message: string;
+    }
+  | {
       status: "manual_review";
       identifier: CarrierLookupIdentifier;
       message: string;
@@ -68,7 +74,7 @@ async function resolveRequestedDot(
   if (resolution.status === "not_found") {
     return {
       status: "not_found",
-      message: `No modern Motus carrier identity was found for ${identifier.canonical}.`,
+      message: `No modern Motus operating-authority identity was found for ${identifier.canonical}.`,
     };
   }
   if (resolution.status === "invalid_source") {
@@ -84,10 +90,11 @@ async function resolveRequestedDot(
 /**
  * First end-to-end Carrier Intelligence identity/core vertical slice.
  *
- * USDOT lookups bootstrap directly from the free Company Census dataset.
- * MC lookups first resolve MC → USDOT through modern Motus, then load Company
- * Census by the resolved USDOT. No first-docket shortcut or heuristic identity
- * merge is allowed.
+ * USDOT lookups bootstrap from the free Company Census dataset. MC lookups first
+ * resolve MC → USDOT through modern Motus, then load Company Census by USDOT.
+ * A missing Census row is explicitly NOT treated as proof that a USDOT entity
+ * does not exist because FMCSA documents coverage exclusions (including active
+ * HMSP entities). Those cases are routed to an alternate official-source path.
  *
  * Callers must supply workspaceId from authenticated Orbit workspace context.
  */
@@ -138,9 +145,12 @@ export async function lookupAndPersistCarrierCore(
 
   if (!row) {
     return {
-      status: "not_found",
+      status: "source_gap",
       identifier,
-      message: `No Company Census carrier was found for USDOT ${resolved.dotNumber}.`,
+      resolvedDotNumber: resolved.dotNumber,
+      message:
+        `USDOT ${resolved.dotNumber} is not present in Company Census. ` +
+        "This is not treated as a carrier-not-found result because FMCSA documents intentional Company Census coverage exclusions. Continue with SAFER/HMSP and other approved official fallback sources.",
     };
   }
 
