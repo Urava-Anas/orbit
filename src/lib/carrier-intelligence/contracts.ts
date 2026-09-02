@@ -26,6 +26,19 @@ export type CarrierVettingDecision =
   | "hold"
   | "reject";
 
+export type CarrierRegulatoryIdentifierType = "usdot" | "mc" | "ff" | "mx";
+
+export interface CarrierRegulatoryIdentifier {
+  type: CarrierRegulatoryIdentifierType;
+  value: string;
+  isPrimary: boolean;
+  status: "observed" | "active" | "inactive" | "historical" | "unknown";
+  sourceName: string;
+  sourceReference?: string | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+}
+
 export interface CarrierFieldEvidence<T = unknown> {
   value: T | null;
   sourceType: CarrierSourceType;
@@ -41,8 +54,14 @@ export interface CarrierFieldEvidence<T = unknown> {
 export interface CarrierIdentity360 {
   legalName: CarrierFieldEvidence<string>;
   dbaName?: CarrierFieldEvidence<string>;
+  /**
+   * Compatibility/display MC only. A USDOT entity can have multiple MC/FF/MX
+   * dockets, so operational code must use `regulatoryIdentifiers` rather than
+   * assuming this field is the carrier's only docket.
+   */
   mcNumber?: CarrierFieldEvidence<string>;
   dotNumber?: CarrierFieldEvidence<string>;
+  regulatoryIdentifiers?: CarrierFieldEvidence<CarrierRegulatoryIdentifier[]>;
   officerName?: CarrierFieldEvidence<string>;
   officerTitle?: CarrierFieldEvidence<string>;
   phone?: CarrierFieldEvidence<string>;
