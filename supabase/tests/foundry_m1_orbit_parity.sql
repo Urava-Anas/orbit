@@ -145,13 +145,14 @@ $$;
 reset role;
 
 -- Test harness only. Orbit deliberately does not grant service_role direct
--- SELECT on these platform access tables. The production claim RPC is a
--- SECURITY DEFINER path and does not need those reads. These grants exist only
--- so this test can inspect the post-claim access state directly; the enclosing
+-- SELECT on these platform access/student tables. The production claim RPC is
+-- a SECURITY DEFINER path and does not need those reads. These grants exist
+-- only so this test can inspect the post-claim state directly; the enclosing
 -- transaction rolls them back at the end of the file.
 grant select on public.workspace_members to service_role;
 grant select on public.member_permission_bundles to service_role;
 grant select on public.permission_bundles to service_role;
+grant select on public.foundry_students to service_role;
 
 set local role service_role;
 
