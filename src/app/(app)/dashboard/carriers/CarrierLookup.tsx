@@ -9,6 +9,8 @@ type LookupResult =
   | { status: "ok"; profile: Carrier360Profile; created: boolean; refreshed: boolean }
   | { status: "invalid_input" | "forbidden" | "not_found" | "source_gap" | "manual_review" | "source_unavailable" | "rate_limited"; message: string };
 
+type PreflightState = "evidence" | "review" | "blocked";
+
 function isSuccess(result: LookupResult | null): result is Extract<LookupResult, { status: "ok" }> {
   return result?.status === "ok";
 }
@@ -29,12 +31,36 @@ function evidenceLabel(evidence?: CarrierFieldEvidence<unknown>) {
   return `${evidence.sourceName} · ${evidence.verificationState.replaceAll("_", " ")} · ${evidence.confidence}% confidence`;
 }
 
+function hasEvidence(evidence?: CarrierFieldEvidence<unknown>) {
+  return Boolean(evidence && evidence.value !== null && evidence.value !== "" && evidence.verificationState !== "unknown");
+}
+
 function Fact({ label, evidence }: { label: string; evidence?: CarrierFieldEvidence<unknown> }) {
   return (
     <div className={styles.fact}>
       <span>{label}</span>
       <strong>{display(evidence?.value)}</strong>
       <small>{evidenceLabel(evidence)}</small>
+    </div>
+  );
+}
+
+function PreflightItem({
+  label,
+  state,
+  value,
+  detail,
+}: {
+  label: string;
+  state: PreflightState;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className={styles.preflightItem} data-state={state}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
     </div>
   );
 }
@@ -71,6 +97,11 @@ export function CarrierLookup({ canResearch }: { canResearch: boolean }) {
   const insurance = profile?.insurance;
   const safety = profile?.safety;
   const identifiers: CarrierRegulatoryIdentifier[] = valueOf(identity?.regulatoryIdentifiers) ?? [];
+  const allowedToOperate = valueOf(safety?.allowedToOperate);
+  const apexDecision = profile?.risk.decision ?? "unassessed";
+  const decisionHardStop = apexDecision === "hold" || apexDecision === "reject";
+  const federalOperatingHardStop = allowedToOperate === false;
+  const hasLookupHardStop = decisionHardStop || federalOperatingHardStop;
 
   return (
     <main className={styles.page}>
@@ -108,6 +139,58 @@ export function CarrierLookup({ canResearch }: { canResearch: boolean }) {
           </section>
 
           <section className={styles.warning}><AlertTriangle size={18} aria-hidden="true" /><p><strong>Verify before dispatch.</strong> FMCSA filings are regulatory evidence, not a substitute for a current commercial COI, identity check, or founder-approved carrier onboarding.</p></section>
+
+          <section className={styles.preflight} aria-labelledby="carrier-preflight-title" data-state={hasLookupHardStop ? "blocked" : "review"}>
+            <div className={styles.preflightHead}>
+              <div>
+                <span>Dispatch boundary</span>
+                <h3 id="carrier-preflight-title">Operational preflight</h3>
+                <p>Lookup evidence never completes operational preflight. Human onboarding and load-level approval remain required.</p>
+              </div>
+              <div className={styles.preflightStatus}>
+                <AlertTriangle size={17} aria-hidden="true" />
+                <div><span>Status</span><strong>{hasLookupHardStop ? "Hard stop" : "Onboarding required"}</strong></div>
+              </div>
+            </div>
+            <div className={styles.preflightGrid}>
+              <PreflightItem
+                label="Federal identity"
+                state={hasEvidence(identity?.legalName) && identifiers.length ? "evidence" : "review"}
+                value={hasEvidence(identity?.legalName) && identifiers.length ? "Evidence found" : "Needs review"}
+                detail="Federal identity evidence is useful for research, but it is not the human identity verification required for carrier onboarding."
+              />
+              <PreflightItem
+                label="Operating authority"
+                state={hasEvidence(authority?.status) ? "evidence" : "review"}
+                value={hasEvidence(authority?.status) ? display(valueOf(authority?.status)) : "Not verified current"}
+                detail="The filed status is shown as source evidence. Current applicability and authority clearance must be verified by the governed preflight workflow."
+              />
+              <PreflightItem
+                label="Insurance"
+                state={hasEvidence(insurance?.regulatoryStatus) ? "evidence" : "review"}
+                value={hasEvidence(insurance?.regulatoryStatus) ? display(valueOf(insurance?.regulatoryStatus)) : "Not verified current"}
+                detail="Regulatory filing evidence does not replace a current commercial COI or any required insurance verification."
+              />
+              <PreflightItem
+                label="FMCSA operating fact"
+                state={federalOperatingHardStop ? "blocked" : hasEvidence(safety?.allowedToOperate) ? "evidence" : "review"}
+                value={allowedToOperate === false ? "Not allowed to operate" : allowedToOperate === true ? "Allowed to operate" : "Unknown"}
+                detail={allowedToOperate === false ? "Federal source evidence is a hard stop for dispatch." : "A positive operating fact is one prerequisite only; it never approves the carrier."}
+              />
+              <PreflightItem
+                label="Apex risk decision"
+                state={decisionHardStop ? "blocked" : apexDecision === "approved" ? "evidence" : "review"}
+                value={apexDecision}
+                detail={decisionHardStop ? "Apex hold/reject is a hard stop." : "Even an Apex-approved risk record does not bypass onboarding, commercial COI, or load-level approval gates."}
+              />
+              <PreflightItem
+                label="Operational readiness"
+                state="review"
+                value="Not established by lookup"
+                detail="Contract, equipment, driver/HOS, credentials, communications, load source, audit, document storage, and exception ownership must be checked separately."
+              />
+            </div>
+          </section>
 
           <div className={styles.grid}>
             <article className={styles.card}><div className={styles.cardHead}><h3>Identity & fleet</h3><CheckCircle2 size={17} aria-hidden="true" /></div><Fact label="Legal name" evidence={identity?.legalName} /><Fact label="Phone" evidence={identity?.phone} /><Fact label="Power units" evidence={profile.fleet.powerUnits} /><Fact label="Drivers" evidence={profile.fleet.drivers} /></article>
