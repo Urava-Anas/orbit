@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { AlertTriangle, CheckCircle2, Database, Search, ShieldCheck, Truck } from "lucide-react";
-import type { Carrier360Profile, CarrierFieldEvidence, CarrierRegulatoryIdentifier } from "@/lib/carrier-intelligence/contracts";
+import type { Carrier360Profile, CarrierFieldEvidence, CarrierRegulatoryIdentifier, CarrierVettingDecision } from "@/lib/carrier-intelligence/contracts";
 import styles from "./carriers.module.css";
 
 type LookupResult =
@@ -10,6 +10,17 @@ type LookupResult =
   | { status: "invalid_input" | "forbidden" | "not_found" | "source_gap" | "manual_review" | "source_unavailable" | "rate_limited"; message: string };
 
 type PreflightState = "evidence" | "review" | "blocked";
+
+type StoredCarrierSummaryView = {
+  legalName: string;
+  dotNumber: string | null;
+  mcNumber: string | null;
+  authorityStatus: string | null;
+  insuranceStatus: string | null;
+  decision: CarrierVettingDecision;
+  lastVerifiedAt: string | null;
+  updatedAt: string;
+};
 
 function isSuccess(result: LookupResult | null): result is Extract<LookupResult, { status: "ok" }> {
   return result?.status === "ok";
@@ -24,6 +35,12 @@ function display(value: unknown, fallback = "Not available") {
   if (Array.isArray(value)) return value.length ? value.join(", ") : fallback;
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value);
+}
+
+function compactDate(value: string | null) {
+  if (!value) return "Not verified";
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : "Unknown date";
 }
 
 function evidenceLabel(evidence?: CarrierFieldEvidence<unknown>) {
@@ -65,7 +82,13 @@ function PreflightItem({
   );
 }
 
-export function CarrierLookup({ canResearch }: { canResearch: boolean }) {
+export function CarrierLookup({
+  canResearch,
+  storedCarriers,
+}: {
+  canResearch: boolean;
+  storedCarriers: StoredCarrierSummaryView[];
+}) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"dot" | "mc">("dot");
   const [loading, setLoading] = useState(false);
@@ -124,6 +147,29 @@ export function CarrierLookup({ canResearch }: { canResearch: boolean }) {
         {!canResearch ? <p className={styles.notice}><AlertTriangle size={16} aria-hidden="true" /> Founder or admin access is required for live carrier research.</p> : null}
         {result && !isSuccess(result) ? <p className={styles.error} role="alert"><AlertTriangle size={16} aria-hidden="true" />{result.message}</p> : null}
       </section>
+
+      {storedCarriers.length ? (
+        <section className={styles.storedPanel} aria-labelledby="stored-carriers-title">
+          <div className={styles.storedHead}>
+            <div><span>Stored Carrier 360</span><h2 id="stored-carriers-title">Recently researched carriers</h2></div>
+            <small>Database view only · no public-source refresh</small>
+          </div>
+          <div className={styles.storedList}>
+            {storedCarriers.map((carrier, index) => (
+              <div className={styles.storedRow} key={`${carrier.dotNumber ?? carrier.mcNumber ?? carrier.legalName}-${index}`}>
+                <div className={styles.storedIdentity}>
+                  <strong>{carrier.legalName}</strong>
+                  <small>{[carrier.dotNumber ? `USDOT ${carrier.dotNumber}` : null, carrier.mcNumber ? `MC ${carrier.mcNumber}` : null].filter(Boolean).join(" · ") || "Identifier unavailable"}</small>
+                </div>
+                <div><span>Authority</span><strong>{display(carrier.authorityStatus, "Unknown")}</strong></div>
+                <div><span>Insurance</span><strong>{display(carrier.insuranceStatus, "Unknown")}</strong></div>
+                <div className={styles.storedDecision} data-decision={carrier.decision}><span>Apex decision</span><strong>{carrier.decision}</strong></div>
+                <div><span>Last verified</span><strong>{compactDate(carrier.lastVerifiedAt)}</strong></div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {!profile ? (
         <section className={styles.empty}>
