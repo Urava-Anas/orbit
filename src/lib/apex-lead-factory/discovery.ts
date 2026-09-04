@@ -145,10 +145,15 @@ function listEvidence(
   if (!template) return undefined;
   const clean = values.filter((value): value is string => Boolean(value));
   return {
-    ...template,
     value: clean,
     confidence: clean.length ? template.confidence : 0,
     verificationState: clean.length ? template.verificationState : "unknown",
+    sourceType: template.sourceType,
+    sourceName: template.sourceName,
+    sourceReference: template.sourceReference,
+    retrievedAt: template.retrievedAt,
+    sourceUpdatedAt: template.sourceUpdatedAt,
+    previousValue: null,
   };
 }
 
