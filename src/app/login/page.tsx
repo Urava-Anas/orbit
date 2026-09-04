@@ -84,7 +84,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 id="password"
                 name="password"
                 autoComplete="current-password"
-                minLength={12}
+                minLength={1}
                 maxLength={128}
                 required
                 placeholder="Your password"
