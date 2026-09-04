@@ -42,6 +42,7 @@ export interface CarrierFactoryCandidate {
   discoveredAt: string;
   sourceUpdatedAt?: string | null;
   mcs150UpdatedAt?: string | null;
+  discoveryOperatingStatus?: "active" | "inactive" | "pending" | "unknown";
   declaredFleet?: DeclaredFleetComposition;
   observedEquipment?: ObservedCarrierVehicle[];
   publicBusinessContactVerified?: boolean;
