@@ -32,3 +32,14 @@ test("Relay represents pending mail in an outbox and never skips a busy inbox ba
   assert.match(connector, /maxUid > 0 \? available\.slice\(0, MAX_SYNC\)/);
   assert.match(migration, /'outbox'/);
 });
+
+test("Relay locks authentication to the selected mailbox and preserves recoverable sync failures", async () => {
+  const page = await source("src/app/(app)/dashboard/mail/page.tsx");
+  const action = await source("src/app/(app)/dashboard/mail/actions.ts");
+
+  assert.match(page, /name="mailbox_id" value=\{selectedMailbox\?\.id \?\? ""\}/);
+  assert.match(page, /readOnly=\{Boolean\(selectedMailbox && selectedMailbox\.status !== "connected"\)\}/);
+  assert.match(action, /requestedMailbox\.address\.toLowerCase\(\) !== email/);
+  assert.match(action, /refused%20a%20mailbox%20identity%20mismatch/);
+  assert.match(action, /Mailbox authenticated, but the first sync failed:/);
+});

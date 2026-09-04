@@ -479,6 +479,9 @@ function ConnectorWorkspace({
 
         {showConnect && canManage ? (
           <form action={connectNamecheapMailbox} className={relay.connectForm}>
+            {selectedMailbox?.status !== "connected" ? (
+              <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+            ) : null}
             <span>Connect Namecheap Private Email</span>
             <h3>Authenticate a business mailbox</h3>
             <p>Use the full mailbox address and that mailbox’s Namecheap Private Email password.</p>
@@ -488,8 +491,10 @@ function ConnectorWorkspace({
                 type="email"
                 name="email"
                 defaultValue={selectedMailbox?.status !== "connected" ? selectedMailbox?.address ?? "" : ""}
+                readOnly={Boolean(selectedMailbox && selectedMailbox.status !== "connected")}
                 placeholder="info@company.com"
                 autoComplete="username"
+                maxLength={320}
                 required
               />
             </label>
@@ -504,11 +509,11 @@ function ConnectorWorkspace({
             </label>
             <label>
               <span>Mailbox password</span>
-              <input type="password" name="password" placeholder="Private Email password" autoComplete="current-password" required />
+              <input type="password" name="password" placeholder="Private Email password" autoComplete="current-password" maxLength={500} required />
             </label>
             <div className={relay.connectSecurity}>
               <ShieldCheck size={16} />
-              <span>Orbit verifies IMAP and SMTP before storing an encrypted credential.</span>
+              <span>Orbit verifies IMAP and SMTP without sending an email, then stores an encrypted credential.</span>
             </div>
             <button type="submit" className={relay.connectButton}>
               Verify & connect <ArrowRight size={15} />
