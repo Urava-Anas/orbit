@@ -268,6 +268,7 @@ export async function fetchObservedEquipmentForCarriers(
         model: cleanText(decoded?.Model),
         modelYear: Number.isInteger(decodedYear) && decodedYear >= 1900 && decodedYear <= 2100 ? decodedYear : null,
         bodyClass: cleanText(decoded?.BodyClass) ?? unitTypeDescription(cleanText(row.insp_unit_type_id) ?? undefined),
+        plateNumber: cleanText(row.insp_unit_license),
         plateState: cleanText(row.insp_unit_license_state),
         sourceName: decoded ? "FMCSA Inspection Files + NHTSA vPIC" : "FMCSA Inspections Per Unit",
         sourceReference: cleanText(row.inspection_id) ? `Inspection ${row.inspection_id}` : null,
