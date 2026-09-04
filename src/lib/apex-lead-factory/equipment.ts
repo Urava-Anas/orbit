@@ -193,8 +193,8 @@ async function decodeVinBatch(vins: string[]): Promise<Map<string, VpicFlatRow>>
 
 /**
  * Inspection-derived vehicle evidence for a small worker chunk. These records
- * prove equipment was observed under the carrier at inspection time; they are
- * never represented as the carrier's complete current fleet.
+ * prove equipment was observed under the carrier at inspection time; this is
+ * not a complete declared fleet inventory and is never represented as one.
  */
 export async function fetchObservedEquipmentForCarriers(
   usdotNumbers: string[],
