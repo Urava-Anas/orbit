@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOrbitAccess, orbitHomePath } from "@/lib/access";
 import { orbitBaseUrl } from "@/lib/integration-connections";
+import { checkPasswordExposure } from "@/lib/password-security";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,6 +27,30 @@ function loginPath(next: string | null) {
 function messagePath(path: string, type: "error" | "notice", message: string) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${type}=${encodeURIComponent(message)}`;
+}
+
+async function requireSafePassword(password: string, returnPath: string) {
+  const exposure = await checkPasswordExposure(password);
+
+  if (exposure === "leaked") {
+    redirect(
+      messagePath(
+        returnPath,
+        "error",
+        "This password appears in known breach data. Choose a unique password.",
+      ),
+    );
+  }
+
+  if (exposure === "unavailable") {
+    redirect(
+      messagePath(
+        returnPath,
+        "error",
+        "Password safety verification is temporarily unavailable. Try again shortly.",
+      ),
+    );
+  }
 }
 
 async function requestOrigin() {
@@ -145,6 +170,8 @@ export async function updatePassword(formData: FormData) {
   if (!password.success) {
     redirect(messagePath("/reset-password", "error", "Use a password with at least 12 characters."));
   }
+
+  await requireSafePassword(password.data, "/reset-password");
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: password.data });
