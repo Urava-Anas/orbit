@@ -6,9 +6,13 @@ Carrier Intelligence is a bounded Apex workflow inside Orbit. It reuses the Apex
 
 The founder/admin lookup surface accepts only MC or USDOT input. Workspace tenancy comes from the authenticated Orbit session. Results display source, verification state and confidence. Lookup cannot approve, reject, contact or book a carrier.
 
-As of 2026-09-02, implementation commit `2f51853` is on Draft PR #59. The exact pre-UI branch head passed Production Quality #675. Local verification after the UI addition passed 36 unit tests, typecheck, lint, route integrity (265 links / 68 routes) and dependency audit with zero known vulnerabilities. The post-push Production Quality run remains the next release gate.
+PR #59 remains the release branch. Production Quality must pass on its exact current head; a prior green run does not certify later changes. The owner has authorized the controlled production release and first 1,000-carrier batch, subject to the verification gates below and zero additional spending.
 
-The connected Vercel team exposes `urava-regent-v01` and `orbit-content-engine-preview`, but no Git-linked Orbit/Apex application project. No Apex preview or production deployment was created. Deployment linkage is therefore an explicit blocker, not an inferred success state.
+The verified Vercel target is `urava-pros/orbit`, connected to `Urava-Anas/orbit`. Pushes to `main` automatically deploy production. The observed production baseline on 2026-09-04 is deployment `dpl_HqZamUdQazVjXfpMJnhMooffn9Mb`, commit `d35c831`, serving `orbit-two-delta.vercel.app`.
+
+Preview deployment `dpl_8Gn1VT9pnxquSGzbHaHSpJ3Zq3JU` failed because Preview lacks `NEXT_PUBLIC_SUPABASE_URL`. Production variables must not be copied into Preview, and the configuration guard must not be weakened. No isolated cloud preview database is available in the connected Supabase projects. Continue free development and isolated CI testing while this gate is blocked; do not create paid branches or change billing.
+
+The original seven Carrier Intelligence migrations were independently verified in Orbit Production, including normalized SQL matches against head `20bc2eb`. Do not reapply them by filename: production migration timestamps differ. The new `apex_carrier_factory_atomic_delivery` migration is a separate pending release dependency; validate it in CI and reconcile migration history before any future production application. Its service-role-only finalizer is required by the updated runner. No live factory batch has been verified.
 
 ## Required gates before production pilot
 
@@ -28,6 +32,6 @@ Core lookup uses free/public FMCSA-derived sources. Paid carrier-data vendors ar
 
 1. Run the full Production Quality workflow after each branch update.
 2. Exercise the preview acceptance matrix without production credentials or real carrier outreach.
-3. Add a stored-carrier list and explicit preflight view after the lookup UI is accepted.
-4. Add Gmail only through Orbit's existing connector and approval model; do not create a separate Apex inbox or credential store.
-5. Do not merge or deploy until the founder authorizes the production pilot.
+3. Verify the stored-carrier list and operational preflight already present in this release.
+4. Run `supabase/tests/apex_carrier_factory_delivery.sql` only in isolated test databases. Its synthetic 1,000-record exercise proves delivery behavior, not real carrier quality or production delivery.
+5. Merge only after the exact-commit checks and preview acceptance pass. Reverify production health, authorization and tenant isolation before starting the owner/admin factory workflow.

@@ -87,12 +87,22 @@ export function scoreCarrierOpportunity(
     warnings.push("Allowed-to-operate status is not verified.");
   }
 
-  if (authorityStatus && /(active|authorized|granted)/i.test(authorityStatus)) {
+  // Negative evidence takes precedence: "inactive" contains "active" and
+  // "not authorized" contains "authorized". Neither is positive authority.
+  if (authorityStatus && /\b(revoked|inactive|out[ -]of[ -]service|not[ -]authorized|unauthorized|suspended|denied|not[ -]granted|not[ -]active)\b/i.test(authorityStatus)) {
+    return {
+      score: 0,
+      tier: "C",
+      reasons: [],
+      warnings: [`Authority status is a hard stop: ${authorityStatus}.`],
+      whyNow: [],
+      scoringVersion,
+    };
+  }
+
+  if (authorityStatus && /^(active|authorized|granted)$/i.test(authorityStatus.trim())) {
     score += 16;
     reasons.push("Operating authority appears active.");
-  } else if (authorityStatus && /(revoked|inactive|out of service|not authorized)/i.test(authorityStatus)) {
-    score -= 30;
-    warnings.push(`Authority status requires review: ${authorityStatus}.`);
   } else {
     warnings.push("Authority status is unknown or ambiguous.");
   }

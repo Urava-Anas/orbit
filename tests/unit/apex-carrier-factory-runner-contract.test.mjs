@@ -22,12 +22,11 @@ test("factory uses a resumable work queue instead of one giant 1,000-carrier req
   assert.match(runner, /boundedLimit/);
 });
 
-test("daily batch is not called complete until the full requested quota is ready", async () => {
+test("daily completion uses the database transaction tested by the isolation suite", async () => {
   const runner = await source("src/lib/apex-lead-factory/runner.ts");
 
-  assert.match(runner, /if \(ready\.length < quota\)/);
-  assert.match(runner, /waiting_for_more_ready/);
-  assert.match(runner, /delivered_count: quota/);
+  assert.match(runner, /admin.rpc\("finalize_apex_carrier_factory_batch"/);
+  assert.doesNotMatch(runner, /delivered_count: quota/);
 });
 
 test("observed truck evidence comes from public FMCSA inspection files and VIN decoding", async () => {

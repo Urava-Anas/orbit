@@ -58,15 +58,8 @@ interface WorkItemRow {
   candidate_payload: unknown;
   attempts: number;
   max_attempts: number;
-}
-
-interface ReadyWorkRow extends WorkItemRow {
-  carrier_id: string | null;
-  lead_id: string | null;
-  opportunity_score: number | null;
-  tier: ApexLeadTier | null;
-  material_fingerprint: string | null;
-  dossier: Record<string, unknown> | null;
+  locked_by: string;
+  locked_at: string;
 }
 
 export interface StartCarrierFactoryInput {
@@ -109,7 +102,7 @@ async function previouslyDeliveredUsdots(workspaceId: string, usdots: string[]):
  */
 export async function startCarrierFactory(input: StartCarrierFactoryInput): Promise<StartCarrierFactoryResult> {
   const admin = adminOrThrow();
-  const quota = Math.min(10_000, Math.max(1, Math.trunc(input.quota ?? DEFAULT_CARRIER_FACTORY_CONFIG.dailyQuota)));
+  let quota = Math.min(10_000, Math.max(1, Math.trunc(input.quota ?? DEFAULT_CARRIER_FACTORY_CONFIG.dailyQuota)));
   const queueMultiplier = Math.min(
     MAX_QUEUE_MULTIPLIER,
     Math.max(2, Math.trunc(input.queueMultiplier ?? 3)),
@@ -123,6 +116,13 @@ export async function startCarrierFactory(input: StartCarrierFactoryInput): Prom
     .eq("batch_date", batchDate)
     .maybeSingle();
   if (existingError) throw new Error(`Apex factory batch read failed: ${existingError.message}`);
+  // A resumed run must retain the original target, including after delivery.
+  if (existingBatch) {
+    if (input.quota !== undefined && quota !== Number(existingBatch.quota)) {
+      throw new Error("An existing carrier factory batch quota cannot be changed.");
+    }
+    quota = Number(existingBatch.quota);
+  }
   if (existingBatch?.status === "completed") {
     return {
       batchId: String(existingBatch.id),
@@ -207,7 +207,6 @@ export async function startCarrierFactory(input: StartCarrierFactoryInput): Prom
   const { error: updateError } = await admin
     .from("apex_carrier_factory_batches")
     .update({
-      quota,
       candidates_scanned: discovery.scanned,
       eligible_candidates: workRows.length,
       deduped_candidates: lifetimeSuppressed,
@@ -233,39 +232,46 @@ function retryAt(attempts: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
-async function markWorkFailure(row: WorkItemRow, message: string) {
+/** Only the current lease holder may settle a work item. */
+async function settleClaimedWork(row: WorkItemRow, values: Record<string, unknown>): Promise<boolean> {
   const admin = adminOrThrow();
-  const terminal = row.attempts >= row.max_attempts;
-  const { error } = await admin
+  const { data, error } = await admin
     .from("apex_carrier_factory_work_items")
-    .update({
-      status: terminal ? "failed" : "queued",
-      available_at: terminal ? new Date().toISOString() : retryAt(row.attempts),
-      locked_at: null,
-      locked_by: null,
-      last_error: message.slice(0, 2_000),
-      updated_at: new Date().toISOString(),
-    })
+    .update(values)
     .eq("workspace_id", row.workspace_id)
-    .eq("id", row.id);
-  if (error) throw new Error(`Apex factory failure-state write failed: ${error.message}`);
+    .eq("batch_id", row.batch_id)
+    .eq("id", row.id)
+    .eq("status", "enriching")
+    .eq("locked_by", row.locked_by)
+    .eq("locked_at", row.locked_at)
+    .eq("attempts", row.attempts)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`Apex factory lease settlement failed: ${error.message}`);
+  return Boolean(data);
+}
+
+async function markWorkFailure(row: WorkItemRow, message: string) {
+  const terminal = row.attempts >= row.max_attempts;
+  return settleClaimedWork(row, {
+    status: terminal ? "failed" : "queued",
+    available_at: terminal ? new Date().toISOString() : retryAt(row.attempts),
+    locked_at: null,
+    locked_by: null,
+    last_error: message.slice(0, 2_000),
+    updated_at: new Date().toISOString(),
+  });
 }
 
 async function markWorkRejected(row: WorkItemRow, message: string) {
-  const admin = adminOrThrow();
-  const { error } = await admin
-    .from("apex_carrier_factory_work_items")
-    .update({
-      status: "rejected",
-      locked_at: null,
-      locked_by: null,
-      last_error: message.slice(0, 2_000),
-      updated_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    })
-    .eq("workspace_id", row.workspace_id)
-    .eq("id", row.id);
-  if (error) throw new Error(`Apex factory rejection write failed: ${error.message}`);
+  return settleClaimedWork(row, {
+    status: "rejected",
+    locked_at: null,
+    locked_by: null,
+    last_error: message.slice(0, 2_000),
+    updated_at: new Date().toISOString(),
+    completed_at: new Date().toISOString(),
+  });
 }
 
 export interface ProcessCarrierFactoryResult {
@@ -274,6 +280,7 @@ export interface ProcessCarrierFactoryResult {
   rejected: number;
   retried: number;
   failed: number;
+  leaseLost: number;
 }
 
 /**
@@ -288,9 +295,11 @@ export async function processCarrierFactoryWork(
 ): Promise<ProcessCarrierFactoryResult> {
   const admin = adminOrThrow();
   const boundedLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
-  await admin.rpc("release_stale_apex_carrier_factory_work", {
+  const { error: releaseError } = await admin.rpc("release_stale_apex_carrier_factory_work", {
     p_workspace_id: workspaceId,
   });
+
+  if (releaseError) throw new Error(`Apex factory stale-lease release failed: ${releaseError.message}`);
 
   const { data: claimedData, error: claimError } = await admin.rpc("claim_apex_carrier_factory_work", {
     p_workspace_id: workspaceId,
@@ -300,7 +309,7 @@ export async function processCarrierFactoryWork(
   });
   if (claimError) throw new Error(`Apex factory work claim failed: ${claimError.message}`);
   const claimed = (claimedData ?? []) as WorkItemRow[];
-  if (!claimed.length) return { claimed: 0, ready: 0, rejected: 0, retried: 0, failed: 0 };
+  if (!claimed.length) return { claimed: 0, ready: 0, rejected: 0, retried: 0, failed: 0, leaseLost: 0 };
 
   let equipmentByDot = new Map<string, Awaited<ReturnType<typeof fetchObservedEquipmentForCarriers>>[number]>();
   try {
@@ -321,6 +330,7 @@ export async function processCarrierFactoryWork(
     rejected: 0,
     retried: 0,
     failed: 0,
+    leaseLost: 0,
   };
 
   for (const row of claimed) {
@@ -334,20 +344,22 @@ export async function processCarrierFactoryWork(
 
       if (lookup.status !== "ok") {
         if (lookup.status === "source_unavailable") {
-          await markWorkFailure(row, lookup.message);
-          if (row.attempts >= row.max_attempts) result.failed += 1;
+          const settled = await markWorkFailure(row, lookup.message);
+          if (!settled) result.leaseLost += 1;
+          else if (row.attempts >= row.max_attempts) result.failed += 1;
           else result.retried += 1;
         } else {
-          await markWorkRejected(row, lookup.message);
-          result.rejected += 1;
+          if (await markWorkRejected(row, lookup.message)) result.rejected += 1;
+          else result.leaseLost += 1;
         }
         continue;
       }
 
       const profile = await loadCarrier360Profile(workspaceId, lookup.carrierId);
       if (!profile) {
-        await markWorkFailure(row, "Carrier persisted but Carrier 360 profile could not be reconstructed.");
-        if (row.attempts >= row.max_attempts) result.failed += 1;
+        const settled = await markWorkFailure(row, "Carrier persisted but Carrier 360 profile could not be reconstructed.");
+        if (!settled) result.leaseLost += 1;
+        else if (row.attempts >= row.max_attempts) result.failed += 1;
         else result.retried += 1;
         continue;
       }
@@ -365,8 +377,8 @@ export async function processCarrierFactoryWork(
       };
       const opportunity = scoreCarrierOpportunity(enriched);
       if (opportunity.score < DEFAULT_CARRIER_FACTORY_CONFIG.minimumScore) {
-        await markWorkRejected(row, `Deep opportunity score ${opportunity.score} is below the delivery floor.`);
-        result.rejected += 1;
+        if (await markWorkRejected(row, `Deep opportunity score ${opportunity.score} is below the delivery floor.`)) result.rejected += 1;
+        else result.leaseLost += 1;
         continue;
       }
 
@@ -381,8 +393,8 @@ export async function processCarrierFactoryWork(
         .maybeSingle();
       if (duplicateError) throw new Error(`Apex delivery dedupe read failed: ${duplicateError.message}`);
       if (duplicate) {
-        await markWorkRejected(row, `Same material carrier version was already delivered at ${duplicate.delivered_at}.`);
-        result.rejected += 1;
+        if (await markWorkRejected(row, `Same material carrier version was already delivered at ${duplicate.delivered_at}.`)) result.rejected += 1;
+        else result.leaseLost += 1;
         continue;
       }
 
@@ -404,9 +416,7 @@ export async function processCarrierFactoryWork(
         },
       };
 
-      const { error: readyError } = await admin
-        .from("apex_carrier_factory_work_items")
-        .update({
+      const settled = await settleClaimedWork(row, {
           status: "ready",
           carrier_id: lookup.carrierId,
           lead_id: carrierRow?.lead_id ?? null,
@@ -419,15 +429,14 @@ export async function processCarrierFactoryWork(
           last_error: null,
           updated_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
-        })
-        .eq("workspace_id", workspaceId)
-        .eq("id", row.id);
-      if (readyError) throw new Error(`Apex factory ready-state write failed: ${readyError.message}`);
-      result.ready += 1;
+      });
+      if (settled) result.ready += 1;
+      else result.leaseLost += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown carrier enrichment failure.";
-      await markWorkFailure(row, message);
-      if (row.attempts >= row.max_attempts) result.failed += 1;
+      const settled = await markWorkFailure(row, message);
+      if (!settled) result.leaseLost += 1;
+      else if (row.attempts >= row.max_attempts) result.failed += 1;
       else result.retried += 1;
     }
   }
@@ -439,6 +448,7 @@ export interface FinalizeCarrierFactoryResult {
   status: "completed" | "waiting_for_more_ready";
   quota: number;
   ready: number;
+  eligibleReady: number;
   delivered: number;
   tierCounts: Record<ApexLeadTier, number>;
 }
@@ -453,108 +463,14 @@ export async function finalizeCarrierFactoryBatch(
   batchId: string,
 ): Promise<FinalizeCarrierFactoryResult> {
   const admin = adminOrThrow();
-  const { data: batch, error: batchError } = await admin
-    .from("apex_carrier_factory_batches")
-    .select("quota,status")
-    .eq("workspace_id", workspaceId)
-    .eq("id", batchId)
-    .single();
-  if (batchError || !batch) throw new Error(`Apex factory batch read failed: ${batchError?.message ?? "missing batch"}`);
-
-  const quota = Number(batch.quota ?? DEFAULT_CARRIER_FACTORY_CONFIG.dailyQuota);
-  const { data: readyData, error: readyError } = await admin
-    .from("apex_carrier_factory_work_items")
-    .select(
-      "id,workspace_id,batch_id,usdot_number,discovery_score,status,candidate_payload,attempts,max_attempts,carrier_id,lead_id,opportunity_score,tier,material_fingerprint,dossier",
-    )
-    .eq("workspace_id", workspaceId)
-    .eq("batch_id", batchId)
-    .eq("status", "ready")
-    .order("opportunity_score", { ascending: false })
-    .order("discovery_score", { ascending: false })
-    .limit(quota);
-  if (readyError) throw new Error(`Apex factory ready-queue read failed: ${readyError.message}`);
-  const ready = (readyData ?? []) as ReadyWorkRow[];
-  const tierCounts: Record<ApexLeadTier, number> = { A: 0, B: 0, C: 0 };
-
-  if (ready.length < quota) {
-    for (const row of ready) if (row.tier) tierCounts[row.tier] += 1;
-    return {
-      status: "waiting_for_more_ready",
-      quota,
-      ready: ready.length,
-      delivered: 0,
-      tierCounts,
-    };
-  }
-
-  const deliveredUsdots = await previouslyDeliveredUsdots(
-    workspaceId,
-    ready.map((row) => row.usdot_number),
-  );
-  const deliveredAt = new Date().toISOString();
-  const ledgerRows = ready.map((row) => {
-    if (!row.opportunity_score || !row.tier || !row.material_fingerprint || !row.dossier) {
-      throw new Error(`Ready work item ${row.id} is missing required delivery fields.`);
-    }
-    tierCounts[row.tier] += 1;
-    const candidate = row.dossier.candidate as CarrierFactoryCandidate | undefined;
-    return {
-      workspace_id: workspaceId,
-      batch_id: batchId,
-      carrier_id: row.carrier_id,
-      lead_id: row.lead_id,
-      usdot_number: normalizeUsdot(row.usdot_number),
-      material_fingerprint: row.material_fingerprint,
-      material_change_kinds: candidate?.materialChangeKinds ?? [],
-      opportunity_score: row.opportunity_score,
-      tier: row.tier,
-      new_to_apex: !deliveredUsdots.has(normalizeUsdot(row.usdot_number)),
-      previously_delivered_at: null,
-      source_freshness_at: candidate?.sourceUpdatedAt ?? candidate?.mcs150UpdatedAt ?? null,
-      dossier: row.dossier,
-      delivered_at: deliveredAt,
-    };
+  // Ledger insertion, queue settlement and counts share one database transaction.
+  // A retry returns persisted delivery evidence, never the number of attempted inserts.
+  const { data, error } = await admin.rpc("finalize_apex_carrier_factory_batch", {
+    p_workspace_id: workspaceId,
+    p_batch_id: batchId,
   });
-
-  const { error: ledgerError } = await admin
-    .from("apex_carrier_lead_delivery_ledger")
-    .upsert(ledgerRows, {
-      onConflict: "workspace_id,usdot_number,material_fingerprint",
-      ignoreDuplicates: true,
-    });
-  if (ledgerError) throw new Error(`Apex factory delivery-ledger write failed: ${ledgerError.message}`);
-
-  const ids = ready.map((row) => row.id);
-  for (const group of chunk(ids, INSERT_CHUNK)) {
-    const { error } = await admin
-      .from("apex_carrier_factory_work_items")
-      .update({ status: "delivered", updated_at: deliveredAt })
-      .eq("workspace_id", workspaceId)
-      .in("id", group);
-    if (error) throw new Error(`Apex factory delivery-state update failed: ${error.message}`);
+  if (error || !data) {
+    throw new Error(`Apex factory finalization failed: ${error?.message ?? "missing result"}`);
   }
-
-  const { error: completeError } = await admin
-    .from("apex_carrier_factory_batches")
-    .update({
-      status: "completed",
-      delivered_count: quota,
-      tier_a_count: tierCounts.A,
-      tier_b_count: tierCounts.B,
-      tier_c_count: tierCounts.C,
-      completed_at: deliveredAt,
-      updated_at: deliveredAt,
-    })
-    .eq("workspace_id", workspaceId)
-    .eq("id", batchId);
-  if (completeError) throw new Error(`Apex factory completion write failed: ${completeError.message}`);
-
-  return {
-    status: "completed",
-    quota,
-    ready: ready.length,
-    delivered: quota,
-    tierCounts,
-  };
+  return data as FinalizeCarrierFactoryResult;
 }
