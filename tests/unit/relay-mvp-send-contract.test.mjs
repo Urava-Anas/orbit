@@ -37,9 +37,10 @@ test("Relay locks authentication to the selected mailbox and preserves recoverab
   const page = await source("src/app/(app)/dashboard/mail/page.tsx");
   const action = await source("src/app/(app)/dashboard/mail/actions.ts");
 
-  assert.match(page, /name="mailbox_id" value=\{selectedMailbox\?\.id \?\? ""\}/);
-  assert.match(page, /readOnly=\{Boolean\(selectedMailbox && selectedMailbox\.status !== "connected"\)\}/);
-  assert.match(action, /requestedMailbox\.address\.toLowerCase\(\) !== email/);
+  assert.match(page, /connectNamecheapMailbox\.bind\(null, authenticatingMailbox\?\.id \?\? null\)/);
+  assert.match(page, /<strong>\{authenticatingMailbox\.address\}<\/strong>/);
+  assert.match(action, /connectNamecheapMailbox\(lockedMailboxId: string \| null, formData: FormData\)/);
+  assert.match(action, /const email = requestedMailbox\?\.address\.toLowerCase\(\) \?\? submittedEmail/);
   assert.match(action, /refused%20a%20mailbox%20identity%20mismatch/);
   assert.match(action, /Mailbox authenticated, but the first sync failed:/);
 });

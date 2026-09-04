@@ -44,20 +44,17 @@ async function mailboxForWorkspace(
   return data ?? null;
 }
 
-export async function connectNamecheapMailbox(formData: FormData) {
+export async function connectNamecheapMailbox(lockedMailboxId: string | null, formData: FormData) {
   const { supabase, workspace, role } = await requireWorkspace();
   requireMailboxAdmin(role);
 
-  const requestedMailboxId = clean(formData.get("mailbox_id"), 80);
-  const email = clean(formData.get("email"), 320).toLowerCase();
+  const requestedMailboxId = clean(lockedMailboxId, 80);
+  const submittedEmail = clean(formData.get("email"), 320).toLowerCase();
   const displayName = clean(formData.get("display_name"), 120);
   const password = clean(formData.get("password"), 500);
   const connectorUrl = requestedMailboxId
     ? `/dashboard/mail?view=connectors&connect=1&mailbox=${requestedMailboxId}`
     : "/dashboard/mail?view=connectors&connect=1";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password) {
-    redirect(`${connectorUrl}&error=Enter%20a%20valid%20mailbox%20and%20password`);
-  }
 
   const requestedMailbox = requestedMailboxId
     ? await mailboxForWorkspace(supabase, workspace.id, requestedMailboxId)
@@ -65,8 +62,13 @@ export async function connectNamecheapMailbox(formData: FormData) {
   if (requestedMailboxId && !requestedMailbox) {
     redirect("/dashboard/mail?view=connectors&error=Relay%20mailbox%20was%20not%20found");
   }
-  if (requestedMailbox && requestedMailbox.address.toLowerCase() !== email) {
+  if (requestedMailbox && submittedEmail && requestedMailbox.address.toLowerCase() !== submittedEmail) {
     redirect(`${connectorUrl}&error=Relay%20refused%20a%20mailbox%20identity%20mismatch`);
+  }
+
+  const email = requestedMailbox?.address.toLowerCase() ?? submittedEmail;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password) {
+    redirect(`${connectorUrl}&error=Enter%20a%20valid%20mailbox%20and%20password`);
   }
 
   const test = await testNamecheapMailbox(email, password);

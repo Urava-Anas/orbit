@@ -433,6 +433,8 @@ function ConnectorWorkspace({
   canManage: boolean;
   showConnect: boolean;
 }) {
+  const authenticatingMailbox = selectedMailbox?.status !== "connected" ? selectedMailbox : null;
+
   return (
     <section className={relay.connectorWorkspace}>
       <div className={relay.connectorHero}>
@@ -478,32 +480,31 @@ function ConnectorWorkspace({
         </div>
 
         {showConnect && canManage ? (
-          <form action={connectNamecheapMailbox} className={relay.connectForm}>
-            {selectedMailbox?.status !== "connected" ? (
-              <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
-            ) : null}
+          <form action={connectNamecheapMailbox.bind(null, authenticatingMailbox?.id ?? null)} className={relay.connectForm}>
             <span>Connect Namecheap Private Email</span>
             <h3>Authenticate a business mailbox</h3>
             <p>Use the full mailbox address and that mailbox’s Namecheap Private Email password.</p>
             <label>
               <span>Business email</span>
-              <input
-                type="email"
-                name="email"
-                defaultValue={selectedMailbox?.status !== "connected" ? selectedMailbox?.address ?? "" : ""}
-                readOnly={Boolean(selectedMailbox && selectedMailbox.status !== "connected")}
-                placeholder="info@company.com"
-                autoComplete="username"
-                maxLength={320}
-                required
-              />
+              {authenticatingMailbox ? (
+                <strong>{authenticatingMailbox.address}</strong>
+              ) : (
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="info@company.com"
+                  autoComplete="username"
+                  maxLength={320}
+                  required
+                />
+              )}
             </label>
             <label>
               <span>Sender / team name</span>
               <input
                 type="text"
                 name="display_name"
-                defaultValue={selectedMailbox?.status !== "connected" ? selectedMailbox?.display_name ?? "" : ""}
+                defaultValue={authenticatingMailbox?.display_name ?? ""}
                 placeholder="Company or department"
               />
             </label>
