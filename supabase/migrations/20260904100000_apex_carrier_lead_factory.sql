@@ -160,7 +160,7 @@ create or replace function public.apex_carrier_factory_can_deliver(
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select not exists (
