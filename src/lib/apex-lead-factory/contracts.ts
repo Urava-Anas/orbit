@@ -17,6 +17,7 @@ export interface ObservedCarrierVehicle {
   model?: string | null;
   modelYear?: number | null;
   bodyClass?: string | null;
+  plateNumber?: string | null;
   plateState?: string | null;
   sourceName: string;
   sourceReference?: string | null;
