@@ -39,6 +39,7 @@ create table if not exists public.apex_carrier_factory_batches (
   completed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint apex_carrier_factory_batches_workspace_id_id_key unique (workspace_id, id),
   constraint apex_carrier_factory_batches_workspace_date_uq unique (workspace_id, batch_date),
   constraint apex_carrier_factory_batches_quota_check check (quota > 0 and quota <= 10000),
   constraint apex_carrier_factory_batches_counts_check check (
