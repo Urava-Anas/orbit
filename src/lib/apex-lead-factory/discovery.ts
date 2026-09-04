@@ -152,7 +152,7 @@ function listEvidence(
     sourceName: template.sourceName,
     sourceReference: template.sourceReference,
     retrievedAt: template.retrievedAt,
-    sourceUpdatedAt: template.sourceUpdatedAt,
+    sourceDate: template.sourceDate,
     previousValue: null,
   };
 }
