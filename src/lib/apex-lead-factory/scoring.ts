@@ -1,4 +1,4 @@
-import type { Carrier360Profile, CarrierFieldEvidence } from "@/lib/carrier-intelligence/contracts";
+import type { CarrierFieldEvidence } from "@/lib/carrier-intelligence/contracts";
 import type {
   CarrierFactoryCandidate,
   CarrierOpportunityScore,
@@ -55,6 +55,19 @@ export function scoreCarrierOpportunity(
   const email = known(profile.identity.email);
   const vehicleOosPercent = known(profile.safety.vehicleOosPercent);
   const driverOosPercent = known(profile.safety.driverOosPercent);
+
+  // Company Census active/inactive is a discovery signal only. It is deliberately
+  // not treated as operating-authority evidence or "allowed to operate" proof.
+  if (candidate.discoveryOperatingStatus === "active") {
+    score += 10;
+    reasons.push("FMCSA Company Census entity status is active.");
+  } else if (candidate.discoveryOperatingStatus === "inactive") {
+    score -= 30;
+    warnings.push("FMCSA Company Census entity status is inactive.");
+  } else if (candidate.discoveryOperatingStatus === "pending") {
+    score -= 8;
+    warnings.push("FMCSA Company Census entity status is pending.");
+  }
 
   if (allowedToOperate === false) {
     return {
