@@ -8,6 +8,15 @@ import {
   type CarrierLookupIdentifier,
 } from "./identifiers";
 import { resolveMotusMcToDot, type MotusMcResolution } from "./motus";
+import {
+  fetchMotusAuthorityHistoryByDot,
+  fetchMotusCurrentAuthoritiesByDot,
+} from "./motus-authority";
+import { fetchMotusInsuranceByDot } from "./motus-insurance";
+import {
+  persistMotusAuthorityFacts,
+  persistMotusInsuranceFacts,
+} from "./motus-regulatory-store";
 import { persistMotusMcResolution } from "./motus-store";
 import { resolveSaferMcToDot, type SaferMcResolution } from "./safer";
 import { persistCompanyCensusCarrier } from "./store";
@@ -142,6 +151,69 @@ async function resolveRequestedDot(
 }
 
 /**
+ * Best-effort regulatory bootstrap for Carrier 360. Identity/core persistence is
+ * still useful when one regulatory publication is temporarily unavailable, so
+ * authority and insurance source outages stay explicit as missing evidence
+ * rather than causing the carrier itself to disappear from the pipeline.
+ */
+async function bootstrapMotusRegulatoryFacts(input: {
+  workspaceId: string;
+  carrierId: string;
+  dotNumber: string;
+  retrievedAt: string;
+}) {
+  const [currentAuthorityResult, authorityHistoryResult, insuranceResult] = await Promise.allSettled([
+    fetchMotusCurrentAuthoritiesByDot(input.dotNumber),
+    fetchMotusAuthorityHistoryByDot(input.dotNumber),
+    fetchMotusInsuranceByDot(input.dotNumber),
+  ]);
+
+  const currentAuthority =
+    currentAuthorityResult.status === "fulfilled" ? currentAuthorityResult.value : [];
+  const authorityHistory =
+    authorityHistoryResult.status === "fulfilled" ? authorityHistoryResult.value : [];
+  const insurance = insuranceResult.status === "fulfilled" ? insuranceResult.value : [];
+
+  if (currentAuthorityResult.status === "fulfilled" || authorityHistoryResult.status === "fulfilled") {
+    await persistMotusAuthorityFacts({
+      workspaceId: input.workspaceId,
+      carrierId: input.carrierId,
+      dotNumber: input.dotNumber,
+      current: currentAuthority,
+      history: authorityHistory,
+      retrievedAt: input.retrievedAt,
+    });
+  } else {
+    console.error("Carrier Intelligence authority bootstrap unavailable", {
+      dotNumber: input.dotNumber,
+      currentAuthorityError:
+        currentAuthorityResult.reason instanceof Error
+          ? currentAuthorityResult.reason.message
+          : "unknown source error",
+      authorityHistoryError:
+        authorityHistoryResult.reason instanceof Error
+          ? authorityHistoryResult.reason.message
+          : "unknown source error",
+    });
+  }
+
+  if (insuranceResult.status === "fulfilled") {
+    await persistMotusInsuranceFacts({
+      workspaceId: input.workspaceId,
+      carrierId: input.carrierId,
+      dotNumber: input.dotNumber,
+      filings: insurance,
+      retrievedAt: input.retrievedAt,
+    });
+  } else {
+    console.error("Carrier Intelligence insurance bootstrap unavailable", {
+      dotNumber: input.dotNumber,
+      error: insuranceResult.reason instanceof Error ? insuranceResult.reason.message : "unknown source error",
+    });
+  }
+}
+
+/**
  * First end-to-end Carrier Intelligence identity/core vertical slice.
  *
  * USDOT lookups bootstrap from the free Company Census dataset. MC lookups first
@@ -149,6 +221,11 @@ async function resolveRequestedDot(
  * then load Company Census by USDOT. A missing Census row is explicitly NOT
  * treated as proof that a USDOT entity does not exist because FMCSA documents
  * coverage exclusions (including active HMSP entities).
+ *
+ * Once identity/core data is persisted, bounded Motus current authority,
+ * authority-history and active/pending insurance publications are bootstrapped
+ * into Carrier 360 as provenance-bearing regulatory evidence. Their temporary
+ * failure does not fabricate a negative fact or erase the valid Census carrier.
  *
  * Callers must supply workspaceId from authenticated Orbit workspace context.
  */
@@ -263,6 +340,13 @@ export async function lookupAndPersistCarrierCore(
       observedAt: retrievedAt,
     });
   }
+
+  await bootstrapMotusRegulatoryFacts({
+    workspaceId: input.workspaceId,
+    carrierId: persisted.carrierId,
+    dotNumber: resolved.dotNumber,
+    retrievedAt,
+  });
 
   return {
     status: "ok",
