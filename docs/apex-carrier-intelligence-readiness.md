@@ -14,6 +14,24 @@ Preview deployment `dpl_8Gn1VT9pnxquSGzbHaHSpJ3Zq3JU` failed because Preview lac
 
 The original seven Carrier Intelligence migrations were independently verified in Orbit Production, including normalized SQL matches against head `20bc2eb`. Do not reapply them by filename: production migration timestamps differ. The new `apex_carrier_factory_atomic_delivery` migration is a separate pending release dependency; validate it in CI and reconcile migration history before any future production application. Its service-role-only finalizer is required by the updated runner. No live factory batch has been verified.
 
+## Privileged RPC authorization evidence — 2026-09-04
+
+A live, non-destructive negative authorization probe was run against Orbit Production using a synthetic `authenticated` identity that is not an Apex authorized user, workspace member, or workspace admin. Mutation-capable probes were wrapped in explicit transactions with rollback as the recovery path; every call failed at its authorization guard before any credential or quota mutation could occur.
+
+Verified negative boundaries:
+
+- `apex_mailbox_credential_state()` -> `42501 Apex access required.`
+- `apex_store_mailbox_credential(...)` -> `42501 Apex admin access required.`
+- `apex_delete_mailbox_credential(...)` -> `42501 Apex admin access required.`
+- `orbit_relay_store_credential(...)` -> `42501 Workspace admin access required.`
+- `orbit_relay_delete_credential(...)` -> `42501 Workspace admin access required.`
+- `consume_lead_autocomplete_rate_limit(...)` -> `42501 workspace membership required.`
+- `consume_apex_carrier_lookup_quota(...)` -> `42501 Workspace access denied.`
+
+The corresponding function definitions were inspected before the probes. Each warned `SECURITY DEFINER` RPC contains an explicit internal authorization check, and the ACL exposes execution to `authenticated`/`service_role` rather than `anon`. These advisor warnings are therefore treated as privileged public RPCs with verified negative authorization boundaries, not as proven privilege-escalation vulnerabilities. This does not waive future regression testing or justify weakening any guard.
+
+Rollback checkpoint for this documentation change: previous blob `74470cf0a12fbfb09b0217fe18e98430a515d8db`. If later evidence invalidates this conclusion, revert only this evidence section or restore that blob; do not rebuild the release branch.
+
 ## Required gates before production pilot
 
 - Production Quality passes on the exact branch head.
