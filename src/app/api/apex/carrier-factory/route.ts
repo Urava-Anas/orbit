@@ -6,6 +6,10 @@ import {
   processCarrierFactoryWork,
   startCarrierFactory,
 } from "@/lib/apex-lead-factory/runner";
+import {
+  getLatestCarrierFactoryBatch,
+  listCarrierFactoryLeads,
+} from "@/lib/apex-lead-factory/read";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +47,72 @@ function headers() {
   };
 }
 
+function canControl(role: string) {
+  return role === "owner" || role === "admin";
+}
+
+/**
+ * Paginated read surface for the completed daily carrier dossiers. The API never
+ * returns the entire 1,000-lead batch in one response.
+ */
+export async function GET(request: Request) {
+  const { workspace, role } = await requireWorkspace();
+  if (!canControl(role)) {
+    return NextResponse.json(
+      { status: "forbidden", message: "Apex Carrier Factory is owner/admin only." },
+      { status: 403, headers: headers() },
+    );
+  }
+
+  const url = new URL(request.url);
+  const batchId = url.searchParams.get("batchId");
+  const page = Number(url.searchParams.get("page") ?? "1");
+  const pageSize = Number(url.searchParams.get("pageSize") ?? "25");
+  const tierParam = url.searchParams.get("tier");
+  const tier = tierParam === "A" || tierParam === "B" || tierParam === "C" ? tierParam : undefined;
+
+  try {
+    const latest = await getLatestCarrierFactoryBatch(workspace.id);
+    const resolvedBatchId = batchId ?? latest?.id ?? null;
+    if (!resolvedBatchId) {
+      return NextResponse.json({ status: "ok", batch: null, leads: [] }, { status: 200, headers: headers() });
+    }
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resolvedBatchId)) {
+      return NextResponse.json(
+        { status: "invalid_input", message: "batchId must be a UUID." },
+        { status: 400, headers: headers() },
+      );
+    }
+
+    const result = await listCarrierFactoryLeads({
+      workspaceId: workspace.id,
+      batchId: resolvedBatchId,
+      page: Number.isFinite(page) ? page : 1,
+      pageSize: Number.isFinite(pageSize) ? pageSize : 25,
+      tier,
+    });
+
+    return NextResponse.json(
+      {
+        status: "ok",
+        batch: latest?.id === resolvedBatchId ? latest : { id: resolvedBatchId },
+        ...result,
+      },
+      { status: 200, headers: headers() },
+    );
+  } catch (error) {
+    console.error("Apex Carrier Factory read failed", {
+      workspaceId: workspace.id,
+      error: error instanceof Error ? error.message : "unknown error",
+    });
+    return NextResponse.json(
+      { status: "unavailable", message: "Carrier Factory dossiers could not be read safely." },
+      { status: 503, headers: headers() },
+    );
+  }
+}
+
 /**
  * Owner/admin control surface for the internal lead factory.
  *
@@ -59,7 +129,7 @@ export async function POST(request: Request) {
   }
 
   const { workspace, role } = await requireWorkspace();
-  if (role !== "owner" && role !== "admin") {
+  if (!canControl(role)) {
     return NextResponse.json(
       { status: "forbidden", message: "Apex Carrier Factory control is owner/admin only." },
       { status: 403, headers: headers() },
