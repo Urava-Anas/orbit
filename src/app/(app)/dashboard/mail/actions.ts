@@ -48,24 +48,41 @@ export async function connectNamecheapMailbox(formData: FormData) {
   const { supabase, workspace, role } = await requireWorkspace();
   requireMailboxAdmin(role);
 
+  const requestedMailboxId = clean(formData.get("mailbox_id"), 80);
   const email = clean(formData.get("email"), 320).toLowerCase();
   const displayName = clean(formData.get("display_name"), 120);
   const password = clean(formData.get("password"), 500);
+  const connectorUrl = requestedMailboxId
+    ? `/dashboard/mail?view=connectors&connect=1&mailbox=${requestedMailboxId}`
+    : "/dashboard/mail?view=connectors&connect=1";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password) {
-    redirect("/dashboard/mail?view=connectors&connect=1&error=Enter%20a%20valid%20mailbox%20and%20password");
+    redirect(`${connectorUrl}&error=Enter%20a%20valid%20mailbox%20and%20password`);
+  }
+
+  const requestedMailbox = requestedMailboxId
+    ? await mailboxForWorkspace(supabase, workspace.id, requestedMailboxId)
+    : null;
+  if (requestedMailboxId && !requestedMailbox) {
+    redirect("/dashboard/mail?view=connectors&error=Relay%20mailbox%20was%20not%20found");
+  }
+  if (requestedMailbox && requestedMailbox.address.toLowerCase() !== email) {
+    redirect(`${connectorUrl}&error=Relay%20refused%20a%20mailbox%20identity%20mismatch`);
   }
 
   const test = await testNamecheapMailbox(email, password);
   if (!test.ok) {
-    redirect(`/dashboard/mail?view=connectors&connect=1&error=${encodeURIComponent(test.error ?? "Namecheap authentication failed")}`);
+    redirect(`${connectorUrl}&error=${encodeURIComponent(test.error ?? "Namecheap authentication failed")}`);
   }
 
-  const { data: existing } = await supabase
-    .from("orbit_mailboxes")
-    .select("id,is_primary")
-    .eq("workspace_id", workspace.id)
-    .eq("address", email)
-    .maybeSingle();
+  const { data: existingByAddress } = requestedMailbox
+    ? { data: null }
+    : await supabase
+        .from("orbit_mailboxes")
+        .select("id,is_primary")
+        .eq("workspace_id", workspace.id)
+        .eq("address", email)
+        .maybeSingle();
+  const existing = requestedMailbox ?? existingByAddress;
 
   let mailboxId = existing?.id ?? null;
   if (!mailboxId) {
@@ -131,15 +148,20 @@ export async function connectNamecheapMailbox(formData: FormData) {
   }
 
   let imported = 0;
+  let initialSyncError: string | null = null;
   try {
     const result = await syncNamecheapMailbox({ workspaceId: workspace.id, mailboxId });
     imported = result.imported;
-  } catch {
+  } catch (error) {
     // Authentication was already verified. A first-sync failure remains visible
     // as connection health in Relay and can be retried without re-entering the password.
+    initialSyncError = error instanceof Error ? error.message : "Initial mailbox sync failed.";
   }
 
   revalidatePath("/dashboard/mail");
+  if (initialSyncError) {
+    redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&error=${encodeURIComponent(`Mailbox authenticated, but the first sync failed: ${initialSyncError}`)}`);
+  }
   redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(`Mailbox connected. ${imported} new message${imported === 1 ? "" : "s"} synced.`)}`);
 }
 
