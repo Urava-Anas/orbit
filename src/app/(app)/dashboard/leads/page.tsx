@@ -51,13 +51,17 @@ type LeadActivity = {
   occurred_at: string;
 };
 
-type ApprovedLeadResult = {
-  id: string;
-  business_name: string;
-  total_score: number | null;
-  niche: string;
+type ApprovalMemory = {
   lead_id: string | null;
-  created_at: string;
+  decided_at: string | null;
+};
+
+type ApprovedLead = {
+  id: string;
+  name: string;
+  company: string | null;
+  niche: string | null;
+  lead_score: number | null;
 };
 
 type AutopilotConfig = {
@@ -109,7 +113,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
     autopilotResult,
     activeProjectResult,
     emailActionResult,
-    approvedResult,
+    approvedMemoryResult,
   ] = await Promise.all([
     supabase.rpc("get_lead_engine_summary", { p_workspace_id: workspace.id }),
     supabase
@@ -136,18 +140,34 @@ export default async function LeadsPage({ searchParams }: PageProps) {
       .in("status", ["completed", "sent", "succeeded"])
       .gte("created_at", monthStart.toISOString()),
     supabase
-      .from("lead_finder_results")
-      .select("id,business_name,total_score,niche,lead_id,created_at")
+      .from("lead_finder_place_memory")
+      .select("lead_id,decided_at")
       .eq("workspace_id", workspace.id)
-      .eq("status", "approved")
+      .eq("decision", "approved")
       .not("lead_id", "is", null)
-      .order("created_at", { ascending: false })
+      .order("decided_at", { ascending: false })
       .limit(6),
   ]);
 
   const summary = summaryResult.error ? emptySummary : asSummary(summaryResult.data);
   const activities = (activityResult.data ?? []) as LeadActivity[];
-  const approvedLeads = (approvedResult.data ?? []) as ApprovedLeadResult[];
+  const approvalMemories = (approvedMemoryResult.data ?? []) as ApprovalMemory[];
+  const approvedLeadIds = Array.from(new Set(approvalMemories.flatMap((memory) => memory.lead_id ? [memory.lead_id] : [])));
+  let approvedLeadRows: ApprovedLead[] = [];
+  if (approvedLeadIds.length) {
+    const approvedLeadResult = await supabase
+      .from("leads")
+      .select("id,name,company,niche,lead_score")
+      .eq("workspace_id", workspace.id)
+      .in("id", approvedLeadIds);
+    approvedLeadRows = (approvedLeadResult.data ?? []) as ApprovedLead[];
+  }
+  const approvedLeadsById = new Map(approvedLeadRows.map((lead) => [lead.id, lead]));
+  const approvedLeads = approvalMemories.flatMap((memory) => {
+    if (!memory.lead_id) return [];
+    const lead = approvedLeadsById.get(memory.lead_id);
+    return lead ? [lead] : [];
+  });
   const autopilot = (autopilotResult.data ?? null) as AutopilotConfig | null;
   const totalLeadCount = Math.max(summary.total, 1);
   const flowCounts = summary.flow;
@@ -255,29 +275,29 @@ export default async function LeadsPage({ searchParams }: PageProps) {
             <div className={styles.panelHeadingRow}>
               <div>
                 <h2 id="approved-leads-title">Approved leads</h2>
-                <p>Recently approved Lead Finder results that now have canonical Orbit lead records.</p>
+                <p>Recent durable approvals resolved to canonical Orbit lead records.</p>
               </div>
-              <Link href="/dashboard/leads/add">View all leads <ArrowRight size={14} aria-hidden="true" /></Link>
+              <Link href="/dashboard/leads/approved">View all approved <ArrowRight size={14} aria-hidden="true" /></Link>
             </div>
             {approvedLeads.length ? (
               <div className={extraStyles.approvedList}>
                 {approvedLeads.map((lead) => (
                   <Link
                     className={extraStyles.approvedLead}
-                    href={`/dashboard/leads/${lead.lead_id}`}
+                    href={`/dashboard/leads/${lead.id}`}
                     key={lead.id}
                   >
                     <span className={extraStyles.approvedIcon}><CheckCircle2 size={16} aria-hidden="true" /></span>
                     <div>
-                      <strong>{lead.business_name}</strong>
-                      <small>{lead.niche} · approved into Lead Engine</small>
+                      <strong>{lead.company ?? lead.name}</strong>
+                      <small>{lead.niche ?? "Niche not set"} · approved into Lead Engine</small>
                     </div>
-                    <span className={extraStyles.approvedScore}>{lead.total_score ?? "—"}</span>
+                    <span className={extraStyles.approvedScore}>{lead.lead_score ?? "—"}</span>
                   </Link>
                 ))}
               </div>
             ) : (
-              <div className={extraStyles.empty}>No approved finder leads yet. Approved businesses will appear here and open directly into their full lead record.</div>
+              <div className={extraStyles.empty}>No approved finder leads yet. Approved businesses will appear here and remain available after discovery results expire.</div>
             )}
           </section>
         </div>
