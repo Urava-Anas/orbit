@@ -16,6 +16,7 @@
     "test:e2e": "node scripts/e2e-smoke.mjs",
     "test:scale": "node scripts/load-smoke.mjs",
     "test:acceptance": "node scripts/founder-acceptance-runner.mjs",
+    "test:acceptance:local": "node scripts/local-founder-acceptance.mjs",
     "audit:routes": "node scripts/verify-internal-routes.mjs",
     "audit:dev-patches": "node scripts/verify-dev-dependency-security.mjs"
   },
