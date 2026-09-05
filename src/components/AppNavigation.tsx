@@ -19,7 +19,6 @@ import {
   Menu,
   MessageSquareText,
   ShieldCheck,
-  Truck,
   UsersRound,
   X,
 } from "lucide-react";
@@ -30,7 +29,7 @@ const orbitLinks = [
   { href: "/dashboard", label: "Founder Command", icon: LayoutDashboard },
   { href: "/dashboard/foundry", label: "Foundry", icon: GraduationCap },
   { href: "/dashboard/leads", label: "Lead Engine", icon: UsersRound },
-  { href: "/content-engine", label: "Content Engine", icon: MessageSquareText },
+  { href: "/dashboard/content", label: "Content Engine", icon: MessageSquareText },
   { href: "/dashboard/mail", label: "Relay", icon: Mail },
   { href: "/dashboard/sales", label: "Sales", icon: Crosshair },
   { href: "/dashboard/projects", label: "Studio & Delivery", icon: FolderKanban },
@@ -39,12 +38,11 @@ const orbitLinks = [
   { href: "/dashboard/plugins", label: "Plugins & Connections", icon: Blocks },
   { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
   { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
-  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
+  { href: "/dashboard/settings", label: "Security & Access", icon: ShieldCheck },
 ] as const;
 
 const apexLinks = [
   { href: "/dashboard", label: "Founder Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/carriers", label: "Carrier Intelligence", icon: Truck },
   { href: "/dashboard/leads", label: "Carrier Pipeline", icon: UsersRound },
   { href: "/dashboard/leads/forms", label: "Online Forms", icon: ClipboardList },
   { href: "/dashboard/mail", label: "Relay", icon: Mail },
@@ -56,7 +54,7 @@ const apexLinks = [
   { href: "/dashboard/plugins", label: "Integrations", icon: Blocks },
   { href: "/dashboard/organisation", label: "Workspace", icon: Building2 },
   { href: "/dashboard/billing", label: "Plan & Billing", icon: CreditCard },
-  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
+  { href: "/dashboard/settings", label: "Security & Access", icon: ShieldCheck },
 ] as const;
 
 type AppNavigationProps = {
@@ -82,7 +80,7 @@ export function AppNavigation({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const links = experience === "apex" ? apexLinks : orbitLinks;
-  const primaryCutoff = experience === "apex" ? 9 : 9;
+  const primaryCutoff = experience === "apex" ? 8 : 9;
   const primaryLinks = links.slice(0, primaryCutoff);
   const systemLinks = links.slice(primaryCutoff);
 
@@ -105,30 +103,157 @@ export function AppNavigation({
   }, [open]);
 
   if (!mobile) {
-    return <nav className="nav-list" aria-label="Orbit operating domains">
-      {links.map(({ href, label, icon: Icon }) => <Link className={`nav-link ${isActive(pathname, href) ? "nav-link-active" : ""}`} href={href} key={href}><Icon size={16} strokeWidth={1.8} aria-hidden="true" />{label}</Link>)}
-    </nav>;
+    return (
+      <div className={styles.desktopNavShell}>
+        <nav className={`${styles.desktopGroup} nav-list`} aria-label="Primary operating areas">
+          <span className={styles.desktopGroupLabel}>Operate</span>
+          {primaryLinks.map(({ href, label, icon: Icon }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Link
+                className={`nav-link ${active ? "nav-link-active" : ""}`}
+                href={href}
+                key={href}
+                aria-current={active ? "page" : undefined}
+              >
+                <span className={styles.desktopIcon} aria-hidden="true">
+                  <Icon size={16} strokeWidth={1.8} />
+                </span>
+                <span className={styles.desktopLabel}>{label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+        <nav className={`${styles.desktopGroup} nav-list`} aria-label="Workspace controls">
+          <span className={styles.desktopGroupLabel}>Workspace</span>
+          {systemLinks.map(({ href, label, icon: Icon }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Link
+                className={`nav-link ${active ? "nav-link-active" : ""}`}
+                href={href}
+                key={href}
+                aria-current={active ? "page" : undefined}
+              >
+                <span className={styles.desktopIcon} aria-hidden="true">
+                  <Icon size={16} strokeWidth={1.8} />
+                </span>
+                <span className={styles.desktopLabel}>{label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    );
   }
 
   const closeMenu = () => setOpen(false);
-  const drawer = open ? createPortal(<>
-    <button type="button" className={styles.backdrop} aria-label="Close navigation" onClick={() => { closeMenu(); requestAnimationFrame(() => triggerRef.current?.focus()); }} />
-    <aside className={`${styles.drawer} ${experience === "apex" ? styles.apexDrawer : ""}`} role="dialog" aria-modal="true" aria-label={`${workspaceName} navigation`}>
-      <div className={styles.drawerHeader}>
-        <div className={styles.drawerBrand}><span className={styles.brandMark} aria-hidden="true" /><div><strong>{experience === "apex" ? workspaceName : "Orbit"}</strong><small>{productLabel}</small></div></div>
-        <button ref={closeRef} type="button" className={styles.closeButton} aria-label="Close navigation" onClick={() => { closeMenu(); requestAnimationFrame(() => triggerRef.current?.focus()); }}><X size={18} aria-hidden="true" /></button>
-      </div>
-      <div className={styles.drawerScroll}>
-        <nav className={styles.mobileLinks} aria-label="Primary operating areas"><span className={styles.groupLabel}>Operate</span>
-          {primaryLinks.map(({ href, label, icon: Icon }) => { const active = isActive(pathname, href); return <Link key={href} href={href} onClick={closeMenu} className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}><span className={styles.linkIcon}><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></span><span>{label}</span></Link>; })}
-        </nav>
-        <nav className={styles.mobileLinks} aria-label="Workspace controls"><span className={styles.groupLabel}>Workspace</span>
-          {systemLinks.map(({ href, label, icon: Icon }) => { const active = isActive(pathname, href); return <Link key={href} href={href} onClick={closeMenu} className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}><span className={styles.linkIcon}><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></span><span>{label}</span></Link>; })}
-        </nav>
-      </div>
-      <div className={styles.drawerFooter}><span><i aria-hidden="true" /> {workspaceName}</span><small>Secure workspace · isolated data</small></div>
-    </aside>
-  </>, document.body) : null;
+  const drawer = open
+    ? createPortal(
+        <>
+          <button
+            type="button"
+            className={styles.backdrop}
+            aria-label="Close navigation"
+            onClick={() => {
+              closeMenu();
+              requestAnimationFrame(() => triggerRef.current?.focus());
+            }}
+          />
+          <aside
+            className={`${styles.drawer} ${experience === "apex" ? styles.apexDrawer : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${workspaceName} navigation`}
+          >
+            <div className={styles.drawerHeader}>
+              <div className={styles.drawerBrand}>
+                <span className={styles.brandMark} aria-hidden="true" />
+                <div>
+                  <strong>{experience === "apex" ? workspaceName : "Orbit"}</strong>
+                  <small>{productLabel}</small>
+                </div>
+              </div>
+              <button
+                ref={closeRef}
+                type="button"
+                className={styles.closeButton}
+                aria-label="Close navigation"
+                onClick={() => {
+                  closeMenu();
+                  requestAnimationFrame(() => triggerRef.current?.focus());
+                }}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className={styles.drawerScroll}>
+              <nav className={styles.mobileLinks} aria-label="Primary operating areas">
+                <span className={styles.groupLabel}>Operate</span>
+                {primaryLinks.map(({ href, label, icon: Icon }) => {
+                  const active = isActive(pathname, href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={closeMenu}
+                      aria-current={active ? "page" : undefined}
+                      className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}
+                    >
+                      <span className={styles.linkIcon}>
+                        <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                      </span>
+                      <span>{label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+              <nav className={styles.mobileLinks} aria-label="Workspace controls">
+                <span className={styles.groupLabel}>Workspace</span>
+                {systemLinks.map(({ href, label, icon: Icon }) => {
+                  const active = isActive(pathname, href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={closeMenu}
+                      aria-current={active ? "page" : undefined}
+                      className={`${styles.mobileLink} ${active ? styles.mobileLinkActive : ""}`}
+                    >
+                      <span className={styles.linkIcon}>
+                        <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                      </span>
+                      <span>{label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+            <div className={styles.drawerFooter}>
+              <span>
+                <i aria-hidden="true" /> {workspaceName}
+              </span>
+              <small>Secure workspace · isolated data</small>
+            </div>
+          </aside>
+        </>,
+        document.body,
+      )
+    : null;
 
-  return <div className={`mobile-nav ${styles.mobileNav}`}><button ref={triggerRef} type="button" className={styles.menuButton} aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} onClick={() => setOpen((current) => !current)}><Menu size={21} strokeWidth={1.8} aria-hidden="true" /></button>{drawer}</div>;
+  return (
+    <div className={`mobile-nav ${styles.mobileNav}`}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={styles.menuButton}
+        aria-label={open ? "Close navigation" : "Open navigation"}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Menu size={21} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      {drawer}
+    </div>
+  );
 }
