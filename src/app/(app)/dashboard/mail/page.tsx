@@ -33,13 +33,17 @@ import { requireWorkspace } from "@/lib/workspace";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
 import { getRelayRecommendations } from "@/lib/relay/recommendations";
 import {
-  approveAndSendRelayMessage,
   connectNamecheapMailbox,
   disconnectRelayMailbox,
-  requestMailSend,
-  saveMailDraft,
   syncRelayMailbox,
 } from "./actions";
+import {
+  approveAndSendRelayMessageSafe,
+  queueRelayMessage,
+  returnRelayMessageToDraft,
+  saveRelayDraft,
+  setRelayMessageRecoveryState,
+} from "./message-lifecycle-actions";
 import { moveRelayThread, setRelayThreadFlag } from "./conversation-actions";
 import styles from "./mail.module.css";
 import relay from "./relay-auth.module.css";
@@ -98,9 +102,12 @@ type Message = {
   body_text: string;
   status: string;
   authority_level: string;
+  provider_message_id: string | null;
+  internet_message_id: string | null;
   sent_at: string | null;
   received_at: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 const folders = [
@@ -196,12 +203,16 @@ export default async function RelayPage({ searchParams }: Props) {
   const { data: messageRows } = selectedId && view === "mail"
     ? await supabase
         .from("orbit_mail_messages")
-        .select("id,direction,from_address,to_addresses,subject,body_text,status,authority_level,sent_at,received_at,created_at")
+        .select("id,direction,from_address,to_addresses,subject,body_text,status,authority_level,provider_message_id,internet_message_id,sent_at,received_at,created_at,updated_at")
         .eq("workspace_id", workspace.id)
+        .eq("mailbox_id", selectedMailbox?.id ?? "")
         .eq("thread_id", selectedId)
         .order("created_at", { ascending: true })
     : { data: [] };
   const messages = (messageRows ?? []) as Message[];
+  const draftMessage = selected?.folder === "drafts"
+    ? [...messages].reverse().find((message) => message.status === "draft" && message.direction === "draft") ?? null
+    : null;
   const unread = threads.filter((thread) => thread.is_unread).length;
   const connected = selectedMailbox?.status === "connected";
   const providerLabel = selectedMailbox?.provider === "namecheap_private_email"
@@ -365,7 +376,7 @@ export default async function RelayPage({ searchParams }: Props) {
 
             <section className={styles.reader}>
               {params.compose === "1" && selectedMailbox ? (
-                <Compose mailbox={selectedMailbox} thread={selected} />
+                <Compose mailbox={selectedMailbox} thread={selected} draft={draftMessage} />
               ) : selected ? (
                 <>
                   <div className={styles.readerHeader}>
@@ -462,12 +473,38 @@ export default async function RelayPage({ searchParams }: Props) {
                         </div>
                         <p>{message.body_text || "(Empty message)"}</p>
                         <time>{new Date(message.sent_at ?? message.received_at ?? message.created_at).toLocaleString()}</time>
+
                         {selected.folder === "outbox" && message.status === "pending_approval" && canManageMailboxes ? (
-                          <form action={approveAndSendRelayMessage} className={styles.approveSendForm}>
+                          <div className={styles.approveSendForm}>
+                            <form action={approveAndSendRelayMessageSafe}>
+                              <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                              <input type="hidden" name="message_id" value={message.id} />
+                              <button type="submit" className={styles.sendButton}>Approve & send now <Send size={14} /></button>
+                            </form>
+                            <form action={returnRelayMessageToDraft}>
+                              <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                              <input type="hidden" name="message_id" value={message.id} />
+                              <input type="hidden" name="expected_updated_at" value={message.updated_at} />
+                              <button type="submit" className={styles.secondaryButton}>Return to draft</button>
+                            </form>
+                          </div>
+                        ) : null}
+
+                        {selected.folder === "outbox" && message.status === "failed" && canManageMailboxes && !message.provider_message_id && !message.internet_message_id && !message.sent_at ? (
+                          <form action={setRelayMessageRecoveryState} className={styles.approveSendForm}>
                             <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
                             <input type="hidden" name="message_id" value={message.id} />
-                            <button type="submit" className={styles.sendButton}>Approve & send now <Send size={14} /></button>
+                            <input type="hidden" name="expected_status" value="failed" />
+                            <input type="hidden" name="next_status" value="pending_approval" />
+                            <input type="hidden" name="expected_updated_at" value={message.updated_at} />
+                            <button type="submit" className={styles.secondaryButton}>Recover to approval queue</button>
                           </form>
+                        ) : null}
+
+                        {selected.folder === "outbox" && message.status === "sending" ? (
+                          <div className={styles.approveSendForm}>
+                            <small>Delivery state uncertain · Relay will not retry automatically. Verify provider delivery before recovery.</small>
+                          </div>
                         ) : null}
                       </article>
                     ))}
@@ -476,7 +513,7 @@ export default async function RelayPage({ searchParams }: Props) {
                     className={styles.replyButton}
                     href={withMailbox(`/dashboard/mail?view=mail&folder=${selected.folder}&compose=1&thread=${selected.id}`, selectedMailbox?.id)}
                   >
-                    Reply
+                    {selected.folder === "drafts" ? "Edit draft" : "Reply"}
                   </Link>
                 </>
               ) : selectedMailbox ? (
@@ -749,27 +786,36 @@ function RelayWorkspace({ view, mailbox }: { view: string; mailbox: Mailbox | nu
   );
 }
 
-function Compose({ mailbox, thread }: { mailbox: Mailbox; thread?: Thread | null }) {
+function Compose({ mailbox, thread, draft }: { mailbox: Mailbox; thread?: Thread | null; draft?: Message | null }) {
   const connected = mailbox.status === "connected";
+  const to = draft?.to_addresses.join(", ") ?? thread?.participant_emails.join(", ") ?? "";
+  const subject = draft?.subject ?? (thread ? (/^re:/i.test(thread.subject) ? thread.subject : `Re: ${thread.subject}`) : "");
+  const authority = draft?.authority_level === "red" ? "red" : "amber";
   return (
     <div className={styles.compose}>
-      <div><span>New Relay message</span><h2>Compose</h2><p>From {mailbox.address}</p></div>
+      <div>
+        <span>{draft ? "Existing Relay draft" : thread ? "Reply in conversation" : "New Relay message"}</span>
+        <h2>{draft ? "Edit draft" : thread ? "Reply" : "Compose"}</h2>
+        <p>From {mailbox.address}</p>
+      </div>
       <form>
         <input type="hidden" name="mailbox_id" value={mailbox.id} />
         {thread ? <input type="hidden" name="thread_id" value={thread.id} /> : null}
-        <label><span>To</span><input name="to" type="text" defaultValue={thread?.participant_emails.join(", ") ?? ""} placeholder="carrier@example.com" required /></label>
-        <label><span>Subject</span><input name="subject" type="text" defaultValue={thread ? (/^re:/i.test(thread.subject) ? thread.subject : `Re: ${thread.subject}`) : ""} placeholder="Subject" /></label>
-        <label className={styles.bodyField}><span>Message</span><textarea name="body" rows={12} placeholder="Write your message…" required /></label>
+        {draft ? <input type="hidden" name="draft_message_id" value={draft.id} /> : null}
+        {draft ? <input type="hidden" name="draft_expected_updated_at" value={draft.updated_at} /> : null}
+        <label><span>To</span><input name="to" type="text" defaultValue={to} placeholder="carrier@example.com" required /></label>
+        <label><span>Subject</span><input name="subject" type="text" defaultValue={subject} placeholder="Subject" /></label>
+        <label className={styles.bodyField}><span>Message</span><textarea name="body" rows={12} defaultValue={draft?.body_text ?? ""} placeholder="Write your message…" required /></label>
         <label>
           <span>Authority</span>
-          <select name="authority" defaultValue="amber">
+          <select name="authority" defaultValue={authority}>
             <option value="amber">Amber · approved business communication</option>
             <option value="red">Red · sensitive / founder approval</option>
           </select>
         </label>
         <div className={styles.composeActions}>
-          <button formAction={saveMailDraft} className={styles.secondaryButton}>Save draft</button>
-          <button formAction={requestMailSend} className={styles.sendButton}>
+          <button formAction={saveRelayDraft} className={styles.secondaryButton}>Save draft</button>
+          <button formAction={queueRelayMessage} className={styles.sendButton}>
             {connected ? "Queue approved send" : "Save until connected"}<Send size={15} />
           </button>
         </div>
