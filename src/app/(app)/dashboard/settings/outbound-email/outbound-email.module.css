@@ -1,0 +1,118 @@
+.back {
+  margin-bottom: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(360px, 1.2fr);
+  gap: 14px;
+}
+
+.card {
+  padding: 22px;
+}
+
+.cardHead {
+  display: flex;
+  margin-bottom: 18px;
+  align-items: center;
+  gap: 11px;
+}
+
+.cardHead span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--accent);
+}
+
+.cardHead h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.readiness {
+  display: flex;
+  margin-top: 18px;
+  padding: 12px;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.readiness svg {
+  flex: 0 0 auto;
+  color: var(--success);
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--glass-control);
+  color: var(--foreground);
+  outline: 0;
+}
+
+.form input:focus {
+  border-color: rgba(255, 107, 97, 0.68);
+  box-shadow: 0 0 0 4px rgba(255, 107, 97, 0.1);
+}
+
+.status {
+  display: inline-flex;
+  min-height: 27px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-strong);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.status[data-ready="true"] {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--line));
+  background: color-mix(in srgb, var(--success) 7%, transparent);
+  color: var(--success);
+}
+
+.status::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

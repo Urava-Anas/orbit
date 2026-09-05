@@ -10,13 +10,14 @@ import { createClient } from "@/lib/supabase/server";
 
 const emailSchema = z.string().trim().email().max(254);
 const passwordSchema = z.string().min(12).max(128);
+const safeAuthPaths = new Set(["/trial", "/account/delete"]);
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
 function safeAuthNext(next: string) {
-  return next === "/trial" ? "/trial" : null;
+  return safeAuthPaths.has(next) ? next : null;
 }
 
 function loginPath(next: string | null) {

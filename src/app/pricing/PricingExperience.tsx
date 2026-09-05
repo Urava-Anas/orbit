@@ -99,7 +99,7 @@ export function PricingExperience() {
                 <div className={styles.savingLine}>
                   {plan.key === "enterprise"
                     ? "Designed around your organisation"
-                    : "Plan activation is manual until checkout goes live"}
+                    : "Choose your permanent plan after the trial"}
                 </div>
               )}
 

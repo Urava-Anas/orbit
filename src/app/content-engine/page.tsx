@@ -9,7 +9,6 @@ import {
   CircleDot,
   Clock3,
   Link,
-  Pencil,
   RefreshCw,
   Sparkles,
   Target,
@@ -19,6 +18,7 @@ import {
 import styles from './content-engine.module.css';
 
 type Status = 'pending' | 'approved' | 'rejected';
+type ReviewTab = 'all' | Status;
 
 type ContentItem = {
   id: number;
@@ -93,7 +93,7 @@ const metrics = [
 
 export default function ContentEnginePage() {
   const [items, setItems] = useState(seedItems);
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved'>('all');
+  const [activeTab, setActiveTab] = useState<ReviewTab>('all');
 
   const filtered = useMemo(
     () => items.filter((item) => activeTab === 'all' || item.status === activeTab),
@@ -121,7 +121,12 @@ export default function ContentEnginePage() {
     );
   };
 
-  const approveAll = () => setItems((current) => current.map((item) => ({ ...item, status: 'approved' })));
+  const approveAllPending = () =>
+    setItems((current) =>
+      current.map((item) =>
+        item.status === 'pending' ? { ...item, status: 'approved' } : item,
+      ),
+    );
 
   return (
     <main className={styles.page}>
@@ -134,7 +139,7 @@ export default function ContentEnginePage() {
         <div className={styles.loopState}><CircleDot size={15} /> Daily loop active</div>
       </header>
 
-      <section className={styles.flow}>
+      <section className={styles.flow} aria-label="Daily content workflow">
         {['Plan + Generate', 'Daily Approval', 'Auto-Post', 'Learn + Improve'].map((label, index) => (
           <div className={styles.flowStep} key={label}>
             <span>{index + 1}</span>
@@ -144,7 +149,7 @@ export default function ContentEnginePage() {
         ))}
       </section>
 
-      <section className={styles.metricsGrid}>
+      <section className={styles.metricsGrid} aria-label="Content engine status">
         <article className={styles.metricCard}><Zap size={18} /><span>Today’s batch</span><strong>{items.length} pieces</strong><small>{pending} waiting for approval</small></article>
         <article className={styles.metricCard}><Check size={18} /><span>Approval progress</span><strong>{approved}/{items.length}</strong><small>{Math.round((approved / items.length) * 100)}% approved</small></article>
         <article className={styles.metricCard}><Target size={18} /><span>Today’s focus</span><strong>Proof + Leads</strong><small>Based on yesterday’s response</small></article>
@@ -158,12 +163,22 @@ export default function ContentEnginePage() {
               <span className={styles.sectionLabel}>Daily approval</span>
               <h2>Review today’s content batch</h2>
             </div>
-            <button className={styles.primaryButton} onClick={approveAll}><Check size={16} /> Approve all</button>
+            <button className={styles.primaryButton} onClick={approveAllPending} disabled={!pending}>
+              <Check size={16} /> {pending ? `Approve ${pending} pending` : 'All reviewed'}
+            </button>
           </div>
 
-          <div className={styles.tabs}>
-            {(['all', 'pending', 'approved'] as const).map((tab) => (
-              <button key={tab} className={activeTab === tab ? styles.activeTab : ''} onClick={() => setActiveTab(tab)}>{tab}</button>
+          <div className={styles.tabs} role="tablist" aria-label="Content review states">
+            {(['all', 'pending', 'approved', 'rejected'] as const).map((tab) => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
+                className={activeTab === tab ? styles.activeTab : ''}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
             ))}
           </div>
 
@@ -183,10 +198,21 @@ export default function ContentEnginePage() {
                   <div className={styles.goalTag}>{item.goal}</div>
                 </div>
                 <div className={styles.actions}>
-                  <button aria-label="Edit content"><Pencil size={15} /></button>
                   <button onClick={() => replace(item.id)}><RefreshCw size={15} /> Replace</button>
-                  <button className={styles.reject} onClick={() => setStatus(item.id, 'rejected')}><Trash2 size={15} /> Reject</button>
-                  <button className={item.status === 'approved' ? styles.approvedButton : styles.approveButton} onClick={() => setStatus(item.id, 'approved')}><Check size={15} /> {item.status === 'approved' ? 'Approved' : 'Approve'}</button>
+                  <button
+                    className={styles.reject}
+                    aria-pressed={item.status === 'rejected'}
+                    onClick={() => setStatus(item.id, 'rejected')}
+                  >
+                    <Trash2 size={15} /> {item.status === 'rejected' ? 'Rejected' : 'Reject'}
+                  </button>
+                  <button
+                    className={item.status === 'approved' ? styles.approvedButton : styles.approveButton}
+                    aria-pressed={item.status === 'approved'}
+                    onClick={() => setStatus(item.id, 'approved')}
+                  >
+                    <Check size={15} /> {item.status === 'approved' ? 'Approved' : 'Approve'}
+                  </button>
                 </div>
               </article>
             ))}
@@ -197,13 +223,16 @@ export default function ContentEnginePage() {
           <section className={styles.sidePanel}>
             <div className={styles.panelHeaderCompact}><div><span className={styles.sectionLabel}>Auto-posting</span><h3>Today’s schedule</h3></div><span className={styles.live}>Live</span></div>
             <div className={styles.schedule}>
-              {items.map((item) => (
-                <div className={styles.scheduleRow} key={item.id}>
-                  <span className={styles.platformIcon}><Link size={15} /></span>
-                  <div><strong>{item.time}</strong><small>{item.platform} · {item.format}</small></div>
-                  <span className={item.status === 'approved' ? styles.ready : styles.waiting}>{item.status === 'approved' ? 'Ready' : 'Waiting'}</span>
-                </div>
-              ))}
+              {items.map((item) => {
+                const scheduleState = item.status === 'approved' ? 'Ready' : item.status === 'rejected' ? 'Skipped' : 'Waiting';
+                return (
+                  <div className={styles.scheduleRow} key={item.id}>
+                    <span className={styles.platformIcon}><Link size={15} /></span>
+                    <div><strong>{item.time}</strong><small>{item.platform} · {item.format}</small></div>
+                    <span className={item.status === 'approved' ? styles.ready : styles.waiting}>{scheduleState}</span>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
