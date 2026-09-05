@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
+import { KeyRound, Pencil, Trash2 } from "lucide-react";
 import { removeFoundryStudent } from "@/app/(app)/dashboard/foundry/students/actions";
 
 export function StudentRosterActions({
@@ -15,6 +15,13 @@ export function StudentRosterActions({
 }) {
   return (
     <div className="foundry-row-actions">
+      <Link
+        className="foundry-button foundry-button-quiet"
+        href={`/dashboard/foundry/students/${studentId}/access`}
+      >
+        <KeyRound aria-hidden="true" size={14} />
+        Access
+      </Link>
       <Link
         className="foundry-button foundry-button-quiet"
         href={`/dashboard/foundry/students/${studentId}#profile`}
