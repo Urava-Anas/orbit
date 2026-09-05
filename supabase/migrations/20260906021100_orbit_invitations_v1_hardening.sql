@@ -194,7 +194,7 @@ begin
     action,
     entity_type,
     entity_id,
-    payload
+    metadata
   )
   values (
     invitation_row.workspace_id,
