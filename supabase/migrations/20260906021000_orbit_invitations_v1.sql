@@ -209,10 +209,9 @@ begin
     return;
   end if;
 
-  select oi.*, w.name
-  into invitation_row, resolved_workspace_name
+  select oi.*
+  into invitation_row
   from public.orbit_invitations oi
-  join public.workspaces w on w.id = oi.workspace_id
   where oi.token_hash = private.orbit_invitation_hash(invitation_token)
   limit 1;
 
@@ -220,6 +219,11 @@ begin
     return query select 'invalid'::text, null::text, null::text, null::text, null::timestamptz;
     return;
   end if;
+
+  select w.name
+  into resolved_workspace_name
+  from public.workspaces w
+  where w.id = invitation_row.workspace_id;
 
   return query
   select
