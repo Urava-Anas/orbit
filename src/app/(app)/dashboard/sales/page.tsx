@@ -6,16 +6,13 @@ import {
   CheckCircle2,
   CircleDollarSign,
   FileText,
-  Filter,
   FolderKanban,
   History,
-  Link2,
   MoreHorizontal,
   PackageCheck,
   Plus,
   Receipt,
   Search,
-  StickyNote,
   TriangleAlert,
   UploadCloud,
   UsersRound,
@@ -24,6 +21,7 @@ import { Notice } from "@/components/Notice";
 import { formatMoney, formatRelativeDate, humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
 import { createSalesClient } from "./actions";
+import extraStyles from "./SalesPageEnhancements.module.css";
 import styles from "./sales.module.css";
 
 export const metadata: Metadata = {
@@ -74,11 +72,11 @@ type WonLead = {
   currency: string;
 };
 
-type AuditRow = {
+type CompanyEventRow = {
   id: number;
-  action: string;
-  entity_type: string;
-  created_at: string;
+  event_type: string;
+  entity_type: string | null;
+  occurred_at: string;
 };
 
 function initials(name: string) {
@@ -108,7 +106,9 @@ function sparkline(values: number[]) {
   if (!values.length) return `0,${height} ${width},${height}`;
   const max = Math.max(...values, 1);
   const step = values.length === 1 ? width : width / (values.length - 1);
-  return values.map((value, index) => `${Math.round(index * step)},${Math.round(height - (value / max) * (height - 8))}`).join(" ");
+  return values
+    .map((value, index) => `${Math.round(index * step)},${Math.round(height - (value / max) * (height - 8))}`)
+    .join(" ");
 }
 
 export default async function SalesDeskPage({ searchParams }: PageProps) {
@@ -123,14 +123,14 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
     supabase.from("projects").select("id,client_id,name,status,value,currency,due_date,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
     supabase.from("invoices").select("id,reference,amount,currency,status,due_at,paid_at,created_at,projects(name,client_id)").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
     supabase.from("leads").select("id,stage,estimated_value,currency").eq("workspace_id", workspace.id).eq("stage", "won"),
-    supabase.from("audit_events").select("id,action,entity_type,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(6),
+    supabase.from("company_events").select("id,event_type,entity_type,occurred_at").eq("workspace_id", workspace.id).order("occurred_at", { ascending: false }).limit(6),
   ]);
 
   const clients = (clientsResult.data ?? []) as ClientRow[];
   const projects = (projectsResult.data ?? []) as ProjectRow[];
   const invoices = (invoicesResult.data ?? []) as unknown as InvoiceRow[];
   const wonLeads = (wonResult.data ?? []) as WonLead[];
-  const audit = (auditResult.data ?? []) as AuditRow[];
+  const companyEvents = (auditResult.data ?? []) as CompanyEventRow[];
 
   const activeProjects = projects.filter((project) => project.status !== "completed");
   const pipelinePkr = activeProjects.filter((project) => project.currency === "PKR").reduce((sum, project) => sum + Number(project.value || 0), 0);
@@ -141,7 +141,9 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
   const totalPaidPkr = invoices.filter((invoice) => invoice.status === "paid" && invoice.currency === "PKR").reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
 
   const latestProjectByClient = new Map<string, ProjectRow>();
-  for (const project of projects) if (!latestProjectByClient.has(project.client_id)) latestProjectByClient.set(project.client_id, project);
+  for (const project of projects) {
+    if (!latestProjectByClient.has(project.client_id)) latestProjectByClient.set(project.client_id, project);
+  }
   const invoiceByClient = new Map<string, InvoiceRow[]>();
   for (const invoice of invoices) {
     const clientId = invoice.projects?.client_id;
@@ -153,22 +155,35 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
 
   const q = params.q?.trim().toLowerCase() ?? "";
   const view = params.view ?? "all";
-  const clientRows = clients.map((client) => {
-    const project = latestProjectByClient.get(client.id);
-    const clientInvoices = invoiceByClient.get(client.id) ?? [];
-    const overdue = clientInvoices.some((invoice) => invoice.status === "overdue");
-    const stage = projectStage(project);
-    const status = overdue ? "Payment due" : project?.status === "blocked" ? "Blocked" : stage === "Completed" ? "Completed" : stage === "Onboarding" ? "Onboarding" : "Active";
-    const lastAt = clientInvoices[0]?.paid_at ?? clientInvoices[0]?.created_at ?? project?.created_at ?? client.created_at;
-    return { client, project, stage, status, lastAt };
-  }).filter((row) => {
-    const haystack = [row.client.name, row.client.contact_name, row.client.email, row.project?.name].filter(Boolean).join(" ").toLowerCase();
-    if (q && !haystack.includes(q)) return false;
-    if (view === "active" && row.status !== "Active") return false;
-    if (view === "onboarding" && row.stage !== "Onboarding") return false;
-    if (view === "completed" && row.stage !== "Completed") return false;
-    return true;
-  });
+  const clientRows = clients
+    .map((client) => {
+      const project = latestProjectByClient.get(client.id);
+      const clientInvoices = invoiceByClient.get(client.id) ?? [];
+      const overdue = clientInvoices.some((invoice) => invoice.status === "overdue");
+      const stage = projectStage(project);
+      const status = overdue
+        ? "Payment due"
+        : project?.status === "blocked"
+          ? "Blocked"
+          : stage === "Completed"
+            ? "Completed"
+            : stage === "Onboarding"
+              ? "Onboarding"
+              : "Active";
+      const lastAt = clientInvoices[0]?.paid_at ?? clientInvoices[0]?.created_at ?? project?.created_at ?? client.created_at;
+      return { client, project, stage, status, lastAt };
+    })
+    .filter((row) => {
+      const haystack = [row.client.name, row.client.contact_name, row.client.email, row.project?.name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (q && !haystack.includes(q)) return false;
+      if (view === "active" && row.status !== "Active") return false;
+      if (view === "onboarding" && row.stage !== "Onboarding") return false;
+      if (view === "completed" && row.stage !== "Completed") return false;
+      return true;
+    });
 
   const planned = projects.filter((project) => project.status === "planned");
   const inProgress = projects.filter((project) => project.status === "in_progress");
@@ -192,8 +207,16 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
   const linePoints = sparkline(cumulativeRevenue);
 
   const taskItems = [
-    ...overdueInvoices.slice(0, 2).map((invoice) => ({ title: `Collect ${invoice.reference}`, detail: formatMoney(Number(invoice.amount), invoice.currency), due: invoice.due_at ? formatRelativeDate(invoice.due_at) : "Overdue" })),
-    ...activeProjects.filter((project) => project.due_date).slice(0, 2).map((project) => ({ title: project.name, detail: project.status === "blocked" ? "Delivery blocked" : "Delivery follow-up", due: formatRelativeDate(project.due_date ?? project.created_at) })),
+    ...overdueInvoices.slice(0, 2).map((invoice) => ({
+      title: `Collect ${invoice.reference}`,
+      detail: formatMoney(Number(invoice.amount), invoice.currency),
+      due: invoice.due_at ? formatRelativeDate(invoice.due_at) : "Overdue",
+    })),
+    ...activeProjects.filter((project) => project.due_date).slice(0, 2).map((project) => ({
+      title: project.name,
+      detail: project.status === "blocked" ? "Delivery blocked" : "Delivery follow-up",
+      due: formatRelativeDate(project.due_date ?? project.created_at),
+    })),
   ].slice(0, 4);
 
   return (
@@ -213,7 +236,7 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
 
       <div className={styles.salesGrid}>
         <div className={styles.mainColumn}>
-          <section className={styles.metricsGrid}>
+          <section className={styles.metricsGrid} aria-label="Sales overview">
             <article><span className={`${styles.metricIcon} ${styles.purple}`}><UsersRound size={18} /></span><p>Total Clients<strong>{clients.length}</strong><small>Won relationships under management</small></p></article>
             <article><span className={`${styles.metricIcon} ${styles.blue}`}><FolderKanban size={18} /></span><p>Active Projects<strong>{activeProjects.length}</strong><small>{projects.length} total projects</small></p></article>
             <article><span className={`${styles.metricIcon} ${styles.green}`}><CircleDollarSign size={18} /></span><p>Active Client Value<strong>{formatMoney(pipelinePkr, "PKR")}</strong><small>Non-completed PKR delivery</small></p></article>
@@ -234,19 +257,16 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
           </section>
 
           <section className={styles.clientPanel}>
-            <nav className={styles.tabs}>
-              <Link className={view === "all" ? styles.activeTab : ""} href="/dashboard/sales?view=all">All Clients</Link>
-              <Link className={view === "active" ? styles.activeTab : ""} href="/dashboard/sales?view=active">Active</Link>
-              <Link className={view === "onboarding" ? styles.activeTab : ""} href="/dashboard/sales?view=onboarding">Onboarding</Link>
-              <Link className={view === "completed" ? styles.activeTab : ""} href="/dashboard/sales?view=completed">Completed</Link>
+            <nav className={styles.tabs} aria-label="Client views">
+              <Link className={view === "all" ? styles.activeTab : ""} href="/dashboard/sales?view=all" aria-current={view === "all" ? "page" : undefined}>All Clients</Link>
+              <Link className={view === "active" ? styles.activeTab : ""} href="/dashboard/sales?view=active" aria-current={view === "active" ? "page" : undefined}>Active</Link>
+              <Link className={view === "onboarding" ? styles.activeTab : ""} href="/dashboard/sales?view=onboarding" aria-current={view === "onboarding" ? "page" : undefined}>Onboarding</Link>
+              <Link className={view === "completed" ? styles.activeTab : ""} href="/dashboard/sales?view=completed" aria-current={view === "completed" ? "page" : undefined}>Completed</Link>
             </nav>
-            <form className={styles.filterBar} action="/dashboard/sales" method="get">
+            <form className={`${styles.filterBar} ${extraStyles.searchBar}`} action="/dashboard/sales" method="get">
               <input type="hidden" name="view" value={view} />
-              <label className={styles.searchBox}><Search size={15} /><input name="q" defaultValue={params.q ?? ""} placeholder="Search clients by name, business, email or project..." /></label>
-              <select aria-label="Owner"><option>All owners</option></select>
-              <select aria-label="Service"><option>All services</option></select>
-              <select aria-label="Stage"><option>All stages</option></select>
-              <button type="submit"><Filter size={14} /> Filters</button>
+              <label className={styles.searchBox}><Search size={15} /><input name="q" defaultValue={params.q ?? ""} placeholder="Search clients, contacts or projects..." /></label>
+              <button type="submit"><Search size={14} /> Search</button>
             </form>
             <div className={styles.tableWrap}>
               <table className={styles.clientTable}>
@@ -254,14 +274,18 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
                 <tbody>
                   {clientRows.slice(0, 12).map(({ client, project, stage, status, lastAt }) => (
                     <tr key={client.id}>
-                      <td><div className={styles.clientIdentity}><span>{initials(client.name)}</span><div><strong>{client.name}</strong><small>{client.contact_name ?? client.email ?? "Client record"}</small></div></div></td>
+                      <td>
+                        <Link className={extraStyles.clientName} href={`/dashboard/sales/${client.id}`}>
+                          <div className={styles.clientIdentity}><span>{initials(client.name)}</span><div><strong>{client.name}</strong><small>{client.contact_name ?? client.email ?? "Client record"}</small></div></div>
+                        </Link>
+                      </td>
                       <td><span className={`${styles.stagePill} ${styles[`stage_${stageTone(stage)}`]}`}>{stage}</span></td>
                       <td>{project?.name ?? "Onboarding / scope"}</td>
                       <td><span className={styles.ownerAvatar}>U</span> Urava Team</td>
                       <td>{project ? formatMoney(Number(project.value), project.currency) : "—"}</td>
                       <td><span className={`${styles.statusPill} ${styles[`stage_${stageTone(status)}`]}`}>{status}</span></td>
                       <td>{formatRelativeDate(lastAt)}</td>
-                      <td><Link className={styles.moreButton} href="/dashboard/projects" aria-label={`Open ${client.name}`}><MoreHorizontal size={16} /></Link></td>
+                      <td><Link className={styles.moreButton} href={`/dashboard/sales/${client.id}`} aria-label={`Open ${client.name}`}><MoreHorizontal size={16} /></Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -293,17 +317,17 @@ export default async function SalesDeskPage({ searchParams }: PageProps) {
           <section className={styles.sideCard}>
             <div className={styles.sideHeading}><h2>Recent activity</h2><Link href="/dashboard">View all</Link></div>
             <div className={styles.activityList}>
-              {audit.length ? audit.map((event) => <div key={event.id}><span className={styles.activityDot} /><p><strong>{humanize(event.action)} {humanize(event.entity_type)}</strong><small>Organisation record changed</small></p><time>{formatRelativeDate(event.created_at)}</time></div>) : <div className={styles.emptyMini}>No recent client activity.</div>}
+              {companyEvents.length ? companyEvents.map((event) => <div key={event.id}><span className={styles.activityDot} /><p><strong>{humanize(event.event_type)}</strong><small>{event.entity_type ? humanize(event.entity_type) : "Organisation workflow"} event</small></p><time>{formatRelativeDate(event.occurred_at)}</time></div>) : <div className={styles.emptyMini}>No recent company workflow events.</div>}
             </div>
           </section>
 
           <section className={styles.sideCard}>
             <h2>Quick actions</h2>
             <div className={styles.quickActions}>
-              <Link href="/dashboard/projects"><FileText size={17} /><span>New Project</span></Link>
-              <Link href="/dashboard/cash"><Receipt size={17} /><span>Create Invoice</span></Link>
-              <Link href="/dashboard/cash"><Link2 size={17} /><span>Payment</span></Link>
-              <Link href="#add-client"><StickyNote size={17} /><span>Client Note</span></Link>
+              <Link href="/dashboard/projects#create-project"><FileText size={17} /><span>New Project</span></Link>
+              <Link href="/dashboard/cash#record-invoice"><Receipt size={17} /><span>Create Invoice</span></Link>
+              <Link href="/dashboard/cash"><Banknote size={17} /><span>Review Payments</span></Link>
+              <Link href="#add-client"><Plus size={17} /><span>Add Client</span></Link>
             </div>
           </section>
         </aside>

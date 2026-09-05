@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type RateLimitResult = {
   allowed: boolean;
+  unavailable?: boolean;
   remaining: number;
   resetAt: string;
 };
@@ -21,8 +22,9 @@ export async function consumeRateLimit(input: {
 }): Promise<RateLimitResult> {
   const admin = createAdminClient();
   if (!admin) {
+    console.error("Orbit rate-limit store unavailable", { scope: input.scope, reason: "missing_server_key" });
     // Production-sensitive endpoints fail closed if the quota store is unavailable.
-    return { allowed: false, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString() };
+    return { allowed: false, unavailable: true, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString() };
   }
 
   const { data, error } = await admin.rpc("consume_orbit_rate_limit", {
@@ -33,7 +35,8 @@ export async function consumeRateLimit(input: {
   });
   const row = Array.isArray(data) ? data[0] : data;
   if (error || !row) {
-    return { allowed: false, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString() };
+    console.error("Orbit rate-limit store unavailable", { scope: input.scope, reason: "quota_rpc_failed", code: error?.code || "unknown" });
+    return { allowed: false, unavailable: true, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString() };
   }
 
   return {

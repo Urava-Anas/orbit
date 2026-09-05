@@ -7,6 +7,28 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { FoundryHealth } from "@/lib/foundry";
+import styles from "./FoundryUI.module.css";
+
+export type FoundryProgressStage =
+  | "introduced"
+  | "practising"
+  | "understood"
+  | "applied"
+  | "mastered";
+
+export function foundryProgressStage(value: number): FoundryProgressStage {
+  const safeValue = Math.max(0, Math.min(100, value));
+  if (safeValue >= 85) return "mastered";
+  if (safeValue >= 65) return "applied";
+  if (safeValue >= 45) return "understood";
+  if (safeValue >= 20) return "practising";
+  return "introduced";
+}
+
+function progressStageLabel(stage: FoundryProgressStage) {
+  if (stage === "practising") return "Practising";
+  return stage.charAt(0).toUpperCase() + stage.slice(1);
+}
 
 export function FoundryNotice({
   notice,
@@ -60,10 +82,11 @@ export function FoundryProgressBar({
   compact?: boolean;
 }) {
   const safeValue = Math.max(0, Math.min(100, value));
+  const stage = foundryProgressStage(safeValue);
   return (
     <div
       className={`foundry-progress ${compact ? "is-compact" : ""}`}
-      aria-label={`${safeValue}% progress`}
+      aria-label={`${progressStageLabel(stage)} learning stage, ${safeValue}% recorded evidence`}
       aria-valuemax={100}
       aria-valuemin={0}
       aria-valuenow={safeValue}
@@ -71,6 +94,25 @@ export function FoundryProgressBar({
     >
       <span style={{ width: `${safeValue}%` }} />
     </div>
+  );
+}
+
+export function FoundryStageBadge({
+  value,
+  showEvidence = false,
+}: {
+  value: number;
+  showEvidence?: boolean;
+}) {
+  const safeValue = Math.max(0, Math.min(100, value));
+  const stage = foundryProgressStage(safeValue);
+  return (
+    <span className={styles.stageDetail}>
+      <span className={styles.stage} data-stage={stage}>
+        {progressStageLabel(stage)}
+      </span>
+      {showEvidence ? <small>{safeValue}% evidence</small> : null}
+    </span>
   );
 }
 

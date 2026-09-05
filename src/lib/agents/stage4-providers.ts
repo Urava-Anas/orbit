@@ -216,6 +216,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
   }
 
   const body = text(envelope.payload.body);
+  const html = text(envelope.payload.html);
   if (!body) {
     return {
       ok: false,
@@ -238,6 +239,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
       to: [envelope.destination],
       subject: emailSubject(envelope),
       text: body,
+      ...(html ? { html } : {}),
       headers: {
         "X-Orbit-Request-Id": envelope.requestId,
         "X-Orbit-Action-Request-Id": envelope.actionRequestId,
@@ -264,7 +266,7 @@ async function sendEmail(envelope: StageFourGatewayEnvelope): Promise<StageFourG
     ok: true,
     provider: "resend",
     providerRequestId,
-    responseSummary: { status: response.status, accepted: true },
+    responseSummary: { status: response.status, accepted: true, html: Boolean(html) },
     errorCode: null,
   };
 }

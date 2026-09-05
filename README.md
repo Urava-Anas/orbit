@@ -72,3 +72,30 @@ npm run build
 Database migrations live in `supabase/migrations`. The live tenant-isolation test
 is in `supabase/tests/tenant_isolation.sql`; it runs inside a transaction and
 rolls back all synthetic users and records.
+
+
+## Sovereign AI foundation
+
+Orbit owns business workflows and treats AI models as replaceable infrastructure.
+
+Stage 1 adds:
+
+- a provider-independent AI Gateway at `POST /api/ai/gateway`
+- server-only provider and model catalogs
+- workspace model policies with local-only, cost, latency, preferred-model, and fallback controls
+- per-attempt AI usage telemetry without storing raw prompts or outputs
+- append-only company events
+- deduplicated structured company memory entries
+- a generic OpenAI-compatible adapter that can target a cloud endpoint today or an Urava-owned local inference server later
+
+The seeded `openai` and `urava_local` providers are disabled by default. No model is enabled automatically.
+
+Gateway execution requires a server-side `SUPABASE_SECRET_KEY` or legacy
+`SUPABASE_SERVICE_ROLE_KEY`. Provider credentials are referenced only by
+environment-variable name in the database; secret values are never stored in
+the provider catalog.
+
+The current adapter is enabled only for capabilities that are actually configured
+on a provider/model pair. Stage 1 seeds only `chat`; structured output, tool
+calling, vision, and other capabilities remain contract-level options until an
+adapter and model are explicitly configured for them.

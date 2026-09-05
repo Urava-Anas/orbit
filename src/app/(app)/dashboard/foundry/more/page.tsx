@@ -18,7 +18,7 @@ import { getFoundrySettings } from "@/lib/foundry";
 import { updateFoundryCapacity } from "../actions";
 
 export const metadata: Metadata = {
-  title: "Foundry More",
+  title: "Foundry Settings & Support",
   robots: { index: false, follow: false },
 };
 
@@ -37,8 +37,8 @@ const moduleLinks = [
   },
   {
     href: "/dashboard/foundry/progress",
-    title: "Progress",
-    detail: "Skill scores, achievements and Studio readiness.",
+    title: "Progress & readiness",
+    detail: "Learning evidence, achievements and Studio readiness decisions.",
     icon: BarChart3,
   },
 ] as const;
@@ -56,13 +56,16 @@ export default async function FoundryMorePage({ searchParams }: Props) {
       <FoundryNotice error={messages.error} notice={messages.notice} />
       <section className="foundry-page-title">
         <div>
-          <span className="foundry-kicker">MVP operations</span>
-          <h1>More</h1>
-          <p>Supporting modules and system boundaries for Foundry operators.</p>
+          <span className="foundry-kicker">Foundry controls</span>
+          <h1>Settings & Support</h1>
+          <p>
+            Open supporting workflows, control cohort capacity and understand the
+            systems that keep Foundry records secure and consistent.
+          </p>
         </div>
       </section>
 
-      <section className="foundry-more-grid">
+      <section className="foundry-more-grid" aria-label="Supporting Foundry workflows">
         {moduleLinks.map(({ href, title, detail, icon: Icon }) => (
           <Link className="foundry-more-card" href={href} key={href}>
             <span>
@@ -87,7 +90,7 @@ export default async function FoundryMorePage({ searchParams }: Props) {
             <UsersRound aria-hidden="true" size={20} />
           </div>
           <p className="foundry-long-copy">
-            Dashboard availability isi trusted capacity se calculate hoti hai.
+            Available seats on Founder Command are calculated from this active-student capacity.
           </p>
           <form action={updateFoundryCapacity} className="foundry-inline-form">
             <label>
@@ -115,11 +118,10 @@ export default async function FoundryMorePage({ searchParams }: Props) {
             <Gauge aria-hidden="true" size={20} />
           </span>
           <div>
-            <small>Foundry module</small>
+            <small>Foundry system</small>
             <strong>{moduleStatus}</strong>
             <p>
-              Auth, role routing, RLS, audited commands and live updates are the
-              operating boundary.
+              Identity, role access, audited actions and live updates share one secure operating boundary.
             </p>
           </div>
           <Settings2 aria-hidden="true" size={20} />
@@ -129,8 +131,8 @@ export default async function FoundryMorePage({ searchParams }: Props) {
       <section className="foundry-card">
         <div className="foundry-card-head">
           <div>
-            <span className="foundry-card-eyebrow">Orbit boundary</span>
-            <h2>Trusted system map</h2>
+            <span className="foundry-card-eyebrow">Data responsibilities</span>
+            <h2>Where Foundry information lives</h2>
           </div>
           <ShieldCheck aria-hidden="true" size={20} />
         </div>
@@ -138,19 +140,19 @@ export default async function FoundryMorePage({ searchParams }: Props) {
           <article>
             <Database aria-hidden="true" size={20} />
             <strong>Supabase</strong>
-            <p>Canonical operational data, auth, RLS and audited workflow state.</p>
-            <span>Source of truth</span>
+            <p>Secure operational records, identity, permissions and workflow state.</p>
+            <span>Primary record</span>
           </article>
           <article>
             <FileText aria-hidden="true" size={20} />
             <strong>Airtable</strong>
-            <p>Admissions intake with permanent Foundry ID and sync timestamp.</p>
-            <span>Intake only</span>
+            <p>Admissions intake linked to each permanent Foundry ID.</p>
+            <span>Admissions intake</span>
           </article>
           <article>
             <BookOpenCheck aria-hidden="true" size={20} />
             <strong>Notion</strong>
-            <p>Curriculum, decisions, policies and implementation record.</p>
+            <p>Curriculum, policies, decisions and implementation knowledge.</p>
             <span>Knowledge layer</span>
           </article>
         </div>

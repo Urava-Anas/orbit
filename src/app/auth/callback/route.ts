@@ -8,7 +8,7 @@ function safeReturnPath(value: string | null, origin: string) {
   try {
     const destination = new URL(value, origin);
     if (destination.origin !== origin) return null;
-    if (!["/reset-password", "/trial"].includes(destination.pathname)) return null;
+    if (!["/reset-password", "/trial", "/account/delete"].includes(destination.pathname)) return null;
 
     return `${destination.pathname}${destination.search}${destination.hash}`;
   } catch {

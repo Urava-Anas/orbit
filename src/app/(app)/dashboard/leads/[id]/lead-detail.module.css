@@ -1,0 +1,256 @@
+.page {
+  display: grid;
+  gap: 16px;
+}
+
+.back {
+  width: fit-content;
+}
+
+.hero {
+  display: flex;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  background:
+    radial-gradient(circle at 0 0, rgba(255, 107, 97, 0.1), transparent 22rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), transparent 42%),
+    var(--glass-regular);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 15px;
+}
+
+.avatar {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 17px;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.identity h1 {
+  margin: 4px 0 0;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.identity p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-family: var(--font-orbit-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-orbit-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 9px;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 19px;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  padding: 21px;
+}
+
+.cardWide {
+  grid-column: 1 / -1;
+}
+
+.cardHead {
+  display: flex;
+  margin-bottom: 16px;
+  align-items: center;
+  gap: 10px;
+}
+
+.cardHead span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--accent);
+}
+
+.cardHead h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.definition {
+  display: grid;
+  gap: 0;
+}
+
+.definition > div {
+  display: grid;
+  min-width: 0;
+  padding: 11px 0;
+  grid-template-columns: minmax(110px, 0.38fr) minmax(0, 1fr);
+  gap: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.definition > div:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.definition dt {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.definition dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted-strong);
+  font-size: 11px;
+  text-align: right;
+}
+
+.prose {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.nextAction {
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--line));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--warning) 6%, transparent);
+}
+
+.nextAction strong,
+.nextAction span {
+  display: block;
+}
+
+.nextAction strong {
+  font-size: 14px;
+}
+
+.nextAction span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .metrics,
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .identity {
+    align-items: flex-start;
+  }
+
+  .actions,
+  .metrics,
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .actions :global(.button) {
+    width: 100%;
+  }
+
+  .cardWide {
+    grid-column: auto;
+  }
+
+  .definition > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .definition dd {
+    text-align: left;
+  }
+}
