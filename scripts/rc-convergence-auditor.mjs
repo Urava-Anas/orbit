@@ -45,6 +45,15 @@ function parseNameStatus(raw) {
   });
 }
 
+function parseTree(raw) {
+  if (!raw) return [];
+  return raw.split("\n").filter(Boolean).map((line) => {
+    const [meta, path] = line.split("\t");
+    const [, type, object] = meta.split(/\s+/);
+    return { type, object, path };
+  });
+}
+
 function pathsFor(change) {
   return [change.path, change.previousPath].filter(Boolean);
 }
@@ -140,6 +149,24 @@ const deletionsTouchingRc = candidateDeletions.filter((path) => rcMap.has(path))
 const candidateMigrations = candidatePaths.filter((path) => /^supabase\/migrations\/.*\.sql$/i.test(path));
 const sharedConfigOrNavigation = sharedPaths.filter((path) => classify(path).some((domain) => domain === "shared-config" || domain === "shared-navigation"));
 
+const rcMigrationTree = parseTree(git(["ls-tree", "-r", rcRef, "--", "supabase/migrations"]));
+const rcMigrationPathsByBlob = new Map();
+for (const item of rcMigrationTree) {
+  if (item.type !== "blob" || !/\.sql$/i.test(item.path)) continue;
+  const paths = rcMigrationPathsByBlob.get(item.object) || [];
+  paths.push(item.path);
+  rcMigrationPathsByBlob.set(item.object, paths);
+}
+
+const duplicateMigrationBlobs = [];
+for (const path of candidateMigrations) {
+  const candidateBlob = git(["rev-parse", `${candidateRef}:${path}`]);
+  const rcMatches = (rcMigrationPathsByBlob.get(candidateBlob) || []).filter((rcPath) => rcPath !== path);
+  if (rcMatches.length) {
+    duplicateMigrationBlobs.push({ candidatePath: path, rcPaths: rcMatches.sort(), blob: candidateBlob });
+  }
+}
+
 const mergeTree = runGit(["merge-tree", "--write-tree", rcRef, candidateRef], { allowFailure: true });
 const mergeOutput = [mergeTree.stdout, mergeTree.stderr].filter(Boolean).join("\n");
 const mergeConflicts = parseMergeConflicts(mergeOutput);
@@ -148,13 +175,15 @@ const baseAncestorOfRc = runGit(["merge-base", "--is-ancestor", baseRef, rcRef],
 
 let risk = "low";
 if (candidateMigrations.length || sharedConfigOrNavigation.length || candidateDeletions.length) risk = "medium";
-if (mergeConflicts.length || deletionsTouchingRc.length || !baseAncestorOfRc) risk = "high";
+if (mergeConflicts.length || deletionsTouchingRc.length || duplicateMigrationBlobs.length || !baseAncestorOfRc) risk = "high";
 
 const recommendation = mergeConflicts.length
   ? "reconcile-conflicts"
-  : sharedPaths.length
-    ? "overlay-domain-files-and-review-shared"
-    : "clean-overlay-candidate";
+  : duplicateMigrationBlobs.length
+    ? "drop-duplicate-migration-files-and-review-shared"
+    : sharedPaths.length
+      ? "overlay-domain-files-and-review-shared"
+      : "clean-overlay-candidate";
 
 const summary = {
   baseRef,
@@ -174,6 +203,7 @@ const summary = {
   candidateDeletions,
   deletionsTouchingRc,
   candidateMigrations,
+  duplicateMigrationBlobs,
   mergeConflicts,
   mergeTreeClean: mergeTree.status === 0,
   candidateDomains: domainCounts(candidatePaths),
@@ -189,6 +219,7 @@ const human = [
   `RC: ${rcSha.slice(0, 12)} | Candidate: ${candidateSha.slice(0, 12)} | Fork: ${forkPoint.slice(0, 12)}`,
   `Candidate files: ${candidateChanges.length} | RC-since-fork: ${rcChangesSinceFork.length} | Shared: ${sharedPaths.length}`,
   `Merge conflicts: ${mergeConflicts.length} | Candidate deletions: ${candidateDeletions.length} | Migrations: ${candidateMigrations.length}`,
+  `Duplicate migration blobs: ${duplicateMigrationBlobs.length}`,
   `Risk: ${risk.toUpperCase()} | Recommendation: ${recommendation}`,
 ];
 console.error(`\n${human.join("\n")}\n`);
