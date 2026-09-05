@@ -52,13 +52,14 @@ async function requestSubject(email: string) {
 export async function login(formData: FormData) {
   const next = safeAuthNext(value(formData, "next"));
   const returnToLogin = loginPath(next);
-  const parsed = z.object({ email: emailSchema, password: passwordSchema }).safeParse({
+  // Verify the existing password exactly; strength rules apply when setting a new one.
+  const parsed = z.object({ email: emailSchema, password: z.string().min(1).max(128) }).safeParse({
     email: value(formData, "email"),
-    password: value(formData, "password"),
+    password: String(formData.get("password") ?? ""),
   });
 
   if (!parsed.success) {
-    redirect(messagePath(returnToLogin, "error", "Use a valid email and 12+ character password."));
+    redirect(messagePath(returnToLogin, "error", "Enter a valid email and your password."));
   }
 
   const quota = await consumeRateLimit({
@@ -68,6 +69,7 @@ export async function login(formData: FormData) {
     windowSeconds: 600,
   });
   if (!quota.allowed) {
+    if (quota.unavailable) redirect(messagePath(returnToLogin, "error", "Sign-in is temporarily unavailable. Please try again shortly."));
     redirect(messagePath(returnToLogin, "error", "Too many sign-in attempts. Try again later."));
   }
 
@@ -92,7 +94,9 @@ export async function signInWithGoogle(formData: FormData) {
     limit: 20,
     windowSeconds: 600,
   });
-  if (!quota.allowed) redirect(messagePath(returnToLogin, "error", "Too many sign-in attempts. Try again later."));
+  if (!quota.allowed) redirect(messagePath(returnToLogin, "error", quota.unavailable
+    ? "Sign-in is temporarily unavailable. Please try again shortly."
+    : "Too many sign-in attempts. Try again later."));
 
   const origin = await requestOrigin();
   const callback = new URL("/auth/callback", origin);
@@ -138,7 +142,7 @@ export async function requestPasswordReset(formData: FormData) {
 }
 
 export async function updatePassword(formData: FormData) {
-  const password = passwordSchema.safeParse(value(formData, "password"));
+  const password = passwordSchema.safeParse(String(formData.get("password") ?? ""));
   if (!password.success) {
     redirect(messagePath("/reset-password", "error", "Use a password with at least 12 characters."));
   }
