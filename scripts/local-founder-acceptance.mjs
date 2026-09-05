@@ -11,12 +11,26 @@ const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !publicKey || !adminKey) throw new Error("Local Supabase environment is incomplete.");
 if (!["127.0.0.1", "localhost"].includes(new URL(url).hostname)) throw new Error("Refusing non-local Supabase target.");
 
-const founderId = "81000000-0000-4000-8000-000000000001";
-const email = "ci-founder@urava.test";
+const workspaceId = "82000000-0000-4000-8000-000000000001";
+const email = "ci-founder-session@urava.test";
 const ephemeral = randomBytes(24).toString("base64url");
 const admin = createClient(url, adminKey, { auth: { persistSession: false, autoRefreshToken: false } });
-const updated = await admin.auth.admin.updateUserById(founderId, { password: ephemeral, email_confirm: true });
-if (updated.error) throw updated.error;
+const created = await admin.auth.admin.createUser({
+  email,
+  password: ephemeral,
+  email_confirm: true,
+  user_metadata: { full_name: "CI Founder" },
+});
+if (created.error || !created.data.user) throw created.error ?? new Error("Could not create managed local Founder identity.");
+const founderId = created.data.user.id;
+
+const ownerUpdate = await admin.from("workspaces").update({ owner_id: founderId }).eq("id", workspaceId);
+if (ownerUpdate.error) throw ownerUpdate.error;
+const memberUpsert = await admin.from("workspace_members").upsert(
+  { workspace_id: workspaceId, user_id: founderId, role: "owner" },
+  { onConflict: "workspace_id,user_id" },
+);
+if (memberUpsert.error) throw memberUpsert.error;
 
 const jar = new Map();
 const auth = createServerClient(url, publicKey, { cookies: {
@@ -26,7 +40,7 @@ const auth = createServerClient(url, publicKey, { cookies: {
 const signed = await auth.auth.signInWithPassword({ email, password: ephemeral });
 if (signed.error) throw signed.error;
 const verified = await auth.auth.getUser();
-if (verified.error || verified.data.user?.id !== founderId) throw verified.error ?? new Error("Seeded founder session verification failed.");
+if (verified.error || verified.data.user?.id !== founderId) throw verified.error ?? new Error("Managed local Founder session verification failed.");
 const cookie = [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
 if (!cookie) throw new Error("No local SSR session cookie was emitted.");
 
