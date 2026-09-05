@@ -30,7 +30,7 @@ values
   ('97000000-0000-4000-8000-000000000002','96000000-0000-4000-8000-000000000001',null,'UFS-INV-002','New Student','new@example.test','new','applied'),
   ('97000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000001',null,'UFS-INV-003','Founder Invite','founder@example.test','accepted','accepted'),
   ('97000000-0000-4000-8000-000000000004','96000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000005','UFS-INV-004','Existing Learner','existing@example.test','enrolled','explorer'),
-  ('97000000-0000-4000-8000-000000000005','96000000-0000-4000-8000-000000000001',null,'UFS-INV-005','Second Learner Record','existing@example.test','accepted','accepted'),
+  ('97000000-0000-4000-8000-000000000005','96000000-0000-4000-8000-000000000001',null,'UFS-INV-005','Second Learner Record','second-existing@example.test','accepted','accepted'),
   ('97000000-0000-4000-8000-000000000006','96000000-0000-4000-8000-000000000001',null,'UFS-INV-006','Revoked Invite','revoked@example.test','accepted','accepted'),
   ('97000000-0000-4000-8000-000000000007','96000000-0000-4000-8000-000000000001',null,'UFS-INV-007','Expired Invite','expired@example.test','accepted','accepted');
 
@@ -283,6 +283,9 @@ $$;
 select set_config('request.jwt.claim.sub','95000000-0000-4000-8000-000000000001',true);
 create temporary table learner_invitation on commit drop as
 select * from public.create_foundry_invitation('97000000-0000-4000-8000-000000000005',24);
+update auth.users
+set email='second-existing@example.test', updated_at=now()
+where id='95000000-0000-4000-8000-000000000005';
 select set_config('request.jwt.claim.sub','95000000-0000-4000-8000-000000000005',true);
 do $$
 declare raw_token text;
