@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, Clock3, KeyRound, ShieldCheck, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  KeyRound,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { acceptOrbitInvitation } from "@/app/invite/[token]/actions";
 import { Notice } from "@/components/Notice";
 import { OrbitMark } from "@/components/OrbitMark";
@@ -28,13 +34,19 @@ function expiryLabel(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     timeZoneName: "short",
   }).format(date);
 }
 
-export default async function InvitationPage({ params, searchParams }: InvitationPageProps) {
+export default async function InvitationPage({
+  params,
+  searchParams,
+}: InvitationPageProps) {
   const { token } = await params;
   const messages = await searchParams;
   const validTokenShape = isOrbitInvitationToken(token);
@@ -72,7 +84,11 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
 
         <div className="auth-form">
           <span className="eyebrow">Orbit invitation</span>
-          <h1>{unavailable ? unavailableTitle : `Join ${invitation.workspaceName ?? "this organisation"}.`}</h1>
+          <h1>
+            {unavailable
+              ? unavailableTitle
+              : `Join ${invitation.workspaceName ?? "this organisation"}.`}
+          </h1>
           <p>
             {unavailable
               ? "No organisation access can be granted from this link. Ask the organisation to send a new invitation if you still need access."
@@ -83,9 +99,19 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
 
           {!unavailable ? (
             <div className="auth-role-row" aria-label="Invitation details">
-              <span><Users size={13} /> {invitation.workspaceName ?? "Orbit organisation"}</span>
-              <span><KeyRound size={13} /> {invitation.emailHint ?? "Invited email"}</span>
-              {expires ? <span><Clock3 size={13} /> Expires {expires}</span> : null}
+              <span>
+                <Users size={13} />
+                {invitation.workspaceName ?? "Orbit organisation"}
+              </span>
+              <span>
+                <KeyRound size={13} />
+                {invitation.emailHint ?? "Invited email"}
+              </span>
+              {expires ? (
+                <span>
+                  <Clock3 size={13} /> Expires {expires}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
@@ -98,20 +124,26 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
                 Create Orbit account
               </Link>
               <span className="auth-invite-note">
-                <ShieldCheck size={13} /> Authentication does not grant access by itself.
+                <ShieldCheck size={13} /> Authentication does not grant access by
+                itself.
               </span>
             </div>
           ) : null}
 
-          {!unavailable && context && context.access.accountRole === "pending" ? (
-            <form className="form-stack" style={{ marginTop: 22 }} action={acceptOrbitInvitation}>
+          {!unavailable && context?.access.accountRole === "pending" ? (
+            <form
+              className="form-stack"
+              style={{ marginTop: 22 }}
+              action={acceptOrbitInvitation}
+            >
               <input type="hidden" name="token" value={token} />
               <SubmitButton
                 idleLabel={`Accept and join ${invitation.workspaceName ?? "organisation"}`}
                 pendingLabel="Granting authorised access…"
               />
               <span className="auth-invite-note">
-                <ShieldCheck size={13} /> Orbit will verify your confirmed email again before access changes.
+                <ShieldCheck size={13} /> Orbit will verify your confirmed email
+                again before access changes.
               </span>
             </form>
           ) : null}
@@ -121,7 +153,10 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
               <Notice
                 error="This signed-in account already has Orbit access. Use the account that was invited rather than changing an existing account's role."
               />
-              <Link className="text-link" href={orbitHomePath(context.access)}>
+              <Link
+                className="text-link"
+                href={orbitHomePath(context.access)}
+              >
                 Return to my current Orbit workspace
               </Link>
             </div>
@@ -130,7 +165,10 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
           {unavailable ? (
             <div className="form-foot" style={{ marginTop: 22 }}>
               {context ? (
-                <Link className="text-link" href={orbitHomePath(context.access)}>
+                <Link
+                  className="text-link"
+                  href={orbitHomePath(context.access)}
+                >
                   Continue to Orbit
                 </Link>
               ) : (
@@ -146,7 +184,10 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
           <span className="eyebrow">Identity ≠ authority</span>
-          <p>Orbit keeps account identity separate from organisation membership and Foundry access.</p>
+          <p>
+            Orbit keeps account identity separate from organisation membership
+            and Foundry access.
+          </p>
           <span className="system-state">
             <CheckCircle2 size={13} /> Signed, expiring, single-use access
           </span>
