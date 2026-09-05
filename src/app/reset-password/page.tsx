@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { updatePassword } from "@/app/auth/actions";
 import { Notice } from "@/components/Notice";
@@ -22,19 +23,19 @@ export default async function ResetPasswordPage({ searchParams }: PageProps) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login?error=Reset%20link%20expired");
+  if (!user) redirect("/forgot-password?error=That%20reset%20link%20is%20invalid%20or%20expired.");
   const params = await searchParams;
 
   return (
     <main className="auth-shell">
       <section className="auth-panel">
-        <OrbitMark />
+        <Link href="/" aria-label="Orbit home"><OrbitMark /></Link>
         <div className="auth-form">
-          <span className="eyebrow">New credential</span>
-          <h1>Reset password.</h1>
+          <span className="eyebrow">Secure credential change</span>
+          <h1>Choose a new password.</h1>
           <p>
-            Use at least 12 characters. Updating it will revoke your other active
-            Orbit sessions.
+            Use at least 12 characters. When it changes, Orbit revokes your active
+            sessions and asks you to sign in again.
           </p>
           <Notice error={params.error} />
           <form className="form-stack" action={updatePassword}>
@@ -47,19 +48,17 @@ export default async function ResetPasswordPage({ searchParams }: PageProps) {
                 minLength={12}
                 maxLength={128}
                 required
+                placeholder="At least 12 characters"
               />
             </div>
-            <SubmitButton
-              idleLabel="Update password"
-              pendingLabel="Updating password…"
-            />
+            <SubmitButton idleLabel="Update password" pendingLabel="Securing your account…" />
           </form>
         </div>
       </section>
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
           <span className="eyebrow">Session control</span>
-          <p>A changed credential should close every door you no longer trust.</p>
+          <p>A new credential closes old sessions before you return to the workspace.</p>
         </div>
       </aside>
     </main>
