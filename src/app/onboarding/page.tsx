@@ -51,7 +51,7 @@ export default async function OnboardingPage({ searchParams }: PageProps) {
           <h2>Now shape the first version of your Orbit.</h2>
           <p>
             Three small decisions configure your starting workspace. They personalise
-            the experience; they do not bypass Orbit's permission system.
+            the experience; they do not bypass Orbit&apos;s permission system.
           </p>
           <div className={styles.trustList}>
             <span><Clock3 size={14} /> Trial starts only at final activation</span>
