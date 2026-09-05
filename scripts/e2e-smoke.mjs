@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { createClient } from "@supabase/supabase-js";
 
 const port = 3100;
 const base = `http://127.0.0.1:${port}`;
@@ -30,6 +31,79 @@ function assertRedirect(response, path, destinationPrefix) {
   const resolved = new URL(location, base);
   if (!`${resolved.pathname}${resolved.search}`.startsWith(destinationPrefix)) {
     throw new Error(`${path} redirected to ${resolved.pathname}${resolved.search}; expected ${destinationPrefix}`);
+  }
+}
+
+async function verifyFounderAuthStateMachine() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !publishableKey || !serviceRoleKey) {
+    throw new Error("Isolated Supabase environment is required for auth-product smoke.");
+  }
+
+  const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const email = `orbit-access-${unique}@example.test`;
+  const password = `Ci-only-${unique}-Secure!`;
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const browser = createClient(supabaseUrl, publishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  let userId = null;
+  try {
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: "Orbit Access CI",
+        orbit_signup_intent: "founder_trial",
+        orbit_onboarding_version: "v1",
+      },
+    });
+    if (createError || !created.user) {
+      throw new Error(`Could not create isolated auth user: ${createError?.message ?? "unknown"}`);
+    }
+    userId = created.user.id;
+
+    const { error: signInError } = await browser.auth.signInWithPassword({ email, password });
+    if (signInError) throw new Error(`Isolated sign-in failed: ${signInError.message}`);
+
+    const { data: pendingData, error: pendingError } = await browser.rpc("claim_orbit_access");
+    if (pendingError) throw new Error(`Pending access resolution failed: ${pendingError.message}`);
+    const pending = Array.isArray(pendingData) ? pendingData[0] : pendingData;
+    if (pending?.account_role !== "pending" || pending?.workspace_id) {
+      throw new Error("Fresh verified Orbit identity was not pending before onboarding.");
+    }
+
+    const { data: trialData, error: trialError } = await browser.rpc("start_orbit_trial", {
+      workspace_name: "Orbit Access CI Company",
+    });
+    if (trialError) throw new Error(`Trial activation failed: ${trialError.message}`);
+    const trial = Array.isArray(trialData) ? trialData[0] : trialData;
+    if (!trial?.workspace_id || !trial?.trial_ends_at) {
+      throw new Error("Trial activation did not return workspace and expiry.");
+    }
+
+    const { data: founderData, error: founderError } = await browser.rpc("claim_orbit_access");
+    if (founderError) throw new Error(`Founder access resolution failed: ${founderError.message}`);
+    const founder = Array.isArray(founderData) ? founderData[0] : founderData;
+    if (founder?.account_role !== "founder" || founder?.workspace_id !== trial.workspace_id) {
+      throw new Error("Trial activation did not transition the identity to founder access.");
+    }
+
+    const { error: duplicateTrialError } = await browser.rpc("start_orbit_trial", {
+      workspace_name: "Duplicate Orbit Access CI Company",
+    });
+    if (!duplicateTrialError) {
+      throw new Error("Duplicate founder trial creation was not rejected.");
+    }
+  } finally {
+    await browser.auth.signOut();
+    if (userId) await admin.auth.admin.deleteUser(userId);
   }
 }
 
@@ -74,6 +148,7 @@ try {
     throw new Error("Public trial CTA does not route cleanly to /signup.");
   }
 
+  await verifyFounderAuthStateMachine();
   console.log("Orbit E2E smoke passed.");
 } finally {
   child.kill("SIGTERM");
