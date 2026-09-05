@@ -1,26 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrbitAccess, orbitHomePath } from "@/lib/access";
+import { safeAuthReturnPath } from "@/lib/auth-return-path";
 import { createClient } from "@/lib/supabase/server";
-
-const ALLOWED_AUTH_DESTINATIONS = new Set([
-  "/reset-password",
-  "/onboarding",
-  "/trial",
-]);
-
-function safeReturnPath(value: string | null, origin: string) {
-  if (!value) return null;
-
-  try {
-    const destination = new URL(value, origin);
-    if (destination.origin !== origin) return null;
-    if (!ALLOWED_AUTH_DESTINATIONS.has(destination.pathname)) return null;
-
-    return `${destination.pathname}${destination.search}${destination.hash}`;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -31,7 +12,7 @@ export async function GET(request: Request) {
     process.env.NODE_ENV === "development" || !forwardedHost
       ? url.origin
       : `${forwardedProtocol}://${forwardedHost}`;
-  const returnPath = safeReturnPath(url.searchParams.get("next"), origin);
+  const returnPath = safeAuthReturnPath(url.searchParams.get("next"));
 
   if (code) {
     const supabase = await createClient();
