@@ -22,10 +22,24 @@ async function waitForServer() {
   throw new Error(`Next server did not become ready. ${stderr.slice(-2000)}`);
 }
 
+function assertRedirect(response, path, destinationPrefix) {
+  if (![307, 308].includes(response.status)) {
+    throw new Error(`${path} returned ${response.status}; expected redirect`);
+  }
+  const location = response.headers.get("location") ?? "";
+  const resolved = new URL(location, base);
+  if (!`${resolved.pathname}${resolved.search}`.startsWith(destinationPrefix)) {
+    throw new Error(`${path} redirected to ${resolved.pathname}${resolved.search}; expected ${destinationPrefix}`);
+  }
+}
+
 try {
   await waitForServer();
   const checks = [
     ["/login", [200]],
+    ["/signup", [200]],
+    ["/verify-email", [200]],
+    ["/forgot-password", [200]],
     ["/orbit/privacy", [200]],
     ["/account/delete", [200]],
     ["/api/health/production", [200]],
@@ -41,6 +55,25 @@ try {
       throw new Error(`${path} did not receive the hardened nonce CSP.`);
     }
   }
+
+  const trialResponse = await fetch(`${base}/trial`, { redirect: "manual" });
+  assertRedirect(trialResponse, "/trial", "/signup");
+
+  const onboardingResponse = await fetch(`${base}/onboarding`, { redirect: "manual" });
+  assertRedirect(onboardingResponse, "/onboarding", "/signup");
+
+  const resetResponse = await fetch(`${base}/reset-password`, { redirect: "manual" });
+  assertRedirect(resetResponse, "/reset-password", "/forgot-password");
+
+  const homeResponse = await fetch(base, { redirect: "manual" });
+  if (homeResponse.status !== 200) {
+    throw new Error(`/ returned ${homeResponse.status}; expected 200`);
+  }
+  const homeHtml = await homeResponse.text();
+  if (!homeHtml.includes('href="/signup"') || homeHtml.includes('href="/login?next=/trial"')) {
+    throw new Error("Public trial CTA does not route cleanly to /signup.");
+  }
+
   console.log("Orbit E2E smoke passed.");
 } finally {
   child.kill("SIGTERM");
