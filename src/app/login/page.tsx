@@ -25,7 +25,9 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const nextPath = params.next === "/trial" ? "/trial" : null;
+  const nextPath = ["/trial", "/account/delete"].includes(params.next ?? "")
+    ? params.next!
+    : null;
   const context = await getOrbitAccess();
 
   if (context) {
@@ -34,6 +36,32 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   const isTrialIntent = nextPath === "/trial";
+  const isDeletionIntent = nextPath === "/account/delete";
+  const eyebrow = isTrialIntent
+    ? "Start your 15-day Business trial"
+    : isDeletionIntent
+      ? "Identity confirmation"
+      : "Your Orbit workspace";
+  const title = isTrialIntent
+    ? "Enter Orbit."
+    : isDeletionIntent
+      ? "Confirm your identity."
+      : "Welcome back.";
+  const description = isTrialIntent
+    ? "Sign in once, then create the organisation workspace your trial will run on."
+    : isDeletionIntent
+      ? "Sign in to verify account ownership before continuing to permanent account deletion."
+      : "Continue once. Orbit will identify your organisation and role automatically.";
+  const idleLabel = isTrialIntent
+    ? "Continue to trial setup"
+    : isDeletionIntent
+      ? "Continue to account deletion"
+      : "Continue to Orbit";
+  const pendingLabel = isTrialIntent
+    ? "Preparing your trial…"
+    : isDeletionIntent
+      ? "Verifying your identity…"
+      : "Opening your workspace…";
 
   return (
     <main className="auth-shell">
@@ -43,15 +71,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </Link>
 
         <div className="auth-form">
-          <span className="eyebrow">
-            {isTrialIntent ? "Start your 15-day Business trial" : "Your Orbit workspace"}
-          </span>
-          <h1>{isTrialIntent ? "Enter Orbit." : "Welcome back."}</h1>
-          <p>
-            {isTrialIntent
-              ? "Sign in once, then create the organisation workspace your trial will run on."
-              : "Continue once. Orbit will identify your organisation and role automatically."}
-          </p>
+          <span className="eyebrow">{eyebrow}</span>
+          <h1>{title}</h1>
+          <p>{description}</p>
 
           <Notice error={params.error} notice={params.notice} />
 
@@ -90,10 +112,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 placeholder="Your password"
               />
             </div>
-            <SubmitButton
-              idleLabel={isTrialIntent ? "Continue to trial setup" : "Continue to Orbit"}
-              pendingLabel={isTrialIntent ? "Preparing your trial…" : "Opening your workspace…"}
-            />
+            <SubmitButton idleLabel={idleLabel} pendingLabel={pendingLabel} />
           </form>
 
           <div className="form-foot" style={{ marginTop: 20 }}>
@@ -110,15 +129,25 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
           <span className="eyebrow">
-            {isTrialIntent ? "15 days · Business · real workspace" : "Sign in → role → workspace"}
+            {isTrialIntent
+              ? "15 days · Business · real workspace"
+              : isDeletionIntent
+                ? "Verified identity · deliberate action"
+                : "Sign in → role → workspace"}
           </span>
           <p>
             {isTrialIntent
               ? "Test the operating system with the same Business layer you would actually run."
-              : "One entrance. No second open button. No detour through the marketing site."}
+              : isDeletionIntent
+                ? "Destructive account actions should always be explicit, verified and reversible only before confirmation."
+                : "One entrance. No second open button. No detour through the marketing site."}
           </p>
           <span className="system-state">
-            <Sparkles size={13} /> {isTrialIntent ? "No payment method required yet" : "Orbit routes you automatically"}
+            <Sparkles size={13} /> {isTrialIntent
+              ? "No payment method required yet"
+              : isDeletionIntent
+                ? "Account ownership verification required"
+                : "Orbit routes you automatically"}
           </span>
         </div>
       </aside>
