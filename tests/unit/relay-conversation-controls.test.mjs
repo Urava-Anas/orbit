@@ -27,3 +27,27 @@ test("Relay conversation moves preserve a deterministic rollback path", async ()
   assert.match(action, /Rollback: move it back to \$\{fromFolder\}/);
   assert.doesNotMatch(action, /\.delete\(/);
 });
+
+test("Relay UI exposes reversible archive and restore controls", async () => {
+  const page = await source("src/app/(app)/dashboard/mail/page.tsx");
+
+  assert.match(page, /import \{ moveRelayThread \} from "\.\/conversation-actions"/);
+  assert.match(page, /action=\{moveRelayThread\}/);
+  assert.match(page, /name="from_folder" value=\{selected\.folder\}/);
+  assert.match(page, /selected\.folder === "archive" \? "inbox" : "archive"/);
+  assert.match(page, /Restore to inbox/);
+  assert.match(page, /Archive conversation/);
+});
+
+test("Relay conversation search stays inside the selected mailbox", async () => {
+  const page = await source("src/app/(app)/dashboard/mail/page.tsx");
+
+  assert.match(page, /name="q"/);
+  assert.match(page, /\.eq\("workspace_id", workspace\.id\)/);
+  assert.match(page, /\.eq\("mailbox_id", selectedMailbox\.id\)/);
+  assert.match(page, /if \(!searchQuery\)/);
+  assert.match(page, /threadRows\.filter/);
+  assert.match(page, /thread\.participant_emails/);
+  assert.match(page, /thread\.business_context_type/);
+  assert.match(page, /No matching conversations/);
+});
