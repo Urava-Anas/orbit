@@ -15,8 +15,6 @@ type Props = {
 export default async function HomePage({ searchParams }: Props) {
   const query = await searchParams;
 
-  // Some OAuth providers may fall back to the configured Site URL. Never leave
-  // the auth code on the public landing page: finish the callback immediately.
   if (query.code) {
     redirect(`/auth/callback?code=${encodeURIComponent(query.code)}`);
   }
@@ -43,7 +41,7 @@ export default async function HomePage({ searchParams }: Props) {
           <Link className="button button-quiet" href="/login">
             Sign in
           </Link>
-          <Link className="button button-primary" href="/login?next=/trial">
+          <Link className="button button-primary" href="/signup">
             Start free trial <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         </div>
@@ -62,7 +60,7 @@ export default async function HomePage({ searchParams }: Props) {
             modules, workflows, and permissions.
           </p>
           <div className="hero-actions">
-            <Link className="button button-primary" href="/login?next=/trial">
+            <Link className="button button-primary" href="/signup">
               Start 15-day Business trial
               <ArrowUpRight size={15} aria-hidden="true" />
             </Link>
