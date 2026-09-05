@@ -162,7 +162,7 @@ begin
     action,
     entity_type,
     entity_id,
-    payload
+    metadata
   )
   values (
     target_student.workspace_id,
@@ -345,7 +345,7 @@ begin
     action,
     entity_type,
     entity_id,
-    payload
+    metadata
   )
   values (
     invitation_row.workspace_id,
@@ -410,7 +410,7 @@ begin
       action,
       entity_type,
       entity_id,
-      payload
+      metadata
     )
     values (
       invitation_row.workspace_id,
