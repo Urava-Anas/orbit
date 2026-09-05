@@ -41,5 +41,5 @@ test("Relay locks authentication to the selected mailbox and preserves recoverab
   assert.match(page, /readOnly=\{Boolean\(selectedMailbox && selectedMailbox\.status !== "connected"\)\}/);
   assert.match(action, /requestedMailbox\.address\.toLowerCase\(\) !== email/);
   assert.match(action, /refused%20a%20mailbox%20identity%20mismatch/);
-  assert.match(action, /Mailbox authenticated, but the first sync failed:/);
+  assert.match(action, /Mailbox authenticated, but the first sync (?:failed|did not complete):/);
 });
