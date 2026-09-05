@@ -36,6 +36,58 @@ jobs:
           ORBIT_OPERATOR_ALLOW_DELETIONS: ${{ startsWith(github.head_ref, 'release/orbit-') && '0' || '1' }}
         run: node scripts/orbit-operator.mjs guard
 
+      - name: Audit active RC convergence target
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/orbit-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f config/orbit-convergence-target.json ]; then
+            echo "No active RC convergence target."
+            exit 0
+          fi
+
+          label="$(node -p "JSON.parse(require('fs').readFileSync('config/orbit-convergence-target.json','utf8')).label")"
+          candidate="$(node -p "JSON.parse(require('fs').readFileSync('config/orbit-convergence-target.json','utf8')).candidate")"
+
+          git fetch --no-tags origin "${candidate}"
+          node scripts/rc-convergence-auditor.mjs \
+            --base "origin/${{ github.base_ref }}" \
+            --rc HEAD \
+            --candidate "${candidate}" > /tmp/orbit-convergence.json
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('/tmp/orbit-convergence.json', 'utf8'));
+          const target = JSON.parse(fs.readFileSync('config/orbit-convergence-target.json', 'utf8'));
+          const lines = [
+            '## RC convergence target',
+            '',
+            `**Target:** ${target.label}`,
+            `**RC head:** \`${report.rcSha}\``,
+            `**Candidate:** \`${report.candidateSha}\``,
+            `**Candidate files:** ${report.candidateChangedFiles}`,
+            `**Shared files:** ${report.sharedFiles.length}`,
+            `**Merge conflicts:** ${report.mergeConflicts.length}`,
+            `**Candidate migrations:** ${report.candidateMigrations.length}`,
+            `**Duplicate migration blobs:** ${report.duplicateMigrationBlobs.length}`,
+            `**Risk:** ${report.risk.toUpperCase()}`,
+            `**Recommendation:** \`${report.recommendation}\``,
+          ];
+          if (report.sharedFiles.length) {
+            lines.push('', '**Shared paths:**', ...report.sharedFiles.map((item) => `- \`${item.path}\``));
+          }
+          if (report.duplicateMigrationBlobs.length) {
+            lines.push('', '**Duplicate migration history:**');
+            for (const item of report.duplicateMigrationBlobs) {
+              lines.push(`- \`${item.candidatePath}\` duplicates ${item.rcPaths.map((path) => `\`${path}\``).join(', ')}`);
+            }
+          }
+          if (report.mergeConflicts.length) {
+            lines.push('', '**True merge conflicts:**', ...report.mergeConflicts.map((path) => `- \`${path}\``));
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+          NODE
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
