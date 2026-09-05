@@ -279,7 +279,7 @@ export default async function RelayPage({ searchParams }: Props) {
         />
       ) : view === "mail" ? (
         <>
-          <ConnectionStatus mailbox={selectedMailbox} providerLabel={providerLabel} />
+          <ConnectionStatus mailbox={selectedMailbox} providerLabel={providerLabel} canManage={canManageMailboxes} />
 
           {selectedMailbox ? (
             <section className={relay.orbitBrief}>
@@ -563,25 +563,65 @@ function MailboxStrip({ mailboxes, selectedMailbox }: { mailboxes: Mailbox[]; se
   );
 }
 
-function ConnectionStatus({ mailbox, providerLabel }: { mailbox: Mailbox | null; providerLabel: string }) {
+function ConnectionStatus({
+  mailbox,
+  providerLabel,
+  canManage,
+}: {
+  mailbox: Mailbox | null;
+  providerLabel: string;
+  canManage: boolean;
+}) {
   if (!mailbox) return null;
-  const connected = mailbox.status === "connected";
+  const syncing = mailbox.status === "syncing";
+  const connected = mailbox.status === "connected" || syncing;
+  const reconnectRequired = mailbox.status === "error" || mailbox.status === "disconnected";
+  const degraded = mailbox.connection_health === "degraded";
+  const failed = mailbox.connection_health === "failed";
+  const healthLabel = syncing
+    ? "Syncing"
+    : reconnectRequired
+      ? "Reconnect required"
+      : failed
+        ? "Sync failed"
+        : degraded
+          ? "Degraded · retry available"
+          : mailbox.connection_health === "healthy"
+            ? "Healthy"
+            : "Connected · health unknown";
+  const statusCopy = syncing
+    ? "sync in progress"
+    : reconnectRequired
+      ? "authentication or credential recovery required"
+      : "authenticated IMAP + SMTP";
+
   return (
-    <section className={`${styles.connection} ${connected ? styles.connected : styles.pending}`}>
-      <div className={styles.connectionIcon}>{connected ? <ShieldCheck size={20} /> : <Mail size={20} />}</div>
+    <section className={`${styles.connection} ${connected && !failed ? styles.connected : styles.pending}`}>
+      <div className={styles.connectionIcon}>
+        {syncing ? <RefreshCw size={20} /> : failed || reconnectRequired ? <CircleAlert size={20} /> : <ShieldCheck size={20} />}
+      </div>
       <div>
         <strong>{mailbox.address}</strong>
-        <span>{providerLabel} · {connected ? "authenticated IMAP + SMTP" : "authentication required"}</span>
+        <span>{providerLabel} · {statusCopy}</span>
+        {mailbox.last_error && mailbox.connection_health !== "healthy" ? (
+          <small title={mailbox.last_error}>Last sync issue · {mailbox.last_error.slice(0, 180)}</small>
+        ) : null}
       </div>
       <div className={styles.connectionMeta}>
-        <b>{connected ? (mailbox.connection_health === "healthy" ? "Healthy" : "Connected") : "Setup required"}</b>
-        <small>{mailbox.last_synced_at ? `Last sync ${new Date(mailbox.last_synced_at).toLocaleString()}` : "No successful sync yet"}</small>
+        <b>{healthLabel}</b>
+        <small>{mailbox.last_synced_at ? `Last successful sync ${new Date(mailbox.last_synced_at).toLocaleString()}` : "No successful sync yet"}</small>
       </div>
-      {connected ? (
+      {canManage && connected ? (
         <form action={syncRelayMailbox} className={relay.inlineAction}>
           <input type="hidden" name="mailbox_id" value={mailbox.id} />
-          <button type="submit"><RefreshCw size={14} /> Sync now</button>
+          <button type="submit" disabled={syncing}>
+            <RefreshCw size={14} /> {syncing ? "Syncing…" : degraded || failed ? "Retry sync" : "Sync now"}
+          </button>
         </form>
+      ) : canManage && reconnectRequired ? (
+        <Link className={styles.replyButton} href={`/dashboard/mail?view=connectors&connect=1&mailbox=${mailbox.id}`}>
+          Reconnect mailbox
+        </Link>
       ) : null}
     </section>
   );
@@ -623,11 +663,11 @@ function ConnectorWorkspace({
               <div>
                 <strong>{mailbox.address}</strong>
                 <span>{mailbox.display_name || "Business mailbox"}</span>
-                <small>{mailbox.status === "connected" ? "Namecheap authenticated" : "Authentication required"}</small>
+                <small>{mailbox.status === "connected" ? "Namecheap authenticated" : mailbox.status === "syncing" ? "Sync in progress" : "Authentication required"}</small>
               </div>
               <div className={relay.mailboxCardActions}>
                 <Link href={`/dashboard/mail?view=mail&mailbox=${mailbox.id}`}>Open</Link>
-                {canManage && mailbox.status === "connected" ? (
+                {canManage && (mailbox.status === "connected" || mailbox.status === "syncing") ? (
                   <form action={disconnectRelayMailbox}>
                     <input type="hidden" name="mailbox_id" value={mailbox.id} />
                     <button type="submit">Disconnect</button>
@@ -712,7 +752,7 @@ function RelayHome({ mailbox }: { mailbox: Mailbox }) {
         <span><Sparkles size={15} /> Selected business identity</span>
         <h2>{mailbox.address}</h2>
         <p>Relay treats this mailbox as an operating channel, not just an inbox. Orbit can connect conversations to the work they should create.</p>
-        <b>{mailbox.status === "connected" ? "Authenticated · business intelligence active" : "Authentication required"}</b>
+        <b>{mailbox.status === "connected" || mailbox.status === "syncing" ? "Authenticated · business intelligence active" : "Authentication required"}</b>
       </div>
       <div className={relay.toolGrid}>
         {tools.map(([Icon, title, text, status]) => (
