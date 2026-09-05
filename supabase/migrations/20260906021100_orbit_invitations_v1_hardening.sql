@@ -1,6 +1,6 @@
 -- Harden the first Orbit invitation implementation before release.
 -- Keep inspection minimal and prevent the current single-role access resolver from
--- converting an existing founder/admin identity into a student identity.
+-- converting an existing founder/admin/student identity into another role.
 
 create or replace function public.inspect_orbit_invitation(invitation_token text)
 returns table (
@@ -77,6 +77,7 @@ declare
   invitation_row public.orbit_invitations%rowtype;
   target_student public.foundry_students%rowtype;
   founder_workspace_id uuid;
+  existing_student_id uuid;
 begin
   if current_user_id is null then
     raise exception 'Authentication required' using errcode = '42501';
@@ -125,8 +126,9 @@ begin
     raise exception 'Sign in with the email address that received this invitation' using errcode = '42501';
   end if;
 
-  -- Orbit Access v1 currently resolves one primary role. Do not let accepting a
-  -- student invitation silently change an existing founder/admin account's route.
+  -- Orbit Access v1 resolves one primary role. Do not let invitation acceptance
+  -- silently replace an existing founder/admin route or bind one identity to a
+  -- second Foundry student record.
   select wm.workspace_id
   into founder_workspace_id
   from public.workspace_members wm
@@ -137,6 +139,19 @@ begin
 
   if founder_workspace_id is not null then
     raise exception 'Use a non-founder Orbit account to accept this Foundry invitation' using errcode = '42501';
+  end if;
+
+  select fs.id
+  into existing_student_id
+  from public.foundry_students fs
+  where fs.auth_user_id = current_user_id
+    and fs.id <> invitation_row.foundry_student_id
+    and fs.lifecycle_status not in ('inactive', 'graduated', 'rejected')
+  order by fs.created_at
+  limit 1;
+
+  if existing_student_id is not null then
+    raise exception 'This Orbit account already belongs to a Foundry learner' using errcode = '42501';
   end if;
 
   select fs.*
