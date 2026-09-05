@@ -12,13 +12,6 @@ export type FoundryInvitationActionState = {
   expiresAt: string | null;
 };
 
-export const initialFoundryInvitationActionState: FoundryInvitationActionState = {
-  status: "idle",
-  message: null,
-  invitationUrl: null,
-  expiresAt: null,
-};
-
 const inputSchema = z.object({
   studentId: z.string().uuid(),
 });
