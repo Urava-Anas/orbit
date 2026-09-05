@@ -36,18 +36,6 @@ if (created.error || !created.data.user) fail("managed identity creation", creat
 const founderId = created.data.user.id;
 stage("managed Founder identity and onboarding workspace created");
 
-const bootstrap = await admin
-  .from("workspace_members")
-  .select("workspace_id,role")
-  .eq("user_id", founderId)
-  .eq("role", "owner")
-  .limit(1)
-  .maybeSingle();
-if (bootstrap.error || !bootstrap.data?.workspace_id) {
-  fail("canonical workspace bootstrap verification", bootstrap.error ?? new Error("owner workspace missing"));
-}
-stage("canonical workspace bootstrap verified");
-
 const jar = new Map();
 const auth = createServerClient(url, publicKey, { cookies: {
   getAll: () => [...jar].map(([name, value]) => ({ name, value })),
@@ -59,6 +47,20 @@ if (signed.error) fail("password sign-in", signed.error);
 stage("verifying Supabase SSR session");
 const verified = await auth.auth.getUser();
 if (verified.error || verified.data.user?.id !== founderId) fail("SSR session verification", verified.error ?? new Error("user id mismatch"));
+
+stage("verifying canonical workspace bootstrap through authenticated RLS");
+const bootstrap = await auth
+  .from("workspace_members")
+  .select("workspace_id,role")
+  .eq("user_id", founderId)
+  .eq("role", "owner")
+  .limit(1)
+  .maybeSingle();
+if (bootstrap.error || !bootstrap.data?.workspace_id) {
+  fail("authenticated workspace bootstrap verification", bootstrap.error ?? new Error("owner workspace missing"));
+}
+stage("canonical workspace bootstrap verified through authenticated RLS");
+
 const cookie = [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
 if (!cookie) throw new Error("No local SSR session cookie was emitted.");
 stage("SSR session cookie emitted");
