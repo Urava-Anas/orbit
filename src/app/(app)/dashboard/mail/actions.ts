@@ -65,6 +65,9 @@ export async function connectNamecheapMailbox(formData: FormData) {
   if (requestedMailboxId && !requestedMailbox) {
     redirect("/dashboard/mail?view=connectors&error=Relay%20mailbox%20was%20not%20found");
   }
+  if (requestedMailbox?.status === "syncing") {
+    redirect(`${connectorUrl}&error=Relay%20sync%20is%20already%20running.%20Connector%20changes%20are%20blocked%20until%20it%20finishes.`);
+  }
   if (requestedMailbox && requestedMailbox.address.toLowerCase() !== email) {
     redirect(`${connectorUrl}&error=Relay%20refused%20a%20mailbox%20identity%20mismatch`);
   }
@@ -200,6 +203,9 @@ export async function disconnectRelayMailbox(formData: FormData) {
   const mailboxId = clean(formData.get("mailbox_id"), 80);
   const mailbox = await mailboxForWorkspace(supabase, workspace.id, mailboxId);
   if (!mailbox) redirect("/dashboard/mail?view=connectors&error=Mailbox%20not%20found");
+  if (mailbox.status === "syncing") {
+    redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&error=Relay%20sync%20is%20running.%20Disconnect%20is%20blocked%20until%20the%20sync%20finishes.`);
+  }
 
   await removeMailboxCredential(mailboxId).catch(() => undefined);
   await supabase.from("orbit_mailboxes").update({
