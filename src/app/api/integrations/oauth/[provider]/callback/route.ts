@@ -18,8 +18,10 @@ type TokenResponse = {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
+  refresh_expires_in?: number;
   scope?: string;
   token_type?: string;
+  open_id?: string;
 };
 
 type AssetCredential = {
@@ -60,6 +62,7 @@ const supported = new Set<SupportedProvider>([
   "google_analytics",
   "meta",
   "linkedin",
+  "tiktok",
 ]);
 
 function isSupported(value: string): value is SupportedProvider {
@@ -158,21 +161,40 @@ async function exchangeCode(provider: SupportedProvider, code: string) {
     return exchangeMetaLongLivedToken((await response.json()) as TokenResponse);
   }
 
-  const clientId = process.env.LINKEDIN_CLIENT_ID;
-  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-  if (!clientId || !clientSecret) throw new Error("LinkedIn OAuth credentials are missing.");
-  const response = await providerFetch("https://www.linkedin.com/oauth/v2/accessToken", {
+  if (provider === "linkedin") {
+    const clientId = process.env.LINKEDIN_CLIENT_ID;
+    const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+    if (!clientId || !clientSecret) throw new Error("LinkedIn OAuth credentials are missing.");
+    const response = await providerFetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+      }),
+    });
+    if (!response.ok) throw new Error("LinkedIn token exchange failed.");
+    return (await response.json()) as TokenResponse;
+  }
+
+  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+  if (!clientKey || !clientSecret) throw new Error("TikTok OAuth credentials are missing.");
+  const response = await providerFetch("https://open.tiktokapis.com/v2/oauth/token/", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      client_id: clientId,
+      client_key: clientKey,
       client_secret: clientSecret,
+      code,
+      grant_type: "authorization_code",
       redirect_uri: redirectUri,
     }),
   });
-  if (!response.ok) throw new Error("LinkedIn token exchange failed.");
+  if (!response.ok) throw new Error("TikTok token exchange failed.");
   return (await response.json()) as TokenResponse;
 }
 
@@ -215,6 +237,7 @@ async function providerIdentity(
       if (!sitesResponse.ok) throw new Error("Search Console capability verification failed.");
       const sitesJson = (await sitesResponse.json()) as { siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }> };
       const assets = (sitesJson.siteEntry ?? []).map((item) => ({
+        kind: "search_console_property",
         id: item.siteUrl ?? "site",
         name: item.siteUrl ?? "Search Console property",
         permission: item.permissionLevel ?? null,
@@ -241,6 +264,7 @@ async function providerIdentity(
     };
     const assets = (summariesJson.accountSummaries ?? []).flatMap((account) =>
       (account.propertySummaries ?? []).map((property) => ({
+        kind: "google_analytics_property",
         id: property.property ?? account.account ?? "property",
         name: property.displayName ?? account.displayName ?? "Analytics property",
         account: account.displayName ?? null,
@@ -322,14 +346,20 @@ async function providerIdentity(
     if (instagramRows.length && hasInstagramInsightsScope) verifiedCapabilities.push("instagram.insights.read");
     if (pageRows.length && hasFacebookPublishScope) verifiedCapabilities.push("facebook.publish");
 
-    const connectionReady = publishableInstagramRows.length > 0 && hasInstagramPublishScope;
-    const connectionIssue = !instagramRows.length
-      ? "No Professional Instagram account is linked to an approved Facebook Page."
-      : !publishableInstagramRows.length
-        ? "The linked Instagram account does not have a usable Page publishing credential."
-        : !hasInstagramPublishScope
-          ? "Instagram publishing permission was not granted."
-          : null;
+    const instagramReady = publishableInstagramRows.length > 0 && hasInstagramPublishScope;
+    const facebookReady = pageRows.length > 0 && hasFacebookPublishScope;
+    const connectionReady = instagramReady || facebookReady;
+    const connectionIssue = connectionReady
+      ? null
+      : !pageRows.length
+        ? "No approved Facebook Page is available for publishing."
+        : !hasFacebookPublishScope && !hasInstagramPublishScope
+          ? "Meta publishing permissions were not granted."
+          : !instagramRows.length
+            ? "Facebook is visible but no Professional Instagram account is linked to an approved Page."
+            : !publishableInstagramRows.length
+              ? "The linked Instagram account does not have a usable Page publishing credential."
+              : "No verified Meta publishing rail is ready.";
 
     return {
       accountName: String(profile.name ?? "Meta account"),
@@ -343,19 +373,64 @@ async function providerIdentity(
     };
   }
 
-  const response = await providerFetch("https://api.linkedin.com/v2/userinfo", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error("LinkedIn identity verification failed.");
-  const profile = (await response.json()) as Record<string, unknown>;
-  const accountId = typeof profile.sub === "string" ? profile.sub : null;
-  if (!accountId) throw new Error("LinkedIn account identity is incomplete.");
+  if (provider === "linkedin") {
+    const response = await providerFetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("LinkedIn identity verification failed.");
+    const profile = (await response.json()) as Record<string, unknown>;
+    const accountId = typeof profile.sub === "string" ? profile.sub : null;
+    if (!accountId) throw new Error("LinkedIn account identity is incomplete.");
+    const accountName = String(profile.name ?? profile.email ?? "LinkedIn account");
+    const canPublishMember = scopes.includes("w_member_social");
+    return {
+      accountName,
+      accountId,
+      accountType: "linkedin_member",
+      assets: [{
+        kind: "linkedin_member",
+        id: accountId,
+        urn: `urn:li:person:${accountId}`,
+        name: accountName,
+      }],
+      verifiedCapabilities: canPublishMember ? ["identity", "linkedin.publish.member"] : ["identity"],
+      connectionReady: canPublishMember,
+      connectionIssue: canPublishMember ? null : "Share on LinkedIn permission was not granted.",
+    };
+  }
+
+  const response = await providerFetch(
+    "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name",
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok) throw new Error("TikTok identity verification failed.");
+  const payload = (await response.json()) as {
+    data?: { user?: { open_id?: string; union_id?: string; avatar_url?: string; display_name?: string } };
+    error?: { code?: string; message?: string };
+  };
+  if (payload.error?.code && payload.error.code !== "ok") throw new Error("TikTok identity verification failed.");
+  const user = payload.data?.user;
+  const accountId = user?.open_id ?? null;
+  if (!accountId) throw new Error("TikTok account identity is incomplete.");
+  const accountName = user?.display_name || "TikTok account";
+  const verifiedCapabilities = ["identity"];
+  if (scopes.includes("video.publish")) verifiedCapabilities.push("tiktok.publish");
+  if (scopes.includes("video.upload")) verifiedCapabilities.push("tiktok.upload");
+  const connectionReady = verifiedCapabilities.includes("tiktok.publish") || verifiedCapabilities.includes("tiktok.upload");
   return {
-    accountName: String(profile.name ?? profile.email ?? "LinkedIn account"),
+    accountName,
     accountId,
-    accountType: "linkedin",
-    assets: [],
-    verifiedCapabilities: ["identity"],
+    accountType: "tiktok_creator",
+    assets: [{
+      kind: "tiktok_account",
+      id: accountId,
+      union_id: user?.union_id ?? null,
+      name: accountName,
+      avatar_url: user?.avatar_url ?? null,
+    }],
+    verifiedCapabilities,
+    connectionReady,
+    connectionIssue: connectionReady ? null : "TikTok Content Posting permissions were not granted.",
   };
 }
 
@@ -434,7 +509,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     const now = new Date().toISOString();
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null;
-    const status = provider === "meta" && identity.connectionReady === false ? "attention" : "connected";
+    const status = identity.connectionReady === false ? "attention" : "connected";
     const instagramAssets = identity.assets.filter((asset) => asset.kind === "instagram_account");
     const facebookAssets = identity.assets.filter((asset) => asset.kind === "facebook_page");
 
@@ -460,6 +535,7 @@ export async function GET(request: Request, { params }: RouteContext) {
           metaGraphVersion: provider === "meta" ? metaGraphVersion() : null,
           linkedInstagramAccounts: provider === "meta" ? instagramAssets.length : null,
           facebookPages: provider === "meta" ? facebookAssets.length : null,
+          tiktokAuditRequired: provider === "tiktok" && identity.verifiedCapabilities.includes("tiktok.publish") ? true : null,
         },
         connected_by: user.id,
         connected_at: now,
@@ -474,7 +550,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       request,
       provider,
       "notice",
-      provider === "meta" && status === "attention" ? "meta_connected_attention" : `${provider}_connected`,
+      status === "attention" ? `${provider}_connected_attention` : `${provider}_connected`,
     );
   } catch (error) {
     console.error("OAuth provider callback failed", provider, error);

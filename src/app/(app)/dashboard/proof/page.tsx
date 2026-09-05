@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { FileCheck2 } from "lucide-react";
+import {
+  FileCheck2,
+  Globe2,
+  Link2Off,
+  LockKeyhole,
+} from "lucide-react";
 import {
   createProof,
   updateProofStatus,
 } from "@/app/(app)/dashboard/actions";
 import { EmptyState } from "@/components/EmptyState";
+import { MetricCard } from "@/components/MetricCard";
 import { Notice } from "@/components/Notice";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
@@ -40,17 +46,133 @@ export default async function ProofPage({ searchParams }: PageProps) {
   ]);
   const projects = (projectsResult.data ?? []) as Pick<Project, "id" | "name">[];
   const proofs = (proofsResult.data ?? []) as unknown as Proof[];
+  const approved = proofs.filter((proof) => ["approved", "published"].includes(proof.status));
+  const publicProof = approved.filter((proof) => proof.permission_scope === "public");
+  const privateProof = proofs.filter((proof) => proof.permission_scope === "private");
+  const missingEvidence = proofs.filter((proof) => !proof.evidence_url);
 
   return (
     <div className="page">
       <PageHeader
         kicker="Evidence control"
         title="Proof"
-        description="A result becomes usable proof only when evidence exists and permission is explicit. Private means private."
+        description="See which results are evidenced, approved, and actually permissioned for use. Private stays private, and a marketing claim never outranks its source."
+        action={
+          <a className="button button-primary" href="#capture-proof">
+            Capture proof
+          </a>
+        }
       />
       <Notice error={params.error} notice={params.notice} />
 
-      <details className="create-panel">
+      <section className="metrics-grid" aria-label="Proof overview">
+        <MetricCard
+          label="Approved"
+          value={approved.length}
+          note={`${proofs.length} total proof records`}
+          icon={FileCheck2}
+          tone="success"
+        />
+        <MetricCard
+          label="Public permission"
+          value={publicProof.length}
+          note="Approved assets explicitly cleared for public use"
+          icon={Globe2}
+          tone="info"
+        />
+        <MetricCard
+          label="Private"
+          value={privateProof.length}
+          note="Must remain inside the organisation boundary"
+          icon={LockKeyhole}
+          tone="neutral"
+        />
+        <MetricCard
+          label="Evidence missing"
+          value={missingEvidence.length}
+          note={missingEvidence.length ? "Add a source before relying on these claims" : "Every proof record has linked evidence"}
+          icon={Link2Off}
+          tone={missingEvidence.length ? "warning" : "success"}
+        />
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Proof library</h2>
+          <span>{proofs.length} assets</span>
+        </div>
+        {proofs.length ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Proof</th>
+                  <th>Project</th>
+                  <th>Permission</th>
+                  <th>Evidence</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proofs.map((proof) => (
+                  <tr key={proof.id}>
+                    <td>
+                      <span className="table-primary">
+                        <strong>{proof.title}</strong>
+                        <small>{proof.result}</small>
+                      </span>
+                    </td>
+                    <td>{proof.projects?.name ?? "Unknown project"}</td>
+                    <td>{humanize(proof.permission_scope)}</td>
+                    <td>
+                      {proof.evidence_url ? (
+                        <a
+                          className="text-link"
+                          href={proof.evidence_url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Open evidence
+                        </a>
+                      ) : (
+                        "Not linked"
+                      )}
+                    </td>
+                    <td>
+                      <form className="inline-form" action={updateProofStatus}>
+                        <input type="hidden" name="id" value={proof.id} />
+                        <StatusPill value={proof.status} />
+                        <select
+                          aria-label={`Update ${proof.title} status`}
+                          name="status"
+                          defaultValue={proof.status}
+                        >
+                          {["draft", "approved", "published"].map((status) => (
+                            <option value={status} key={status}>
+                              {humanize(status)}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="button button-quiet" type="submit">
+                          Update
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={FileCheck2}
+            title="No proof assets"
+            description="Proof starts after delivery. Capture evidence, result, and permission—never a marketing claim with no source."
+          />
+        )}
+      </section>
+
+      <details className="create-panel" id="capture-proof">
         <summary>Capture proof</summary>
         <form action={createProof}>
           {projects.length ? (
@@ -131,83 +253,6 @@ export default async function ProofPage({ searchParams }: PageProps) {
           )}
         </form>
       </details>
-
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Proof library</h2>
-          <span>{proofs.length} assets</span>
-        </div>
-        {proofs.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Proof</th>
-                  <th>Project</th>
-                  <th>Permission</th>
-                  <th>Evidence</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {proofs.map((proof) => (
-                  <tr key={proof.id}>
-                    <td>
-                      <span className="table-primary">
-                        <strong>{proof.title}</strong>
-                        <small>{proof.result}</small>
-                      </span>
-                    </td>
-                    <td>{proof.projects?.name ?? "Unknown project"}</td>
-                    <td>{humanize(proof.permission_scope)}</td>
-                    <td>
-                      {proof.evidence_url ? (
-                        <a
-                          className="text-link"
-                          href={proof.evidence_url}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          Open evidence
-                        </a>
-                      ) : (
-                        "Not linked"
-                      )}
-                    </td>
-                    <td>
-                      <form className="inline-form" action={updateProofStatus}>
-                        <input type="hidden" name="id" value={proof.id} />
-                        <StatusPill value={proof.status} />
-                        <select
-                          aria-label={`Update ${proof.title} status`}
-                          name="status"
-                          defaultValue={proof.status}
-                        >
-                          {["draft", "approved", "published"].map((status) => (
-                            <option value={status} key={status}>
-                              {humanize(status)}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="button button-quiet" type="submit">
-                          Update
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            icon={FileCheck2}
-            title="No proof assets"
-            description="Proof starts after delivery. Capture evidence, result, and permission—never a marketing claim with no source."
-          />
-        )}
-      </section>
     </div>
   );
 }
-

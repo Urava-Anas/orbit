@@ -1,0 +1,102 @@
+.card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.card::after {
+  position: absolute;
+  z-index: -1;
+  top: -58px;
+  right: -44px;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--metric-tone, rgba(255, 255, 255, 0.2)) 13%, transparent);
+  filter: blur(8px);
+  opacity: 0.8;
+  content: "";
+  pointer-events: none;
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--metric-tone, white) 28%, var(--line));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 18px 46px rgba(0, 0, 0, 0.24);
+  transform: translateY(-2px);
+}
+
+.card[data-tone="accent"] {
+  --metric-tone: var(--accent);
+}
+
+.card[data-tone="info"] {
+  --metric-tone: var(--info);
+}
+
+.card[data-tone="success"] {
+  --metric-tone: var(--success);
+}
+
+.card[data-tone="warning"] {
+  --metric-tone: var(--warning);
+}
+
+.card[data-tone="danger"] {
+  --metric-tone: var(--danger);
+}
+
+.card[data-tone="neutral"] {
+  --metric-tone: rgba(255, 255, 255, 0.42);
+}
+
+.topline {
+  display: flex;
+  min-height: 30px;
+  margin-bottom: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topline > span {
+  margin-bottom: 0;
+}
+
+.icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--metric-tone) 24%, var(--line));
+  border-radius: 10px;
+  place-items: center;
+  background: color-mix(in srgb, var(--metric-tone) 9%, rgba(255, 255, 255, 0.04));
+  color: var(--metric-tone);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.card > strong {
+  position: relative;
+  z-index: 1;
+}
+
+.card > small {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}

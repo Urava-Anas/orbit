@@ -21,6 +21,7 @@ import {
 import { Notice } from "@/components/Notice";
 import { humanize } from "@/lib/format";
 import { requireWorkspace } from "@/lib/workspace";
+import extraStyles from "./LeadEnginePage.module.css";
 import styles from "./leads.module.css";
 
 export const metadata: Metadata = {
@@ -48,6 +49,19 @@ type LeadActivity = {
   outcome: string;
   summary: string;
   occurred_at: string;
+};
+
+type ApprovalMemory = {
+  lead_id: string | null;
+  decided_at: string | null;
+};
+
+type ApprovedLead = {
+  id: string;
+  name: string;
+  company: string | null;
+  niche: string | null;
+  lead_score: number | null;
 };
 
 type AutopilotConfig = {
@@ -93,7 +107,14 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   monthStart.setHours(0, 0, 0, 0);
   monthStart.setDate(1);
 
-  const [summaryResult, activityResult, autopilotResult, activeProjectResult, emailActionResult] = await Promise.all([
+  const [
+    summaryResult,
+    activityResult,
+    autopilotResult,
+    activeProjectResult,
+    emailActionResult,
+    approvedMemoryResult,
+  ] = await Promise.all([
     supabase.rpc("get_lead_engine_summary", { p_workspace_id: workspace.id }),
     supabase
       .from("lead_activities")
@@ -118,10 +139,35 @@ export default async function LeadsPage({ searchParams }: PageProps) {
       .eq("channel", "email")
       .in("status", ["completed", "sent", "succeeded"])
       .gte("created_at", monthStart.toISOString()),
+    supabase
+      .from("lead_finder_place_memory")
+      .select("lead_id,decided_at")
+      .eq("workspace_id", workspace.id)
+      .eq("decision", "approved")
+      .not("lead_id", "is", null)
+      .order("decided_at", { ascending: false })
+      .limit(6),
   ]);
 
   const summary = summaryResult.error ? emptySummary : asSummary(summaryResult.data);
   const activities = (activityResult.data ?? []) as LeadActivity[];
+  const approvalMemories = (approvedMemoryResult.data ?? []) as ApprovalMemory[];
+  const approvedLeadIds = Array.from(new Set(approvalMemories.flatMap((memory) => memory.lead_id ? [memory.lead_id] : [])));
+  let approvedLeadRows: ApprovedLead[] = [];
+  if (approvedLeadIds.length) {
+    const approvedLeadResult = await supabase
+      .from("leads")
+      .select("id,name,company,niche,lead_score")
+      .eq("workspace_id", workspace.id)
+      .in("id", approvedLeadIds);
+    approvedLeadRows = (approvedLeadResult.data ?? []) as ApprovedLead[];
+  }
+  const approvedLeadsById = new Map(approvedLeadRows.map((lead) => [lead.id, lead]));
+  const approvedLeads = approvalMemories.flatMap((memory) => {
+    if (!memory.lead_id) return [];
+    const lead = approvedLeadsById.get(memory.lead_id);
+    return lead ? [lead] : [];
+  });
   const autopilot = (autopilotResult.data ?? null) as AutopilotConfig | null;
   const totalLeadCount = Math.max(summary.total, 1);
   const flowCounts = summary.flow;
@@ -142,7 +188,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           <h1>Lead Engine</h1>
           <p>Find leads, nurture them and turn opportunities into clients.</p>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className={extraStyles.headerActions}>
           <Link className={styles.primaryButton} href="/dashboard/leads/send-packs">
             <Send size={16} aria-hidden="true" /> Send Packs
           </Link>
@@ -224,6 +270,36 @@ export default async function LeadsPage({ searchParams }: PageProps) {
               <span>Orbit can run approved acquisition work automatically. Founder attention stays on exceptions and red-authority decisions.</span>
             </div>
           </section>
+
+          <section className={`${styles.leadsPanel} ${extraStyles.approvedPanel}`} aria-labelledby="approved-leads-title">
+            <div className={styles.panelHeadingRow}>
+              <div>
+                <h2 id="approved-leads-title">Approved leads</h2>
+                <p>Recent durable approvals resolved to canonical Orbit lead records.</p>
+              </div>
+              <Link href="/dashboard/leads/approved">View all approved <ArrowRight size={14} aria-hidden="true" /></Link>
+            </div>
+            {approvedLeads.length ? (
+              <div className={extraStyles.approvedList}>
+                {approvedLeads.map((lead) => (
+                  <Link
+                    className={extraStyles.approvedLead}
+                    href={`/dashboard/leads/${lead.id}`}
+                    key={lead.id}
+                  >
+                    <span className={extraStyles.approvedIcon}><CheckCircle2 size={16} aria-hidden="true" /></span>
+                    <div>
+                      <strong>{lead.company ?? lead.name}</strong>
+                      <small>{lead.niche ?? "Niche not set"} · approved into Lead Engine</small>
+                    </div>
+                    <span className={extraStyles.approvedScore}>{lead.lead_score ?? "—"}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className={extraStyles.empty}>No approved finder leads yet. Approved businesses will appear here and remain available after discovery results expire.</div>
+            )}
+          </section>
         </div>
 
         <aside className={styles.sideColumn}>
@@ -254,9 +330,9 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           <section className={styles.sideCard}>
             <h2>Authority guide</h2>
             <div className={styles.authorityList}>
-              <div><span className={`${styles.authorityIcon} ${styles.authorityGreen}`}>○</span><p><strong>Green</strong><small>Automatic · no action needed</small></p></div>
-              <div><span className={`${styles.authorityIcon} ${styles.authorityAmber}`}>◒</span><p><strong>Amber</strong><small>AI acts within approved rules</small></p></div>
-              <div><span className={`${styles.authorityIcon} ${styles.authorityRed}`}>♥</span><p><strong>Red</strong><small>Needs founder approval</small></p></div>
+              <div><span className={`${styles.authorityIcon} ${styles.authorityGreen}`}><CheckCircle2 size={14} aria-hidden="true" /></span><p><strong>Green</strong><small>Automatic · no action needed</small></p></div>
+              <div><span className={`${styles.authorityIcon} ${styles.authorityAmber}`}><Sparkles size={14} aria-hidden="true" /></span><p><strong>Amber</strong><small>AI acts within approved rules</small></p></div>
+              <div><span className={`${styles.authorityIcon} ${styles.authorityRed}`}><ShieldCheck size={14} aria-hidden="true" /></span><p><strong>Red</strong><small>Needs founder approval</small></p></div>
             </div>
           </section>
         </aside>

@@ -110,7 +110,7 @@ export default async function FoundryStudioPage({ searchParams }: Props) {
           <span className="foundry-kicker">Learning → real project delivery</span>
           <h1>Studio Work</h1>
           <p>
-            Assign members to real Orbit projects with a level, role, deliverable and
+            Assign students to real Orbit projects with a level, role, deliverable and
             time window. The assignment appears on the same Journey Map.
           </p>
         </div>
@@ -124,7 +124,7 @@ export default async function FoundryStudioPage({ searchParams }: Props) {
         <section className="foundry-card">
           <div className="foundry-card-head">
             <div>
-              <span className="foundry-card-eyebrow">Choose member</span>
+              <span className="foundry-card-eyebrow">Choose student</span>
               <h2>Who are you assigning to Studio?</h2>
             </div>
             <BriefcaseBusiness aria-hidden="true" size={20} />
@@ -270,7 +270,7 @@ export default async function FoundryStudioPage({ searchParams }: Props) {
                     ) : (
                       <EmptyFoundryState
                         title={`No ${group} Studio work`}
-                        detail="This part of the member's project history is clear."
+                        detail="This part of the student's project history is clear."
                       />
                     )}
                   </section>
@@ -307,14 +307,14 @@ export default async function FoundryStudioPage({ searchParams }: Props) {
                     <input defaultValue="1" max="100" min="1" name="levelNumber" required type="number" />
                   </label>
                   <label>
-                    Member role
+                    Student role
                     <input name="roleTitle" placeholder="UI/UX Designer" required />
                   </label>
                   <label>
                     Deliverable
                     <textarea
                       name="deliverable"
-                      placeholder="What exactly should this member deliver on the project?"
+                      placeholder="What exactly should this student deliver on the project?"
                       required
                       rows={4}
                     />
@@ -347,10 +347,10 @@ export default async function FoundryStudioPage({ searchParams }: Props) {
         </>
       ) : (
         <EmptyFoundryState
-          title="No active member"
-          detail="Add a member before assigning Studio work."
+          title="No active student"
+          detail="Add a student before assigning Studio work."
           href="/dashboard/foundry/students"
-          action="Open members"
+          action="Open students"
         />
       )}
     </div>

@@ -1,0 +1,30 @@
+.attentionRow {
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.attentionRow:hover {
+  background: rgba(255, 255, 255, 0.026);
+}
+
+.attentionRow[data-priority="1"] > i {
+  background: var(--danger);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 48%, transparent);
+}
+
+.attentionRow[data-priority="2"] > i {
+  background: var(--warning);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--warning) 42%, transparent);
+}
+
+.attentionRow[data-priority="3"] > i {
+  background: var(--info);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--info) 38%, transparent);
+}
+
+.attentionRow[data-priority="1"] time {
+  color: color-mix(in srgb, var(--danger) 84%, white);
+}
+
+.attentionRow[data-priority="2"] time {
+  color: color-mix(in srgb, var(--warning) 78%, white);
+}
