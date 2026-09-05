@@ -51,11 +51,7 @@ const verified = await auth.auth.getUser();
 if (verified.error || verified.data.user?.id !== founderId) fail("SSR session verification", verified.error ?? new Error("user id mismatch"));
 
 stage("verifying canonical workspace bootstrap through authenticated RLS");
-const rls = createClient(url, publicKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { Authorization: `Bearer ${signed.data.session.access_token}` } },
-});
-const bootstrap = await rls
+const bootstrap = await auth
   .from("workspace_members")
   .select("workspace_id,role")
   .eq("user_id", founderId)
