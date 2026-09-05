@@ -21,34 +21,32 @@ if (!url || !publicKey || !adminKey) throw new Error("Local Supabase environment
 if (!["127.0.0.1", "localhost"].includes(new URL(url).hostname)) throw new Error("Refusing non-local Supabase target.");
 stage("local target verified");
 
-const workspaceId = "82000000-0000-4000-8000-000000000001";
 const email = "ci-founder-session@urava.test";
 const ephemeral = randomBytes(24).toString("base64url");
 const admin = createClient(url, adminKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-stage("creating managed GoTrue Founder identity");
+stage("creating managed GoTrue Founder identity through canonical onboarding");
 const created = await admin.auth.admin.createUser({
   email,
   password: ephemeral,
   email_confirm: true,
-  user_metadata: { full_name: "CI Founder" },
+  user_metadata: { full_name: "CI Founder", workspace_name: "CI Founder Acceptance" },
 });
 if (created.error || !created.data.user) fail("managed identity creation", created.error ?? new Error("missing user"));
 const founderId = created.data.user.id;
-stage("managed GoTrue Founder identity created");
+stage("managed Founder identity and onboarding workspace created");
 
-stage("binding disposable CI workspace ownership");
-const ownerUpdate = await admin.from("workspaces").update({ owner_id: founderId }).eq("id", workspaceId);
-if (ownerUpdate.error) fail("workspace owner binding", ownerUpdate.error);
-stage("workspace owner binding complete");
-
-stage("binding disposable CI workspace membership");
-const memberUpsert = await admin.from("workspace_members").upsert(
-  { workspace_id: workspaceId, user_id: founderId, role: "owner" },
-  { onConflict: "workspace_id,user_id" },
-);
-if (memberUpsert.error) fail("workspace membership binding", memberUpsert.error);
-stage("workspace membership binding complete");
+const bootstrap = await admin
+  .from("workspace_members")
+  .select("workspace_id,role")
+  .eq("user_id", founderId)
+  .eq("role", "owner")
+  .limit(1)
+  .maybeSingle();
+if (bootstrap.error || !bootstrap.data?.workspace_id) {
+  fail("canonical workspace bootstrap verification", bootstrap.error ?? new Error("owner workspace missing"));
+}
+stage("canonical workspace bootstrap verified");
 
 const jar = new Map();
 const auth = createServerClient(url, publicKey, { cookies: {
