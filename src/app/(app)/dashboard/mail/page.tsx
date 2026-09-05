@@ -32,6 +32,7 @@ import { requireWorkspace } from "@/lib/workspace";
 import { getWorkspaceProfile } from "@/lib/workspace-profile";
 import { getRelayRecommendations } from "@/lib/relay/recommendations";
 import {
+  approveAndSendRelayMessage,
   connectNamecheapMailbox,
   disconnectRelayMailbox,
   requestMailSend,
@@ -101,6 +102,7 @@ type Message = {
 
 const folders = [
   ["inbox", "Inbox", Inbox],
+  ["outbox", "Approval Queue", Workflow],
   ["sent", "Sent", Send],
   ["drafts", "Drafts", PenLine],
   ["archive", "Archive", Archive],
@@ -309,7 +311,7 @@ export default async function RelayPage({ searchParams }: Props) {
 
             <section className={styles.reader}>
               {params.compose === "1" && selectedMailbox ? (
-                <Compose mailbox={selectedMailbox} />
+                <Compose mailbox={selectedMailbox} thread={selected} />
               ) : selected ? (
                 <>
                   <div className={styles.readerHeader}>
@@ -332,12 +334,19 @@ export default async function RelayPage({ searchParams }: Props) {
                         </div>
                         <p>{message.body_text || "(Empty message)"}</p>
                         <time>{new Date(message.sent_at ?? message.received_at ?? message.created_at).toLocaleString()}</time>
+                        {folder === "outbox" && message.status === "pending_approval" && canManageMailboxes ? (
+                          <form action={approveAndSendRelayMessage} className={styles.approveSendForm}>
+                            <input type="hidden" name="mailbox_id" value={selectedMailbox.id} />
+                            <input type="hidden" name="message_id" value={message.id} />
+                            <button type="submit" className={styles.sendButton}>Approve & send now <Send size={14} /></button>
+                          </form>
+                        ) : null}
                       </article>
                     ))}
                   </div>
                   <Link
                     className={styles.replyButton}
-                    href={withMailbox(`/dashboard/mail?view=mail&compose=1&thread=${selected.id}`, selectedMailbox.id)}
+                    href={withMailbox(`/dashboard/mail?view=mail&folder=${folder}&compose=1&thread=${selected.id}`, selectedMailbox.id)}
                   >
                     Reply
                   </Link>
@@ -470,6 +479,9 @@ function ConnectorWorkspace({
 
         {showConnect && canManage ? (
           <form action={connectNamecheapMailbox} className={relay.connectForm}>
+            {selectedMailbox?.status !== "connected" ? (
+              <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+            ) : null}
             <span>Connect Namecheap Private Email</span>
             <h3>Authenticate a business mailbox</h3>
             <p>Use the full mailbox address and that mailbox’s Namecheap Private Email password.</p>
@@ -479,8 +491,10 @@ function ConnectorWorkspace({
                 type="email"
                 name="email"
                 defaultValue={selectedMailbox?.status !== "connected" ? selectedMailbox?.address ?? "" : ""}
+                readOnly={Boolean(selectedMailbox && selectedMailbox.status !== "connected")}
                 placeholder="info@company.com"
                 autoComplete="username"
+                maxLength={320}
                 required
               />
             </label>
@@ -495,11 +509,11 @@ function ConnectorWorkspace({
             </label>
             <label>
               <span>Mailbox password</span>
-              <input type="password" name="password" placeholder="Private Email password" autoComplete="current-password" required />
+              <input type="password" name="password" placeholder="Private Email password" autoComplete="current-password" maxLength={500} required />
             </label>
             <div className={relay.connectSecurity}>
               <ShieldCheck size={16} />
-              <span>Orbit verifies IMAP and SMTP before storing an encrypted credential.</span>
+              <span>Orbit verifies IMAP and SMTP without sending an email, then stores an encrypted credential.</span>
             </div>
             <button type="submit" className={relay.connectButton}>
               Verify & connect <ArrowRight size={15} />
@@ -607,15 +621,16 @@ function RelayWorkspace({ view, mailbox }: { view: string; mailbox: Mailbox | nu
   );
 }
 
-function Compose({ mailbox }: { mailbox: Mailbox }) {
+function Compose({ mailbox, thread }: { mailbox: Mailbox; thread?: Thread | null }) {
   const connected = mailbox.status === "connected";
   return (
     <div className={styles.compose}>
       <div><span>New Relay message</span><h2>Compose</h2><p>From {mailbox.address}</p></div>
       <form>
         <input type="hidden" name="mailbox_id" value={mailbox.id} />
-        <label><span>To</span><input name="to" type="text" placeholder="carrier@example.com" required /></label>
-        <label><span>Subject</span><input name="subject" type="text" placeholder="Subject" /></label>
+        {thread ? <input type="hidden" name="thread_id" value={thread.id} /> : null}
+        <label><span>To</span><input name="to" type="text" defaultValue={thread?.participant_emails.join(", ") ?? ""} placeholder="carrier@example.com" required /></label>
+        <label><span>Subject</span><input name="subject" type="text" defaultValue={thread ? (/^re:/i.test(thread.subject) ? thread.subject : `Re: ${thread.subject}`) : ""} placeholder="Subject" /></label>
         <label className={styles.bodyField}><span>Message</span><textarea name="body" rows={12} placeholder="Write your message…" required /></label>
         <label>
           <span>Authority</span>

@@ -1,7 +1,9 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import * as tls from "node:tls";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const HOST = "mail.privateemail.com";
@@ -121,17 +123,104 @@ async function imapLogin(socket: tls.TLSSocket, email: string, password: string)
   await imapCommand(socket, "A001", `LOGIN ${quoted(email)} ${quoted(password)}`);
 }
 
-function smtpRead(socket: tls.TLSSocket, code: number) {
-  return readUntil(
+async function smtpRead(socket: tls.TLSSocket, code: number) {
+  const response = await readUntil(
     socket,
-    (text) => text.split("\r\n").some((line) => line.startsWith(`${code} `)),
+    (text) => text.split("\r\n").some((line) => /^\d{3} /.test(line)),
     256 * 1024,
   );
+  const finalLine = response.toString("utf8").split("\r\n").find((line) => /^\d{3} /.test(line));
+  const actual = Number(finalLine?.slice(0, 3));
+  if (actual !== code) {
+    throw new Error(`Mail server rejected the request (${Number.isFinite(actual) ? actual : "unknown"}).`);
+  }
+  return response;
 }
 
 async function smtpCommand(socket: tls.TLSSocket, command: string, code: number) {
   socket.write(`${command}\r\n`);
   await smtpRead(socket, code);
+}
+
+function safeHeader(value: string, max = 500) {
+  return value.replace(/[\r\n]+/g, " ").trim().slice(0, max);
+}
+
+function smtpAddress(value: string) {
+  const address = value.trim().toLowerCase();
+  if (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(address)) {
+    throw new Error("Relay refused an invalid email address.");
+  }
+  return address;
+}
+
+function mimeMessage(input: {
+  from: string;
+  to: string[];
+  cc?: string[];
+  subject: string;
+  bodyText: string;
+  inReplyTo?: string | null;
+}) {
+  const from = smtpAddress(input.from);
+  const to = input.to.map(smtpAddress);
+  const cc = (input.cc ?? []).map(smtpAddress);
+  const messageId = `<${randomUUID()}@${from.split("@")[1]}>`;
+  const encodedSubject = Buffer.from(safeHeader(input.subject, 240), "utf8").toString("base64");
+  const body = Buffer.from(input.bodyText.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64");
+  const replyId = input.inReplyTo ? safeHeader(input.inReplyTo) : null;
+  const headers = [
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: ${messageId}`,
+    `From: ${from}`,
+    `To: ${to.join(", ")}`,
+    ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+    `Subject: =?UTF-8?B?${encodedSubject}?=`,
+    ...(replyId ? [`In-Reply-To: ${replyId}`, `References: ${replyId}`] : []),
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+  ];
+  return { messageId, wire: `${headers.join("\r\n")}\r\n\r\n${body.replace(/.{1,76}/g, "$&\r\n")}` };
+}
+
+async function sendSmtp(input: {
+  email: string;
+  password: string;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  bodyText: string;
+  inReplyTo?: string | null;
+}) {
+  const from = smtpAddress(input.email);
+  const recipients = Array.from(
+    new Set([...input.to, ...(input.cc ?? []), ...(input.bcc ?? [])].map(smtpAddress)),
+  );
+  if (!recipients.length || recipients.length > 20) {
+    throw new Error("Relay requires between 1 and 20 valid recipients.");
+  }
+  const message = mimeMessage({ ...input, from });
+  const socket = await openTls(SMTP_PORT);
+  try {
+    await smtpRead(socket, 220);
+    await smtpCommand(socket, "EHLO orbit.relay", 250);
+    await smtpCommand(socket, "AUTH LOGIN", 334);
+    await smtpCommand(socket, Buffer.from(from).toString("base64"), 334);
+    await smtpCommand(socket, Buffer.from(input.password).toString("base64"), 235);
+    await smtpCommand(socket, `MAIL FROM:<${from}>`, 250);
+    for (const recipient of recipients) {
+      await smtpCommand(socket, `RCPT TO:<${recipient}>`, 250);
+    }
+    await smtpCommand(socket, "DATA", 354);
+    socket.write(`${message.wire.replace(/\r\n\./g, "\r\n..")}\r\n.\r\n`);
+    await smtpRead(socket, 250);
+    await smtpCommand(socket, "QUIT", 221).catch(() => undefined);
+    return { messageId: message.messageId };
+  } finally {
+    socket.destroy();
+  }
 }
 
 async function testImap(email: string, password: string) {
@@ -220,7 +309,10 @@ export async function removeMailboxCredential(mailboxId: string) {
 }
 
 async function getMailboxCredential(mailboxId: string) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
+  if (!supabase) {
+    throw new Error("Relay server credential access is not configured.");
+  }
   const { data, error } = await supabase.rpc("orbit_relay_get_credential", {
     p_mailbox_id: mailboxId,
   });
@@ -233,6 +325,94 @@ async function getMailboxCredential(mailboxId: string) {
     throw new Error("Mailbox credentials are invalid.");
   }
   return { email: value.username, password: value.password };
+}
+
+export async function sendNamecheapMessage(input: {
+  workspaceId: string;
+  mailboxId: string;
+  messageId: string;
+}) {
+  const admin = createAdminClient();
+  if (!admin) throw new Error("Relay server sending is not configured.");
+
+  const mailboxResult = await admin
+    .from("orbit_mailboxes")
+    .select("id,address,status,outbound_enabled")
+    .eq("workspace_id", input.workspaceId)
+    .eq("id", input.mailboxId)
+    .single();
+  const mailbox = mailboxResult.data;
+  if (mailboxResult.error || !mailbox) throw new Error("Relay mailbox was not found.");
+  if (mailbox.status !== "connected" || !mailbox.outbound_enabled) {
+    throw new Error("Relay mailbox sending is not enabled.");
+  }
+
+  const claim = await admin
+    .from("orbit_mail_messages")
+    .update({ status: "sending", updated_at: new Date().toISOString() })
+    .eq("workspace_id", input.workspaceId)
+    .eq("mailbox_id", input.mailboxId)
+    .eq("id", input.messageId)
+    .eq("status", "pending_approval")
+    .select("id,thread_id,from_address,to_addresses,cc_addresses,bcc_addresses,subject,body_text,in_reply_to")
+    .maybeSingle();
+  const message = claim.data;
+  if (claim.error || !message) {
+    throw new Error("This message is no longer waiting for approval.");
+  }
+
+  let smtpAccepted = false;
+  try {
+    if (String(message.from_address).toLowerCase() !== String(mailbox.address).toLowerCase()) {
+      throw new Error("Relay refused a sender identity mismatch.");
+    }
+    const credential = await getMailboxCredential(input.mailboxId);
+    if (credential.email.toLowerCase() !== String(mailbox.address).toLowerCase()) {
+      throw new Error("Relay refused a mailbox credential mismatch.");
+    }
+    const sent = await sendSmtp({
+      email: credential.email,
+      password: credential.password,
+      to: message.to_addresses ?? [],
+      cc: message.cc_addresses ?? [],
+      bcc: message.bcc_addresses ?? [],
+      subject: message.subject,
+      bodyText: message.body_text,
+      inReplyTo: message.in_reply_to,
+    });
+    smtpAccepted = true;
+    const sentAt = new Date().toISOString();
+    const updateMessage = await admin
+      .from("orbit_mail_messages")
+      .update({
+        status: "sent",
+        provider_message_id: sent.messageId,
+        internet_message_id: sent.messageId,
+        sent_at: sentAt,
+        updated_at: sentAt,
+      })
+      .eq("workspace_id", input.workspaceId)
+      .eq("id", message.id)
+      .eq("status", "sending");
+    if (updateMessage.error) throw new Error("Relay sent the email but could not save its final state.");
+    const updateThread = await admin
+      .from("orbit_mail_threads")
+      .update({ folder: "sent", is_unread: false, latest_message_at: sentAt, updated_at: sentAt })
+      .eq("workspace_id", input.workspaceId)
+      .eq("id", message.thread_id);
+    if (updateThread.error) throw new Error("Relay sent the email but could not update its conversation.");
+    return { messageId: sent.messageId, sentAt };
+  } catch (error) {
+    if (!smtpAccepted) {
+      await admin
+        .from("orbit_mail_messages")
+        .update({ status: "failed", updated_at: new Date().toISOString() })
+        .eq("workspace_id", input.workspaceId)
+        .eq("id", message.id)
+        .eq("status", "sending");
+    }
+    throw error;
+  }
 }
 
 function qp(value: string) {
@@ -429,13 +609,15 @@ export async function syncNamecheapMailbox(input: {
     await imapCommand(socket, "A002", 'SELECT "INBOX"');
     const search = (await imapCommand(socket, "A003", "UID SEARCH ALL")).toString("utf8");
     const searchLine = search.split("\r\n").find((line) => /^\* SEARCH/i.test(line)) ?? "";
-    const pending = searchLine
+    const available = searchLine
       .split(/\s+/)
       .slice(2)
       .map(Number)
       .filter(Number.isFinite)
-      .filter((uid) => uid > maxUid)
-      .slice(-MAX_SYNC);
+      .filter((uid) => uid > maxUid);
+    // Bootstrap with the newest messages, then drain subsequent mail in order
+    // so a busy inbox cannot skip messages when more than MAX_SYNC arrive.
+    const pending = maxUid > 0 ? available.slice(0, MAX_SYNC) : available.slice(-MAX_SYNC);
 
     let commandNo = 4;
     for (const uid of pending) {
