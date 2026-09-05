@@ -39,6 +39,7 @@ import {
   saveMailDraft,
   syncRelayMailbox,
 } from "./actions";
+import { moveRelayThread } from "./conversation-actions";
 import styles from "./mail.module.css";
 import relay from "./relay-auth.module.css";
 
@@ -55,6 +56,7 @@ type Props = {
     view?: string;
     mailbox?: string;
     connect?: string;
+    q?: string;
     error?: string;
     notice?: string;
   }>;
@@ -126,6 +128,14 @@ function withMailbox(href: string, mailboxId?: string | null) {
   return `${path}?${params.toString()}`;
 }
 
+function withSearch(href: string, searchQuery?: string) {
+  if (!searchQuery) return href;
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("q", searchQuery);
+  return `${path}?${params.toString()}`;
+}
+
 export default async function RelayPage({ searchParams }: Props) {
   const params = await searchParams;
   const { supabase, workspace, role } = await requireWorkspace();
@@ -133,6 +143,8 @@ export default async function RelayPage({ searchParams }: Props) {
   const canManageMailboxes = ["owner", "admin", "founder"].includes(role);
   const view = relayViews.some(([key]) => key === params.view) ? params.view! : "mail";
   const folder = folders.some(([key]) => key === params.folder) ? params.folder! : "inbox";
+  const searchQuery = String(params.q ?? "").trim().slice(0, 120);
+  const normalizedSearch = searchQuery.toLocaleLowerCase();
 
   const { data: mailboxRows } = await supabase
     .from("orbit_mailboxes")
@@ -147,17 +159,37 @@ export default async function RelayPage({ searchParams }: Props) {
     mailboxes[0] ??
     null;
 
-  const { data: threadRows } = selectedMailbox && view === "mail"
-    ? await supabase
-        .from("orbit_mail_threads")
-        .select("id,subject,participant_emails,folder,is_unread,is_starred,business_context_type,latest_message_at")
-        .eq("workspace_id", workspace.id)
-        .eq("mailbox_id", selectedMailbox.id)
-        .eq("folder", folder)
-        .order("latest_message_at", { ascending: false })
-        .limit(80)
-    : { data: [] };
-  const threads = (threadRows ?? []) as Thread[];
+  let threadRows: Thread[] = [];
+  if (selectedMailbox && view === "mail") {
+    let threadQuery = supabase
+      .from("orbit_mail_threads")
+      .select("id,subject,participant_emails,folder,is_unread,is_starred,business_context_type,latest_message_at")
+      .eq("workspace_id", workspace.id)
+      .eq("mailbox_id", selectedMailbox.id)
+      .order("latest_message_at", { ascending: false })
+      .limit(searchQuery ? 200 : 80);
+
+    if (!searchQuery) {
+      threadQuery = threadQuery.eq("folder", folder);
+    }
+
+    const { data } = await threadQuery;
+    threadRows = (data ?? []) as Thread[];
+  }
+
+  const threads = searchQuery
+    ? threadRows.filter((thread) => {
+        const haystack = [
+          thread.subject,
+          ...(thread.participant_emails ?? []),
+          thread.business_context_type ?? "",
+          thread.folder,
+        ]
+          .join(" ")
+          .toLocaleLowerCase();
+        return haystack.includes(normalizedSearch);
+      })
+    : threadRows;
   const selectedId = params.thread ?? threads[0]?.id;
   const selected = threads.find((item) => item.id === selectedId) ?? null;
   const { data: messageRows } = selectedId && view === "mail"
@@ -266,11 +298,11 @@ export default async function RelayPage({ searchParams }: Props) {
                   <Link
                     key={key}
                     href={withMailbox(`/dashboard/mail?view=mail&folder=${key}`, selectedMailbox?.id)}
-                    className={folder === key ? styles.activeFolder : ""}
+                    className={folder === key && !searchQuery ? styles.activeFolder : ""}
                   >
                     <Icon size={16} />
                     <span>{label}</span>
-                    {key === "inbox" && unread > 0 ? <b>{unread}</b> : null}
+                    {key === "inbox" && unread > 0 && !searchQuery ? <b>{unread}</b> : null}
                   </Link>
                 ))}
               </div>
@@ -283,28 +315,49 @@ export default async function RelayPage({ searchParams }: Props) {
             </aside>
 
             <section className={styles.threadList}>
-              <div className={styles.search}><Search size={15} /><span>Search conversations</span></div>
-              <div className={styles.listHeader}><strong>{folder[0]?.toUpperCase() + folder.slice(1)}</strong><span>{threads.length}</span></div>
+              <form className={styles.search} method="get">
+                <input type="hidden" name="view" value="mail" />
+                {selectedMailbox ? <input type="hidden" name="mailbox" value={selectedMailbox.id} /> : null}
+                <button type="submit" aria-label="Search conversations"><Search size={15} /></button>
+                <input
+                  type="search"
+                  name="q"
+                  defaultValue={searchQuery}
+                  placeholder="Search conversations"
+                  aria-label="Search this mailbox"
+                  maxLength={120}
+                />
+                {searchQuery ? (
+                  <Link href={withMailbox(`/dashboard/mail?view=mail&folder=${folder}`, selectedMailbox?.id)}>Clear</Link>
+                ) : null}
+              </form>
+              <div className={styles.listHeader}>
+                <strong>{searchQuery ? `Search · ${searchQuery}` : folder[0]?.toUpperCase() + folder.slice(1)}</strong>
+                <span>{threads.length}</span>
+              </div>
               {threads.length ? threads.map((thread) => (
                 <Link
                   className={`${styles.thread} ${thread.id === selectedId ? styles.selected : ""}`}
                   key={thread.id}
-                  href={withMailbox(`/dashboard/mail?view=mail&folder=${folder}&thread=${thread.id}`, selectedMailbox?.id)}
+                  href={withSearch(
+                    withMailbox(`/dashboard/mail?view=mail&folder=${thread.folder}&thread=${thread.id}`, selectedMailbox?.id),
+                    searchQuery,
+                  )}
                 >
                   <div className={styles.threadTop}>
                     <strong>{thread.participant_emails[0] ?? selectedMailbox?.address ?? "Relay"}</strong>
                     {thread.is_starred ? <Star size={13} fill="currentColor" /> : null}
                   </div>
                   <h3>{thread.subject}</h3>
-                  <p>{thread.business_context_type ? `Linked to ${thread.business_context_type}` : "Unlinked conversation"}</p>
+                  <p>{thread.business_context_type ? `Linked to ${thread.business_context_type}` : searchQuery ? `Folder · ${thread.folder}` : "Unlinked conversation"}</p>
                   <time>{new Date(thread.latest_message_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</time>
                   {thread.is_unread ? <i className={styles.unreadDot} /> : null}
                 </Link>
               )) : (
                 <div className={styles.empty}>
                   <Mail size={25} />
-                  <strong>No {folder} conversations yet</strong>
-                  <p>{connected ? "Sync the mailbox to pull new conversations." : "Authenticate this mailbox to start syncing."}</p>
+                  <strong>{searchQuery ? "No matching conversations" : `No ${folder} conversations yet`}</strong>
+                  <p>{searchQuery ? "Try a subject, participant, business context or folder name." : connected ? "Sync the mailbox to pull new conversations." : "Authenticate this mailbox to start syncing."}</p>
                 </div>
               )}
             </section>
@@ -320,7 +373,19 @@ export default async function RelayPage({ searchParams }: Props) {
                       <h2>{selected.subject}</h2>
                       <p>{selected.participant_emails.join(", ")}</p>
                     </div>
-                    <button aria-label="Archive"><Archive size={17} /></button>
+                    <form action={moveRelayThread} className={styles.threadAction}>
+                      <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                      <input type="hidden" name="thread_id" value={selected.id} />
+                      <input type="hidden" name="from_folder" value={selected.folder} />
+                      <input type="hidden" name="to_folder" value={selected.folder === "archive" ? "inbox" : "archive"} />
+                      <button
+                        type="submit"
+                        aria-label={selected.folder === "archive" ? "Restore to inbox" : "Archive conversation"}
+                        title={selected.folder === "archive" ? "Restore to inbox" : "Archive conversation"}
+                      >
+                        {selected.folder === "archive" ? <Inbox size={17} /> : <Archive size={17} />}
+                      </button>
+                    </form>
                   </div>
                   <div className={styles.messages}>
                     {messages.map((message) => (
@@ -329,14 +394,14 @@ export default async function RelayPage({ searchParams }: Props) {
                         key={message.id}
                       >
                         <div>
-                          <strong>{message.direction === "inbound" ? message.from_address : selectedMailbox.display_name || message.from_address}</strong>
+                          <strong>{message.direction === "inbound" ? message.from_address : selectedMailbox?.display_name || message.from_address}</strong>
                           <span>{message.status} · {message.authority_level}</span>
                         </div>
                         <p>{message.body_text || "(Empty message)"}</p>
                         <time>{new Date(message.sent_at ?? message.received_at ?? message.created_at).toLocaleString()}</time>
-                        {folder === "outbox" && message.status === "pending_approval" && canManageMailboxes ? (
+                        {selected.folder === "outbox" && message.status === "pending_approval" && canManageMailboxes ? (
                           <form action={approveAndSendRelayMessage} className={styles.approveSendForm}>
-                            <input type="hidden" name="mailbox_id" value={selectedMailbox.id} />
+                            <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
                             <input type="hidden" name="message_id" value={message.id} />
                             <button type="submit" className={styles.sendButton}>Approve & send now <Send size={14} /></button>
                           </form>
@@ -346,7 +411,7 @@ export default async function RelayPage({ searchParams }: Props) {
                   </div>
                   <Link
                     className={styles.replyButton}
-                    href={withMailbox(`/dashboard/mail?view=mail&folder=${folder}&compose=1&thread=${selected.id}`, selectedMailbox.id)}
+                    href={withMailbox(`/dashboard/mail?view=mail&folder=${selected.folder}&compose=1&thread=${selected.id}`, selectedMailbox?.id)}
                   >
                     Reply
                   </Link>
