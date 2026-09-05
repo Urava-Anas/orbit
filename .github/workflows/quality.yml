@@ -154,6 +154,9 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Authenticated local Founder acceptance
+        run: npm run test:acceptance:local
+
       - name: End-to-end smoke
         run: npm run test:e2e
 
