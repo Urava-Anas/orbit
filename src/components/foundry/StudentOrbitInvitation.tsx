@@ -54,7 +54,6 @@ export function StudentOrbitInvitation({
   );
   const [copied, setCopied] = useState(false);
   const eligibleLifecycle = ["accepted", "enrolled"].includes(lifecycleStatus);
-  const eligible = !connected && Boolean(email?.trim()) && eligibleLifecycle;
   const expires = expiryLabel(state.expiresAt);
 
   async function copyInvitation() {
@@ -123,7 +122,11 @@ export function StudentOrbitInvitation({
 
           {state.message ? (
             <div className={styles.result} aria-live="polite">
-              <p className={state.status === "error" ? styles.error : styles.success}>
+              <p
+                className={
+                  state.status === "error" ? styles.error : styles.success
+                }
+              >
                 {state.message}
               </p>
 
@@ -141,7 +144,12 @@ export function StudentOrbitInvitation({
                       type="button"
                       onClick={copyInvitation}
                     >
-                      {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />} {copied ? "Copied" : "Copy"}
+                      {copied ? (
+                        <Check size={15} aria-hidden="true" />
+                      ) : (
+                        <Copy size={15} aria-hidden="true" />
+                      )}{" "}
+                      {copied ? "Copied" : "Copy"}
                     </button>
                   </div>
                   <span className={styles.expiry}>
