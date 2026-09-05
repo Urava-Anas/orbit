@@ -8,9 +8,9 @@ import {
   removeMailboxCredential,
   sendNamecheapMessage,
   storeMailboxCredential,
-  syncNamecheapMailbox,
   testNamecheapMailbox,
 } from "@/lib/relay/namecheap";
+import { syncRelayMailboxReliably } from "@/lib/relay/sync-reliability";
 
 function clean(value: FormDataEntryValue | null, max = 5000) {
   return String(value ?? "").trim().slice(0, max);
@@ -148,21 +148,28 @@ export async function connectNamecheapMailbox(formData: FormData) {
   }
 
   let imported = 0;
+  let possiblyMore = false;
+  let recoveredStaleClaim = false;
   let initialSyncError: string | null = null;
   try {
-    const result = await syncNamecheapMailbox({ workspaceId: workspace.id, mailboxId });
+    const result = await syncRelayMailboxReliably({ workspaceId: workspace.id, mailboxId });
     imported = result.imported;
+    possiblyMore = result.possiblyMore;
+    recoveredStaleClaim = result.recoveredStaleClaim;
   } catch (error) {
-    // Authentication was already verified. A first-sync failure remains visible
-    // as connection health in Relay and can be retried without re-entering the password.
     initialSyncError = error instanceof Error ? error.message : "Initial mailbox sync failed.";
   }
 
   revalidatePath("/dashboard/mail");
   if (initialSyncError) {
-    redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&error=${encodeURIComponent(`Mailbox authenticated, but the first sync failed: ${initialSyncError}`)}`);
+    redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&error=${encodeURIComponent(`Mailbox authenticated, but the first sync did not complete: ${initialSyncError}`)}`);
   }
-  redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(`Mailbox connected. ${imported} new message${imported === 1 ? "" : "s"} synced.`)}`);
+  const details = [
+    `Mailbox connected. ${imported} new message${imported === 1 ? "" : "s"} synced.`,
+    recoveredStaleClaim ? "A stale sync checkpoint was safely recovered." : "",
+    possiblyMore ? "Relay reached its safe batch limit; run Sync again to continue from the saved cursor." : "",
+  ].filter(Boolean).join(" ");
+  redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(details)}`);
 }
 
 export async function syncRelayMailbox(formData: FormData) {
@@ -172,16 +179,19 @@ export async function syncRelayMailbox(formData: FormData) {
   const mailbox = await mailboxForWorkspace(supabase, workspace.id, mailboxId);
   if (!mailbox) redirect("/dashboard/mail?error=Mailbox%20not%20found");
 
-  let imported = 0;
   try {
-    const result = await syncNamecheapMailbox({ workspaceId: workspace.id, mailboxId });
-    imported = result.imported;
+    const result = await syncRelayMailboxReliably({ workspaceId: workspace.id, mailboxId });
+    revalidatePath("/dashboard/mail");
+    const details = [
+      `${result.imported} new message${result.imported === 1 ? "" : "s"} synced.`,
+      result.recoveredStaleClaim ? "Recovered an abandoned sync checkpoint before continuing." : "",
+      result.possiblyMore ? "Safe batch limit reached; Sync again to continue from the saved cursor." : "",
+    ].filter(Boolean).join(" ");
+    redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(details)}`);
   } catch (error) {
+    revalidatePath("/dashboard/mail");
     redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&error=${encodeURIComponent(error instanceof Error ? error.message : "Mailbox sync failed")}`);
   }
-
-  revalidatePath("/dashboard/mail");
-  redirect(`/dashboard/mail?view=mail&mailbox=${mailboxId}&notice=${encodeURIComponent(`${imported} new message${imported === 1 ? "" : "s"} synced.`)}`);
 }
 
 export async function disconnectRelayMailbox(formData: FormData) {
