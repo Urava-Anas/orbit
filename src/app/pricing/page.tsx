@@ -25,7 +25,7 @@ export default function PricingPage() {
           <Link href="/login" className={styles.signInLink}>
             Sign in
           </Link>
-          <Link href="/login?next=/trial" className={styles.navCta}>
+          <Link href="/signup" className={styles.navCta}>
             Start free trial
           </Link>
         </div>

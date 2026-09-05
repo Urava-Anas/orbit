@@ -19,13 +19,16 @@ export default async function ForgotPasswordPage({ searchParams }: PageProps) {
   return (
     <main className="auth-shell">
       <section className="auth-panel">
-        <Link href="/">
+        <Link href="/" aria-label="Orbit home">
           <OrbitMark />
         </Link>
         <div className="auth-form">
-          <span className="eyebrow">Account recovery</span>
+          <span className="eyebrow">Existing account recovery</span>
           <h1>Recover access.</h1>
-          <p>Orbit will send a time-limited password reset link to your email.</p>
+          <p>
+            Enter the email you previously used for Orbit. For security, the response
+            is the same whether or not an account exists.
+          </p>
           <Notice error={params.error} notice={params.notice} />
           <form className="form-stack" action={requestPasswordReset}>
             <div className="field">
@@ -37,6 +40,7 @@ export default async function ForgotPasswordPage({ searchParams }: PageProps) {
                 autoComplete="email"
                 maxLength={254}
                 required
+                placeholder="you@example.com"
               />
             </div>
             <button className="button button-primary" type="submit">
@@ -47,13 +51,16 @@ export default async function ForgotPasswordPage({ searchParams }: PageProps) {
             <Link className="text-link" href="/login">
               Return to sign in
             </Link>
+            <Link className="text-link" href="/signup">
+              Never had an Orbit account? Create one
+            </Link>
           </div>
         </div>
       </section>
       <aside className="auth-art" aria-hidden="true">
         <div className="auth-quote">
-          <span className="eyebrow">Security boundary</span>
-          <p>Recovery reveals nothing about whether an account exists.</p>
+          <span className="eyebrow">Private by design</span>
+          <p>Recovery helps the owner without confirming who does or does not use Orbit.</p>
         </div>
       </aside>
     </main>
