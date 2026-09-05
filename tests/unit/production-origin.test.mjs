@@ -24,3 +24,16 @@ test("production health accepts only reviewed Orbit aliases as origin fallback",
   assert.match(health, /requestUsesReviewedProductionOrigin/);
   assert.match(health, /orbit-two-delta\.vercel\.app/);
 });
+
+test("OAuth provider launch has one redirect authority and terminal callbacks cannot relaunch", async () => {
+  const [nextConfig, proxy] = await Promise.all([
+    source("next.config.ts"),
+    source("src/proxy.ts"),
+  ]);
+
+  assert.doesNotMatch(nextConfig, /connect[\s\S]*meta[\s\S]*api\/integrations\/oauth\/meta\/start/);
+  assert.match(proxy, /connectionLauncherRedirect/);
+  assert.match(proxy, /searchParams\.has\("error"\)/);
+  assert.match(proxy, /searchParams\.has\("notice"\)/);
+  assert.match(proxy, /searchParams\.delete\("connect"\)/);
+});
