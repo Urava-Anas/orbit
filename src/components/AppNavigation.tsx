@@ -19,6 +19,7 @@ import {
   Menu,
   MessageSquareText,
   ShieldCheck,
+  Truck,
   UsersRound,
   X,
 } from "lucide-react";
@@ -43,6 +44,7 @@ const orbitLinks = [
 
 const apexLinks = [
   { href: "/dashboard", label: "Founder Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/carriers", label: "Carrier Intelligence", icon: Truck },
   { href: "/dashboard/leads", label: "Carrier Pipeline", icon: UsersRound },
   { href: "/dashboard/leads/forms", label: "Online Forms", icon: ClipboardList },
   { href: "/dashboard/mail", label: "Relay", icon: Mail },
@@ -80,7 +82,7 @@ export function AppNavigation({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const links = experience === "apex" ? apexLinks : orbitLinks;
-  const primaryCutoff = experience === "apex" ? 8 : 9;
+  const primaryCutoff = experience === "apex" ? 9 : 9;
   const primaryLinks = links.slice(0, primaryCutoff);
   const systemLinks = links.slice(primaryCutoff);
 
