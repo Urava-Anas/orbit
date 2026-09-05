@@ -5,6 +5,7 @@ const startedAt = new Date();
 const baseUrlRaw = process.env.ORBIT_ACCEPTANCE_BASE_URL ?? "";
 const targetClass = process.env.ORBIT_ACCEPTANCE_TARGET_CLASS ?? "";
 const expectedSha = process.env.ORBIT_ACCEPTANCE_EXPECTED_SHA ?? "";
+const verifiedDeploymentSha = process.env.ORBIT_ACCEPTANCE_VERIFIED_DEPLOYMENT_SHA ?? "";
 const sessionCookie = process.env.ORBIT_ACCEPTANCE_SESSION_COOKIE ?? "";
 const outputDir = process.env.ORBIT_ACCEPTANCE_OUTPUT_DIR ?? "artifacts/acceptance";
 
@@ -33,6 +34,7 @@ const report = {
     baseUrl: baseUrlRaw || null,
     targetClass: targetClass || null,
     expectedSha: expectedSha || null,
+    verifiedDeploymentSha: verifiedDeploymentSha || null,
   },
   mode: sessionCookie ? "authenticated-http" : "preflight",
   status: "running",
@@ -68,6 +70,24 @@ function assertSafeTarget() {
       "TARGET_CLASS_UNPROVEN",
       "Set ORBIT_ACCEPTANCE_TARGET_CLASS=preview (or local). The runner fails closed rather than assuming a target is non-production.",
     );
+  }
+
+  if (targetClass === "preview") {
+    if (!expectedSha) {
+      addBlocker("EXPECTED_SHA_MISSING", "Set ORBIT_ACCEPTANCE_EXPECTED_SHA to the exact release checkpoint under acceptance.");
+    }
+    if (!verifiedDeploymentSha) {
+      addBlocker(
+        "DEPLOYMENT_SHA_PROOF_MISSING",
+        "Set ORBIT_ACCEPTANCE_VERIFIED_DEPLOYMENT_SHA from independently inspected Vercel deployment metadata before running Preview acceptance.",
+      );
+    }
+    if (expectedSha && verifiedDeploymentSha && expectedSha !== verifiedDeploymentSha) {
+      addBlocker(
+        "DEPLOYMENT_SHA_MISMATCH",
+        `Preview deployment SHA ${verifiedDeploymentSha} does not match expected release SHA ${expectedSha}.`,
+      );
+    }
   }
 
   return parsed;
@@ -131,6 +151,7 @@ function renderMarkdown() {
     `- Target: \`${report.target.baseUrl ?? "not provided"}\``,
     `- Target class: \`${report.target.targetClass ?? "not provided"}\``,
     `- Expected SHA: \`${report.target.expectedSha ?? "not provided"}\``,
+    `- Independently verified deployment SHA: \`${report.target.verifiedDeploymentSha ?? "not provided"}\``,
     `- Started: ${report.startedAt}`,
     `- Completed: ${report.completedAt}`,
     "",
@@ -185,7 +206,7 @@ if (parsedBase && report.blockers.length === 0) {
 
 if (report.blockers.length === 0) {
   report.status = "passed";
-  report.nextAction = "Run independent QA/release verification against this exact target and SHA; do not infer production readiness from this report alone.";
+  report.nextAction = "Run independent browser QA/release verification against the same Preview deployment; do not infer production readiness from this report alone.";
 } else {
   report.status = report.checks.some((check) => !check.passed) ? "failed" : "blocked";
   report.nextAction = report.blockers[0]?.message ?? "Resolve the first recorded blocker, then rerun from the same checkpoint.";
