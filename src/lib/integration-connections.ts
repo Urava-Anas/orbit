@@ -29,7 +29,7 @@ export type IntegrationState = {
 };
 
 const STATE_TTL_MS = 10 * 60 * 1000;
-const REVIEWED_ORBIT_PRODUCTION_ORIGIN = "https://orbit-two-delta.vercel.app";
+const REVIEWED_ORBIT_PRODUCTION_ORIGIN = "https://orbit.urava.online";
 
 function integrationSecret() {
   const value = process.env.INTEGRATION_SECRET?.trim();
