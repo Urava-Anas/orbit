@@ -4,7 +4,13 @@ const STATIC_AUTH_RETURN_PATHS = new Set([
   "/reset-password",
 ]);
 
+const INVITATION_TOKEN = /^[A-Za-z0-9_-]{32,128}$/;
 const INVITATION_RETURN_PATH = /^\/invite\/[A-Za-z0-9_-]{32,128}$/;
+
+export function isOrbitInvitationToken(value: string | null | undefined) {
+  const candidate = value?.trim();
+  return Boolean(candidate && INVITATION_TOKEN.test(candidate));
+}
 
 export function safeAuthReturnPath(value: string | null | undefined) {
   const candidate = value?.trim();
