@@ -4,6 +4,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOrbitAccess, orbitHomePath } from "@/lib/access";
+import {
+  isInvitationReturnPath,
+  safeAuthReturnPath,
+} from "@/lib/auth-return-path";
 import { orbitBaseUrl } from "@/lib/integration-connections";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -16,8 +20,8 @@ function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-function safeAuthNext(next: string) {
-  return ["/trial", "/onboarding", "/reset-password"].includes(next) ? next : null;
+function signupPath(next: string | null) {
+  return next ? `/signup?next=${encodeURIComponent(next)}` : "/signup";
 }
 
 function loginPath(next: string | null) {
@@ -50,6 +54,9 @@ async function requestSubject(email: string) {
 }
 
 export async function signUp(formData: FormData) {
+  const next = safeAuthReturnPath(value(formData, "next"));
+  const invitationFlow = isInvitationReturnPath(next);
+  const returnToSignup = signupPath(invitationFlow ? next : null);
   const parsed = z
     .object({
       fullName: fullNameSchema,
@@ -65,11 +72,17 @@ export async function signUp(formData: FormData) {
     });
 
   if (!parsed.success) {
-    redirect(messagePath("/signup", "error", "Use your name, a valid email, and a password of at least 12 characters."));
+    redirect(
+      messagePath(
+        returnToSignup,
+        "error",
+        "Use your name, a valid email, and a password of at least 12 characters.",
+      ),
+    );
   }
 
   if (parsed.data.password !== parsed.data.confirmPassword) {
-    redirect(messagePath("/signup", "error", "Passwords do not match."));
+    redirect(messagePath(returnToSignup, "error", "Passwords do not match."));
   }
 
   const quota = await consumeRateLimit({
@@ -80,42 +93,70 @@ export async function signUp(formData: FormData) {
   });
 
   if (!quota.allowed) {
-    redirect(messagePath("/signup", "error", quota.unavailable
-      ? "Account creation is temporarily unavailable. Please try again shortly."
-      : "Too many account attempts. Try again later."));
+    redirect(
+      messagePath(
+        returnToSignup,
+        "error",
+        quota.unavailable
+          ? "Account creation is temporarily unavailable. Please try again shortly."
+          : "Too many account attempts. Try again later.",
+      ),
+    );
   }
 
+  const destination = invitationFlow && next ? next : "/onboarding";
   const origin = await requestOrigin();
+  const callback = new URL("/auth/callback", origin);
+  callback.searchParams.set("next", destination);
+
+  const metadata = invitationFlow
+    ? {
+        full_name: parsed.data.fullName,
+        orbit_signup_intent: "invitation",
+      }
+    : {
+        full_name: parsed.data.fullName,
+        orbit_signup_intent: "founder_trial",
+        orbit_onboarding_version: "v1",
+      };
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback?next=/onboarding`,
-      data: {
-        full_name: parsed.data.fullName,
-        orbit_signup_intent: "founder_trial",
-        orbit_onboarding_version: "v1",
-      },
+      emailRedirectTo: callback.toString(),
+      data: metadata,
     },
   });
 
   if (error || !data.user) {
     console.error("Orbit signup failed", { code: error?.code, status: error?.status });
-    redirect(messagePath("/signup", "error", "Orbit could not create that account. If you already use Orbit, sign in or recover access."));
+    redirect(
+      messagePath(
+        returnToSignup,
+        "error",
+        "Orbit could not create that account. If you already use Orbit, sign in or recover access.",
+      ),
+    );
   }
 
-  if (data.session) redirect("/onboarding");
+  if (data.session) redirect(destination);
+  if (invitationFlow && next) {
+    redirect(`/verify-email?next=${encodeURIComponent(next)}`);
+  }
   redirect("/verify-email");
 }
 
 export async function login(formData: FormData) {
-  const next = safeAuthNext(value(formData, "next"));
+  const next = safeAuthReturnPath(value(formData, "next"));
   const returnToLogin = loginPath(next);
-  const parsed = z.object({ email: emailSchema, password: z.string().min(1).max(128) }).safeParse({
-    email: value(formData, "email"),
-    password: String(formData.get("password") ?? ""),
-  });
+  const parsed = z
+    .object({ email: emailSchema, password: z.string().min(1).max(128) })
+    .safeParse({
+      email: value(formData, "email"),
+      password: String(formData.get("password") ?? ""),
+    });
 
   if (!parsed.success) {
     redirect(messagePath(returnToLogin, "error", "Enter a valid email and your password."));
@@ -128,7 +169,15 @@ export async function login(formData: FormData) {
     windowSeconds: 600,
   });
   if (!quota.allowed) {
-    if (quota.unavailable) redirect(messagePath(returnToLogin, "error", "Sign-in is temporarily unavailable. Please try again shortly."));
+    if (quota.unavailable) {
+      redirect(
+        messagePath(
+          returnToLogin,
+          "error",
+          "Sign-in is temporarily unavailable. Please try again shortly.",
+        ),
+      );
+    }
     redirect(messagePath(returnToLogin, "error", "Too many sign-in attempts. Try again later."));
   }
 
@@ -137,26 +186,39 @@ export async function login(formData: FormData) {
   if (error) redirect(messagePath(returnToLogin, "error", "Email or password is incorrect."));
 
   const context = await getOrbitAccess();
-  if (!context) redirect(messagePath(returnToLogin, "error", "Sign-in session could not be verified."));
+  if (!context) {
+    redirect(messagePath(returnToLogin, "error", "Sign-in session could not be verified."));
+  }
   if (next) redirect(next);
   redirect(orbitHomePath(context.access));
 }
 
 export async function signInWithGoogle(formData: FormData) {
-  const next = safeAuthNext(value(formData, "next"));
+  const next = safeAuthReturnPath(value(formData, "next"));
   const isSignup = value(formData, "flow") === "signup";
-  const returnPath = isSignup ? "/signup" : loginPath(next);
+  const returnPath = isSignup
+    ? signupPath(isInvitationReturnPath(next) ? next : null)
+    : loginPath(next);
   const requestHeaders = await headers();
-  const subject = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const subject =
+    requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const quota = await consumeRateLimit({
     scope: isSignup ? "auth.google.signup" : "auth.google.start",
     subject,
     limit: 20,
     windowSeconds: 600,
   });
-  if (!quota.allowed) redirect(messagePath(returnPath, "error", quota.unavailable
-    ? "Google authentication is temporarily unavailable. Please try again shortly."
-    : "Too many authentication attempts. Try again later."));
+  if (!quota.allowed) {
+    redirect(
+      messagePath(
+        returnPath,
+        "error",
+        quota.unavailable
+          ? "Google authentication is temporarily unavailable. Please try again shortly."
+          : "Too many authentication attempts. Try again later.",
+      ),
+    );
+  }
 
   const origin = await requestOrigin();
   const callback = new URL("/auth/callback", origin);
@@ -173,14 +235,22 @@ export async function signInWithGoogle(formData: FormData) {
 
   if (error || !data.url) {
     console.error("Orbit Google auth failed", { code: error?.code, status: error?.status });
-    redirect(messagePath(returnPath, "error", "Google authentication is unavailable right now. Use email or try again."));
+    redirect(
+      messagePath(
+        returnPath,
+        "error",
+        "Google authentication is unavailable right now. Use email or try again.",
+      ),
+    );
   }
   redirect(data.url);
 }
 
 export async function requestPasswordReset(formData: FormData) {
   const email = emailSchema.safeParse(value(formData, "email"));
-  if (!email.success) redirect(messagePath("/forgot-password", "error", "Enter a valid email."));
+  if (!email.success) {
+    redirect(messagePath("/forgot-password", "error", "Enter a valid email."));
+  }
 
   const quota = await consumeRateLimit({
     scope: "auth.password_reset",
@@ -189,7 +259,13 @@ export async function requestPasswordReset(formData: FormData) {
     windowSeconds: 3600,
   });
   if (!quota.allowed) {
-    redirect(messagePath("/forgot-password", "notice", "If this email belongs to an Orbit account, a secure reset link is on its way."));
+    redirect(
+      messagePath(
+        "/forgot-password",
+        "notice",
+        "If this email belongs to an Orbit account, a secure reset link is on its way.",
+      ),
+    );
   }
 
   const origin = await requestOrigin();
@@ -198,21 +274,47 @@ export async function requestPasswordReset(formData: FormData) {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
   });
 
-  redirect(messagePath("/forgot-password", "notice", "If this email belongs to an Orbit account, a secure reset link is on its way."));
+  redirect(
+    messagePath(
+      "/forgot-password",
+      "notice",
+      "If this email belongs to an Orbit account, a secure reset link is on its way.",
+    ),
+  );
 }
 
 export async function updatePassword(formData: FormData) {
   const password = passwordSchema.safeParse(String(formData.get("password") ?? ""));
   if (!password.success) {
-    redirect(messagePath("/reset-password", "error", "Use a password with at least 12 characters."));
+    redirect(
+      messagePath(
+        "/reset-password",
+        "error",
+        "Use a password with at least 12 characters.",
+      ),
+    );
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: password.data });
-  if (error) redirect(messagePath("/reset-password", "error", "The reset link expired. Request a new one."));
+  if (error) {
+    redirect(
+      messagePath(
+        "/reset-password",
+        "error",
+        "The reset link expired. Request a new one.",
+      ),
+    );
+  }
 
   await supabase.auth.signOut({ scope: "global" });
-  redirect(messagePath("/login", "notice", "Password updated. Sign in again with your new password."));
+  redirect(
+    messagePath(
+      "/login",
+      "notice",
+      "Password updated. Sign in again with your new password.",
+    ),
+  );
 }
 
 export async function signOut() {
@@ -224,5 +326,11 @@ export async function signOut() {
 export async function signOutEverywhere() {
   const supabase = await createClient();
   await supabase.auth.signOut({ scope: "global" });
-  redirect(messagePath("/login", "notice", "All Orbit sessions have been securely signed out."));
+  redirect(
+    messagePath(
+      "/login",
+      "notice",
+      "All Orbit sessions have been securely signed out.",
+    ),
+  );
 }
