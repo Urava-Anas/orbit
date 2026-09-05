@@ -43,13 +43,19 @@ const auth = createServerClient(url, publicKey, { cookies: {
 } });
 stage("signing in through Supabase password flow");
 const signed = await auth.auth.signInWithPassword({ email, password: ephemeral });
-if (signed.error) fail("password sign-in", signed.error);
+if (signed.error || !signed.data.session?.access_token) {
+  fail("password sign-in", signed.error ?? new Error("missing access token"));
+}
 stage("verifying Supabase SSR session");
 const verified = await auth.auth.getUser();
 if (verified.error || verified.data.user?.id !== founderId) fail("SSR session verification", verified.error ?? new Error("user id mismatch"));
 
 stage("verifying canonical workspace bootstrap through authenticated RLS");
-const bootstrap = await auth
+const rls = createClient(url, publicKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  global: { headers: { Authorization: `Bearer ${signed.data.session.access_token}` } },
+});
+const bootstrap = await rls
   .from("workspace_members")
   .select("workspace_id,role")
   .eq("user_id", founderId)
