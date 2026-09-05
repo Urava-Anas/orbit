@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, MailCheck, ShieldCheck } from "lucide-react";
 import { Notice } from "@/components/Notice";
-import { requireWorkspace } from "@/lib/workspace";
+import { PageHeader } from "@/components/PageHeader";
 import { stageFourProviderReadinessForWorkspace } from "@/lib/agents/stage4-providers";
+import { requireWorkspace } from "@/lib/workspace";
 import { saveOutboundEmailProvider } from "./actions";
+import styles from "./outbound-email.module.css";
 
 export const metadata: Metadata = {
   title: "Outbound Email Provider",
@@ -23,48 +25,50 @@ export default async function OutboundEmailPage({ searchParams }: Props) {
 
   return (
     <div className="page">
-      <Link className="button button-quiet" href="/dashboard/settings">
-        <ArrowLeft size={15} /> Back to settings
+      <Link className={`button button-quiet ${styles.back}`} href="/dashboard/settings">
+        <ArrowLeft size={15} /> Back to Security & Access
       </Link>
 
-      <section className="panel" style={{ maxWidth: 780 }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <span className="icon-button"><MailCheck size={18} /></span>
-          <div>
-            <div className="eyebrow">Stage 4 outbound provider</div>
-            <h1 style={{ margin: "4px 0" }}>Outbound Email</h1>
-            <p style={{ margin: 0 }}>
-              Connect a workspace-owned Resend sender for governed proposal,
-              outreach and follow-up delivery.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageHeader
+        kicker="Workspace sender"
+        title="Outbound Email"
+        description="Connect a verified sender Orbit can use for approved proposals, outreach and follow-ups. Credentials stay private to this workspace."
+      />
 
       <Notice error={params.error} notice={params.notice} />
 
-      <section className="settings-grid" style={{ maxWidth: 1100 }}>
-        <article className="panel settings-card">
-          <h2>Provider readiness</h2>
+      <section className={styles.grid}>
+        <article className={`panel settings-card ${styles.card}`}>
+          <div className={styles.cardHead}>
+            <span><MailCheck size={18} /></span>
+            <div>
+              <h2>Connection status</h2>
+              <div className={styles.status} data-ready={readiness.email.configured}>
+                {readiness.email.configured ? "Ready to send" : "Setup required"}
+              </div>
+            </div>
+          </div>
           <dl>
             <div><dt>Provider</dt><dd>Resend</dd></div>
             <div><dt>Status</dt><dd>{readiness.email.configured ? "Configured" : "Not configured"}</dd></div>
-            <div><dt>Reason</dt><dd>{readiness.email.reason}</dd></div>
+            <div><dt>Readiness</dt><dd>{readiness.email.reason}</dd></div>
           </dl>
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 16 }}>
+          <div className={styles.readiness}>
             <ShieldCheck size={16} />
-            <small>
-              The API key is written directly into workspace Vault and is never
-              returned to this page.
-            </small>
+            <span>The API key is written directly into the workspace Vault and is never returned to this page.</span>
           </div>
         </article>
 
-        <article className="panel settings-card">
-          <h2>{readiness.email.configured ? "Replace provider credentials" : "Connect Resend"}</h2>
-          <p>Use a Resend API key and a sender address already verified by Resend.</p>
+        <article className={`panel settings-card ${styles.card}`}>
+          <div className={styles.cardHead}>
+            <span><ShieldCheck size={18} /></span>
+            <div>
+              <h2>{readiness.email.configured ? "Replace sender credentials" : "Connect Resend"}</h2>
+            </div>
+          </div>
+          <p>Use a Resend API key and a sender address already verified in your Resend account.</p>
           {canManage ? (
-            <form action={saveOutboundEmailProvider} style={{ display: "grid", gap: 12 }}>
+            <form action={saveOutboundEmailProvider} className={styles.form}>
               <label>
                 <span>Resend API key</span>
                 <input
@@ -84,7 +88,7 @@ export default async function OutboundEmailPage({ searchParams }: Props) {
                   required
                 />
               </label>
-              <button className="button" type="submit">
+              <button className="button button-primary" type="submit">
                 Save securely
               </button>
             </form>

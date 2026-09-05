@@ -101,8 +101,8 @@ export default async function TrialPage({ searchParams }: TrialPageProps) {
           </form>
 
           <p className={styles.termsNote}>
-            No payment method is collected at this stage. When checkout is connected,
-            billing activation will happen from Plan & Billing inside the workspace.
+            No payment method is collected at this stage. Use the full trial first,
+            then choose the plan that fits from Plan & Billing inside your workspace.
           </p>
         </section>
       </section>

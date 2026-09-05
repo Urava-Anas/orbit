@@ -17,7 +17,8 @@ export type OAuthProvider =
   | "google_search_console"
   | "google_analytics"
   | "meta"
-  | "linkedin";
+  | "linkedin"
+  | "tiktok";
 
 export type IntegrationState = {
   v: 1;
@@ -235,6 +236,7 @@ export function oauthProviderReady(provider: Exclude<OAuthProvider, "github" | "
   }
   if (provider === "meta") return Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET);
   if (provider === "linkedin") return Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET);
+  if (provider === "tiktok") return Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET);
   return false;
 }
 

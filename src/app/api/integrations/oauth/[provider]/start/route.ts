@@ -19,6 +19,7 @@ const supported = new Set<SupportedProvider>([
   "google_analytics",
   "meta",
   "linkedin",
+  "tiktok",
 ]);
 
 function isSupported(value: string): value is SupportedProvider {
@@ -44,7 +45,8 @@ function recoverMisroutedOAuthResponse(request: Request, provider: SupportedProv
     incoming.searchParams.has("state") ||
     incoming.searchParams.has("error") ||
     incoming.searchParams.has("error_code") ||
-    incoming.searchParams.has("error_reason");
+    incoming.searchParams.has("error_reason") ||
+    incoming.searchParams.has("error_description");
 
   if (!hasOAuthResponse) return null;
 
@@ -102,14 +104,29 @@ function authorizationUrl(provider: SupportedProvider, state: string) {
     return url;
   }
 
-  const clientId = process.env.LINKEDIN_CLIENT_ID;
-  if (!clientId) throw new Error("LinkedIn Client ID is not configured.");
-  const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
+  if (provider === "linkedin") {
+    const clientId = process.env.LINKEDIN_CLIENT_ID;
+    if (!clientId) throw new Error("LinkedIn Client ID is not configured.");
+    const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", redirectUri);
+    // Share on LinkedIn is self-service for authenticated-member publishing.
+    // Organisation publishing remains separately gated because it needs company-page permissions.
+    url.searchParams.set("scope", "openid profile email w_member_social");
+    url.searchParams.set("state", state);
+    return url;
+  }
+
+  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  if (!clientKey) throw new Error("TikTok client key is not configured.");
+  const url = new URL("https://www.tiktok.com/v2/auth/authorize/");
+  url.searchParams.set("client_key", clientKey);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
-  // Identity only. Organisation/publishing permissions are not claimed until separately reviewed.
-  url.searchParams.set("scope", "openid profile email");
+  // Connection requests both direct-post and upload capabilities. Orbit still keeps
+  // automatic TikTok delivery gated until creator-info, media and audit requirements are met.
+  url.searchParams.set("scope", "user.info.basic,video.publish,video.upload");
   url.searchParams.set("state", state);
   return url;
 }
