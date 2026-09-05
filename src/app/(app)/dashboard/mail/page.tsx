@@ -12,6 +12,7 @@ import {
   Inbox,
   LockKeyhole,
   Mail,
+  MailOpen,
   PenLine,
   PlugZap,
   RefreshCw,
@@ -39,7 +40,7 @@ import {
   saveMailDraft,
   syncRelayMailbox,
 } from "./actions";
-import { moveRelayThread } from "./conversation-actions";
+import { moveRelayThread, setRelayThreadFlag } from "./conversation-actions";
 import styles from "./mail.module.css";
 import relay from "./relay-auth.module.css";
 
@@ -373,19 +374,81 @@ export default async function RelayPage({ searchParams }: Props) {
                       <h2>{selected.subject}</h2>
                       <p>{selected.participant_emails.join(", ")}</p>
                     </div>
-                    <form action={moveRelayThread} className={styles.threadAction}>
-                      <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
-                      <input type="hidden" name="thread_id" value={selected.id} />
-                      <input type="hidden" name="from_folder" value={selected.folder} />
-                      <input type="hidden" name="to_folder" value={selected.folder === "archive" ? "inbox" : "archive"} />
-                      <button
-                        type="submit"
-                        aria-label={selected.folder === "archive" ? "Restore to inbox" : "Archive conversation"}
-                        title={selected.folder === "archive" ? "Restore to inbox" : "Archive conversation"}
-                      >
-                        {selected.folder === "archive" ? <Inbox size={17} /> : <Archive size={17} />}
-                      </button>
-                    </form>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <form action={setRelayThreadFlag} className={styles.threadAction}>
+                        <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                        <input type="hidden" name="thread_id" value={selected.id} />
+                        <input type="hidden" name="folder" value={selected.folder} />
+                        <input type="hidden" name="field" value="is_starred" />
+                        <input type="hidden" name="expected" value={String(selected.is_starred)} />
+                        <input type="hidden" name="next" value={String(!selected.is_starred)} />
+                        <button
+                          type="submit"
+                          aria-label={selected.is_starred ? "Remove star" : "Star conversation"}
+                          title={selected.is_starred ? "Remove star" : "Star conversation"}
+                        >
+                          <Star size={17} fill={selected.is_starred ? "currentColor" : "none"} />
+                        </button>
+                      </form>
+
+                      <form action={setRelayThreadFlag} className={styles.threadAction}>
+                        <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                        <input type="hidden" name="thread_id" value={selected.id} />
+                        <input type="hidden" name="folder" value={selected.folder} />
+                        <input type="hidden" name="field" value="is_unread" />
+                        <input type="hidden" name="expected" value={String(selected.is_unread)} />
+                        <input type="hidden" name="next" value={String(!selected.is_unread)} />
+                        <button
+                          type="submit"
+                          aria-label={selected.is_unread ? "Mark as read" : "Mark as unread"}
+                          title={selected.is_unread ? "Mark as read" : "Mark as unread"}
+                        >
+                          {selected.is_unread ? <MailOpen size={17} /> : <Mail size={17} />}
+                        </button>
+                      </form>
+
+                      {selected.folder === "archive" || selected.folder === "spam" || selected.folder === "trash" ? (
+                        <form action={moveRelayThread} className={styles.threadAction}>
+                          <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                          <input type="hidden" name="thread_id" value={selected.id} />
+                          <input type="hidden" name="from_folder" value={selected.folder} />
+                          <input type="hidden" name="to_folder" value="inbox" />
+                          <button type="submit" aria-label="Restore to inbox" title="Restore to inbox">
+                            <Inbox size={17} />
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <form action={moveRelayThread} className={styles.threadAction}>
+                            <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                            <input type="hidden" name="thread_id" value={selected.id} />
+                            <input type="hidden" name="from_folder" value={selected.folder} />
+                            <input type="hidden" name="to_folder" value="archive" />
+                            <button type="submit" aria-label="Archive conversation" title="Archive conversation">
+                              <Archive size={17} />
+                            </button>
+                          </form>
+                          <form action={moveRelayThread} className={styles.threadAction}>
+                            <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                            <input type="hidden" name="thread_id" value={selected.id} />
+                            <input type="hidden" name="from_folder" value={selected.folder} />
+                            <input type="hidden" name="to_folder" value="spam" />
+                            <button type="submit" aria-label="Mark as spam" title="Mark as spam">
+                              <CircleAlert size={17} />
+                            </button>
+                          </form>
+                          <form action={moveRelayThread} className={styles.threadAction}>
+                            <input type="hidden" name="mailbox_id" value={selectedMailbox?.id ?? ""} />
+                            <input type="hidden" name="thread_id" value={selected.id} />
+                            <input type="hidden" name="from_folder" value={selected.folder} />
+                            <input type="hidden" name="to_folder" value="trash" />
+                            <button type="submit" aria-label="Move to trash" title="Move to trash">
+                              <Trash2 size={17} />
+                            </button>
+                          </form>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className={styles.messages}>
                     {messages.map((message) => (
