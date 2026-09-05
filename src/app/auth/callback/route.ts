@@ -2,13 +2,19 @@ import { NextResponse } from "next/server";
 import { getOrbitAccess, orbitHomePath } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 
+const ALLOWED_AUTH_DESTINATIONS = new Set([
+  "/reset-password",
+  "/onboarding",
+  "/trial",
+]);
+
 function safeReturnPath(value: string | null, origin: string) {
   if (!value) return null;
 
   try {
     const destination = new URL(value, origin);
     if (destination.origin !== origin) return null;
-    if (!["/reset-password", "/trial"].includes(destination.pathname)) return null;
+    if (!ALLOWED_AUTH_DESTINATIONS.has(destination.pathname)) return null;
 
     return `${destination.pathname}${destination.search}${destination.hash}`;
   } catch {
@@ -38,9 +44,7 @@ export async function GET(request: Request) {
 
       const context = await getOrbitAccess();
       if (context) {
-        return NextResponse.redirect(
-          new URL(orbitHomePath(context.access), origin),
-        );
+        return NextResponse.redirect(new URL(orbitHomePath(context.access), origin));
       }
     }
   }
